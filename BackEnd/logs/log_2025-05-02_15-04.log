@@ -1,0 +1,5 @@
+[2025-05-02 15:04:23,053] INFO: Found credentials in shared credentials file: ~/.aws/credentials
+[2025-05-02 15:04:28,135] INFO: Aluno reconhecido: Gustavo_Falci
+[2025-05-02 15:04:41,566] INFO: Aluno reconhecido: Gustavo_Falci
+[2025-05-02 15:04:48,519] INFO: Relatório CSV salvo como c:\Users\itconsol\Downloads\ProjetoReconhecimento\BackEnd\Relatorios\relatorio_presenca_2025-05-02_15-04.csv
+[2025-05-02 15:04:48,537] INFO: Relatório JSON salvo como c:\Users\itconsol\Downloads\ProjetoReconhecimento\BackEnd\Relatorios\relatorio_presenca.json

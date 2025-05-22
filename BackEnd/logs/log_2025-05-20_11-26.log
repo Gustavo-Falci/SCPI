@@ -1,0 +1,7 @@
+[2025-05-20 11:26:01,514] INFO: Found credentials in shared credentials file: ~/.aws/credentials
+[2025-05-20 11:26:08,483] ERROR: Erro inesperado ao chamar o Rekognition: An error occurred (UnrecognizedClientException) when calling the SearchFacesByImage operation: The security token included in the request is invalid.
+[2025-05-20 11:26:10,238] ERROR: Erro inesperado ao chamar o Rekognition: An error occurred (UnrecognizedClientException) when calling the SearchFacesByImage operation: The security token included in the request is invalid.
+[2025-05-20 11:26:11,883] ERROR: Erro inesperado ao chamar o Rekognition: An error occurred (UnrecognizedClientException) when calling the SearchFacesByImage operation: The security token included in the request is invalid.
+[2025-05-20 11:26:13,422] ERROR: Erro inesperado ao chamar o Rekognition: An error occurred (UnrecognizedClientException) when calling the SearchFacesByImage operation: The security token included in the request is invalid.
+[2025-05-20 11:26:14,484] INFO: Relatório CSV salvo como c:\Users\itconsol\Downloads\ProjetoReconhecimento\BackEnd\Relatorios\relatorio_presenca_2025-05-20_11-26.csv
+[2025-05-20 11:26:14,606] INFO: Relatório JSON salvo como c:\Users\itconsol\Downloads\ProjetoReconhecimento\BackEnd\Relatorios\relatorio_presenca.json

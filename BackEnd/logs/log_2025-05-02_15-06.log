@@ -1,0 +1,8 @@
+[2025-05-02 15:06:53,214] INFO: Found credentials in shared credentials file: ~/.aws/credentials
+[2025-05-02 15:06:57,505] WARNING: Nenhum rosto conhecido encontrado.
+[2025-05-02 15:07:01,171] WARNING: Nenhum rosto detectado. Continuando...
+[2025-05-02 15:07:07,439] WARNING: Nenhum rosto conhecido encontrado.
+[2025-05-02 15:07:11,473] WARNING: Nenhum rosto conhecido encontrado.
+[2025-05-02 15:07:16,372] WARNING: Nenhum rosto conhecido encontrado.
+[2025-05-02 15:07:19,040] INFO: Relatório CSV salvo como c:\Users\itconsol\Downloads\ProjetoReconhecimento\BackEnd\Relatorios\relatorio_presenca_2025-05-02_15-06.csv
+[2025-05-02 15:07:19,064] INFO: Relatório JSON salvo como c:\Users\itconsol\Downloads\ProjetoReconhecimento\BackEnd\Relatorios\relatorio_presenca.json

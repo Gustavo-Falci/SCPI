@@ -1,0 +1,3 @@
+[2025-05-22 09:11:24,322] INFO: Found credentials in shared credentials file: ~/.aws/credentials
+[2025-05-22 09:11:24,665] ERROR: Erro ao abrir a câmera.
+[2025-05-22 09:11:32,705] INFO: Found credentials in shared credentials file: ~/.aws/credentials
