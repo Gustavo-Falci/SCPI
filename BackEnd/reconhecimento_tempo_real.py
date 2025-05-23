@@ -201,13 +201,13 @@ def reconhecer_em_tempo_real():
     global frame_atual, rodando
 
     # Inicia a captura da câmera
-    cap = cv2.VideoCapture(1) # Tente 0 se 1 não funcionar, ou o índice correto da sua câmera
+    cap = cv2.VideoCapture(0) # Tente 0 se 1 não funcionar, ou o índice correto da sua câmera
     if not cap.isOpened():
         logger.error("Erro ao abrir a câmera. Verifique se está conectada e não em uso por outro programa.")
         return
 
     # Define resolução (opcional)
-    # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)09090
     # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     # logger.info(f"Resolução da câmera definida para: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 
@@ -244,7 +244,7 @@ def reconhecer_em_tempo_real():
             logger.info("Tecla ESC pressionada. Encerrando aplicação...")
             break
         
-        time.sleep(0.03) # Ajuste conforme necessário para equilibrar responsividade e uso de CPU
+        time.sleep(0.4) # Ajuste conforme necessário para equilibrar responsividade e uso de CPU
 
     # Espera a thread de Rekognition finalizar (opcional, pois é daemon)
     if rekognition_thread.is_alive():
@@ -283,7 +283,7 @@ def gerar_relatorio_csv():
 def gerar_relatorio_json():
     # Usar o timestamp no nome do arquivo JSON também pode ser útil se quiser manter históricos
     filename = os.path.join(PASTA_RELATORIOS, f"relatorio_presenca_{timestamp}.json") 
-    
+
     try:
         with open(filename, "w", encoding="utf-8") as file:
             json.dump(alunos_reconhecidos, file, indent=4, ensure_ascii=False)

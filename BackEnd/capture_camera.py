@@ -3,7 +3,7 @@ import time
 import os
 
 def capture_image(aluno_id: str | None = None) -> str | None:
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
 
     if not cap.isOpened():
         print("Erro: Não foi possível acessar a câmera.")

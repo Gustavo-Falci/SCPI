@@ -2,7 +2,7 @@ import capture_camera
 import os
 import uuid
 import re
-from rekognition_aws import criar_colecao_rekognition, cadastrar_rosto_s3, reconhecer_aluno_local
+from rekognition_aws import criar_colecao, cadastrar_rosto, reconhecer_aluno
 from sistema_cadastrar_aluno import s3_client, BUCKET_NAME
 
 # Função para formatar o nome/ID do aluno conforme exigido pelo Amazon Rekognition
@@ -16,7 +16,7 @@ def formatar_nome_para_external_id(nome):
 def acao_criar_colecao():
     print("\nℹ️ Essa ação só precisa ser feita uma vez. Se a coleção já existe, será ignorada.")
     try:
-        criar_colecao_rekognition()
+        criar_colecao()
         print("✅ Coleção criada com sucesso (ou já existente).")
     except Exception as e:
         print(f"❌ Erro ao criar coleção ({type(e).__name__}): {e}")
@@ -48,7 +48,7 @@ def acao_cadastrar_aluno():
         print(f"✅ Imagem enviada: s3://{BUCKET_NAME}/{s3_path}")
 
         # Cadastra o rosto da imagem no Rekognition usando o nome formatado
-        cadastrar_rosto_s3(s3_path, nome_formatado)
+        cadastrar_rosto(s3_path, nome_formatado)
         print(f"📌 Rosto cadastrado no Rekognition para o aluno '{nome}'.")
     except Exception as e:
         print(f"❌ Erro durante o cadastro ({type(e).__name__}): {e}")
@@ -68,7 +68,7 @@ def acao_reconhecer_aluno():
 
     try:
         # Envia a imagem para reconhecimento no Rekognition
-        reconhecer_aluno_local(imagem_path)
+        reconhecer_aluno(imagem_path)
     except Exception as e:
         print(f"❌ Erro no reconhecimento ({type(e).__name__}): {e}")
     finally:
