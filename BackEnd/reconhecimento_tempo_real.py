@@ -76,12 +76,16 @@ def verificar_setup_aws_rekognition(client, collection_id_to_check, region_name_
     try:
         # 1. Teste de Conexão e Permissões Básicas: Listar Coleções
         logger.info("Tentando listar coleções para testar a conexão e permissões básicas...")
+
         response_list = client.list_collections()
+
         logger.info(f"Conexão bem-sucedida! Coleções Rekognition existentes: {response_list.get('CollectionIds', [])}")
 
         # 2. Teste de Existência da Coleção Específica
         logger.info(f"Verificando se a coleção '{collection_id_to_check}' existe...")
+
         client.describe_collection(CollectionId=collection_id_to_check)
+
         logger.info(f"Coleção '{collection_id_to_check}' encontrada e acessível.")
         
         return True
@@ -89,30 +93,40 @@ def verificar_setup_aws_rekognition(client, collection_id_to_check, region_name_
     except ClientError as e:
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']
+
         logger.error(f"ERRO DE CLIENTE AWS: {error_code} - {error_message}")
 
         if error_code == 'UnrecognizedClientException':
             logger.error("Causa provável: As credenciais da AWS (access key, secret key) estão inválidas, ausentes ou a região está mal configurada.")
             logger.error("Verifique seu arquivo ~/.aws/credentials, ~/.aws/config ou variáveis de ambiente AWS (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION).")
+
         elif error_code == 'AccessDeniedException':
             logger.error("Causa provável: O usuário IAM não tem as permissões necessárias.")
             logger.error("Certifique-se de que o usuário/role IAM associado às suas credenciais tem permissões para 'rekognition:ListCollections' e 'rekognition:DescribeCollection'.")
             logger.error(f"Detalhes da negação de acesso: {error_message}")
+
         elif error_code == 'ResourceNotFoundException':
             logger.error(f"Causa provável: A coleção Rekognition '{collection_id_to_check}' não existe na região '{region_name_config}'.")
             logger.error("Verifique se o nome da coleção e a região AWS estão corretos e se a coleção foi criada no Amazon Rekognition.")
+
         elif error_code == 'InvalidSignatureException' or error_code == 'SignatureDoesNotMatch':
             logger.error("Causa provável: Chave de acesso secreta (Secret Access Key) inválida. Verifique suas credenciais AWS.")
+
         elif error_code == 'ThrottlingException':
             logger.error("Causa provável: Muitas requisições para a AWS. Tente novamente mais tarde.")
+
         elif error_code == 'InvalidParameterException' and 'Unable to parse region' in error_message:
              logger.error(f"Causa provável: Região AWS '{region_name_config}' inválida ou mal formatada. Verifique a configuração da região.")
+
         else:
             logger.error(f"Um erro inesperado do cliente AWS ocorreu durante a verificação: {error_message}")
+
         return False
+    
     except Exception as e: # Captura outras exceções (ex: BotoCoreError para problemas de endpoint/rede)
         logger.error(f"ERRO GERAL durante a verificação do setup AWS: {e}")
         logger.error("Verifique sua conexão de rede e as configurações de endpoint da AWS, se aplicável.")
+
         return False
 
 # Função que envia a imagem para o Rekognition e processa os rostos detectados
@@ -144,6 +158,7 @@ def processar_rekognition():
             # Processa as faces encontradas
             if response['FaceMatches']:
                 agora = time.time()
+
                 for match in response['FaceMatches']:
                     face_id = match['Face']['FaceId']
                     aluno_id = match['Face']['ExternalImageId']
@@ -168,11 +183,13 @@ def processar_rekognition():
 
         except rekognition.exceptions.InvalidParameterException:
             logger.warning("Nenhum rosto detectado no frame pelo Rekognition. Continuando...")
+
         except ClientError as e: # Tratamento de erros do cliente AWS mais específico
             error_code = e.response['Error']['Code']
             logger.error(f"Erro do cliente AWS ao chamar Rekognition (search_faces_by_image): {error_code} - {e.response['Error']['Message']}")
             # Adicionar lógica para lidar com throttling ou outros erros recuperáveis se necessário
             time.sleep(2) # Pausa para evitar sobrecarregar em caso de erro persistente
+
         except Exception as e:
             logger.error(f"Erro inesperado ao chamar o Rekognition: {e}")
             time.sleep(2) 
@@ -254,9 +271,11 @@ def gerar_relatorio_csv():
         with open(filename, mode='w', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
             writer.writerow(["ID do Aluno", "Horário de Reconhecimento"])
+
             for aluno in alunos_reconhecidos:
                 writer.writerow([aluno["id"], aluno["horario"]])
         logger.info(f"Relatório CSV salvo como {filename}")
+
     except IOError as e:
         logger.error(f"Erro ao salvar relatório CSV: {e}")
 
@@ -264,10 +283,12 @@ def gerar_relatorio_csv():
 def gerar_relatorio_json():
     # Usar o timestamp no nome do arquivo JSON também pode ser útil se quiser manter históricos
     filename = os.path.join(PASTA_RELATORIOS, f"relatorio_presenca_{timestamp}.json") 
+    
     try:
         with open(filename, "w", encoding="utf-8") as file:
             json.dump(alunos_reconhecidos, file, indent=4, ensure_ascii=False)
         logger.info(f"Relatório JSON salvo como {filename}")
+
     except IOError as e:
         logger.error(f"Erro ao salvar relatório JSON: {e}")
 
