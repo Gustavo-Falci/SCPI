@@ -1,0 +1,53 @@
+[2025-05-26 19:52:42,654] INFO: Found credentials in shared credentials file: ~/.aws/credentials
+[2025-05-26 19:52:42,793] INFO: Iniciando aplicação de reconhecimento facial em tempo real...
+[2025-05-26 19:52:42,793] INFO: Verificando setup do AWS Rekognition...
+[2025-05-26 19:52:42,793] INFO: Região AWS configurada: us-east-1
+[2025-05-26 19:52:42,793] INFO: ID da Coleção configurado: sala_de_aula
+[2025-05-26 19:52:42,793] INFO: Tentando listar coleções para testar a conexão e permissões básicas...
+[2025-05-26 19:52:44,312] INFO: Conexão bem-sucedida! Coleções Rekognition existentes: ['sala_de_aula']
+[2025-05-26 19:52:44,312] INFO: Verificando se a coleção 'sala_de_aula' existe...
+[2025-05-26 19:52:44,677] INFO: Coleção 'sala_de_aula' encontrada e acessível.
+[2025-05-26 19:52:44,679] INFO: Setup da AWS verificado com sucesso. Iniciando reconhecimento...
+[2025-05-26 19:53:31,260] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:31,799] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:33,408] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:34,027] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:35,455] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:36,398] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:37,292] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:38,217] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:39,744] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:40,170] WARNING: Nenhum rosto detectado no frame pelo Rekognition. Continuando...
+[2025-05-26 19:53:43,133] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:43,958] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:44,773] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:46,310] INFO: Aluno reconhecido: Gustavo_Falci
+[2025-05-26 19:53:46,812] INFO: Aluno reconhecido: Gustavo_Falci
+[2025-05-26 19:53:48,564] INFO: Aluno reconhecido: Gustavo_Falci
+[2025-05-26 19:53:49,067] INFO: Aluno reconhecido: Gustavo_Falci
+[2025-05-26 19:53:50,308] WARNING: Nenhum rosto detectado no frame pelo Rekognition. Continuando...
+[2025-05-26 19:53:52,552] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:53,378] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:54,093] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:53:55,718] WARNING: Nenhum rosto conhecido encontrado no frame atual.
+[2025-05-26 19:53:56,549] WARNING: Nenhum rosto conhecido encontrado no frame atual.
+[2025-05-26 19:53:57,471] WARNING: Nenhum rosto conhecido encontrado no frame atual.
+[2025-05-26 19:53:58,490] WARNING: Nenhum rosto conhecido encontrado no frame atual.
+[2025-05-26 19:53:59,520] WARNING: Nenhum rosto conhecido encontrado no frame atual.
+[2025-05-26 19:54:00,639] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:54:01,875] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:54:02,626] INFO: Aluno reconhecido: Bruno_Silvestre
+[2025-05-26 19:54:03,504] WARNING: Nenhum rosto conhecido encontrado no frame atual.
+[2025-05-26 19:54:04,539] INFO: Aluno reconhecido: Gustavo_Falci
+[2025-05-26 19:54:05,416] WARNING: Nenhum rosto detectado no frame pelo Rekognition. Continuando...
+[2025-05-26 19:54:08,005] INFO: Aluno reconhecido: Gustavo_Falci
+[2025-05-26 19:54:08,672] INFO: Aluno reconhecido: Gustavo_Falci
+[2025-05-26 19:54:09,664] INFO: Aluno reconhecido: Gustavo_Falci
+[2025-05-26 19:54:11,267] WARNING: Nenhum rosto detectado no frame pelo Rekognition. Continuando...
+[2025-05-26 19:54:11,427] INFO: Tecla ESC pressionada. Encerrando aplicação...
+[2025-05-26 19:54:11,429] INFO: Aguardando a thread de processamento do Rekognition finalizar...
+[2025-05-26 19:54:13,132] WARNING: Nenhum rosto conhecido encontrado no frame atual.
+[2025-05-26 19:54:13,578] INFO: Câmera liberada e janelas destruídas.
+[2025-05-26 19:54:13,589] INFO: Relatório CSV salvo como c:\Users\itconsol\Downloads\ProjetoReconhecimento\BackEnd\Relatorios\relatorio_presenca_2025-05-26_19-52.csv
+[2025-05-26 19:54:13,600] INFO: Relatório JSON salvo como c:\Users\itconsol\Downloads\ProjetoReconhecimento\BackEnd\Relatorios\relatorio_presenca_2025-05-26_19-52.json
+[2025-05-26 19:54:13,610] INFO: Aplicação encerrada.

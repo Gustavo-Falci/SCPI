@@ -135,7 +135,7 @@ def processar_rekognition():
     while rodando:
         # Aguarda até que seja hora de processar um novo frame
         if frame_atual is None or time.time() - ultimo_envio < 1:
-            time.sleep(0.1)
+            time.sleep(0.05)
             continue
 
         ultimo_envio = time.time()
@@ -207,7 +207,7 @@ def reconhecer_em_tempo_real():
         return
 
     # Define resolução (opcional)
-    # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)09090
+    # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     # logger.info(f"Resolução da câmera definida para: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 
@@ -244,7 +244,7 @@ def reconhecer_em_tempo_real():
             logger.info("Tecla ESC pressionada. Encerrando aplicação...")
             break
         
-        time.sleep(0.4) # Ajuste conforme necessário para equilibrar responsividade e uso de CPU
+        time.sleep(0.05) # Ajuste conforme necessário para equilibrar responsividade e uso de CPU
 
     # Espera a thread de Rekognition finalizar (opcional, pois é daemon)
     if rekognition_thread.is_alive():
