@@ -1,9 +1,9 @@
 # Importações de bibliotecas necessárias
 from config import AWS_REGION, COLLECTION_ID
 from datetime import datetime
+from botocore.exceptions import ClientError # Adicionado para tratar exceções AWS
 import cv2
 import boto3
-from botocore.exceptions import ClientError # Adicionado para tratar exceções AWS
 import time
 import json
 import csv
