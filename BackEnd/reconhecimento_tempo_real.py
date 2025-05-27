@@ -1,7 +1,7 @@
 # Importações de bibliotecas necessárias
 from config import AWS_REGION, COLLECTION_ID
 from datetime import datetime
-from botocore.exceptions import ClientError # Adicionado para tratar exceções AWS
+from botocore.exceptions import ClientError
 import cv2
 import boto3
 import time
@@ -10,7 +10,7 @@ import csv
 import os
 import logging
 import threading
-import sys # Adicionado para sys.exit()
+import sys 
 
 # Diretório base do projeto
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
