@@ -1,8 +1,8 @@
 import boto3
-
+from config import AWS_REGION, COLLECTION_ID
 # Configuração do Rekognition
-rekognition = boto3.client("rekognition", region_name="us-east-1")  # Substitua pela sua região
-COLECAO_ID = "sala_de_aula"
+rekognition = boto3.client("rekognition", region_name=AWS_REGION)  # Substitua pela sua região
+COLECAO_ID = COLLECTION_ID
 
 def listar_rostos():
     """Lista todos os rostos cadastrados na coleção do Rekognition."""

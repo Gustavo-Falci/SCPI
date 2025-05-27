@@ -1,21 +1,17 @@
+from aws_clientes import s3_client, rekognition_client
+from config import BUCKET_NAME, COLLECTION_ID
 import os
-import boto3
 import logging
 import botocore.exceptions
-from config import AWS_REGION, BUCKET_NAME, COLLECTION_ID
 
-# Configuração de logging
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-# Inicializa os clientes
-s3_client = boto3.client('s3', region_name=AWS_REGION)
-rekognition_client = boto3.client('rekognition', region_name=AWS_REGION)
+logger = logging.getLogger(__name__)
 
 
 def upload_imagem_s3(imagem_path, aluno_id):
     """Faz upload da imagem para o S3."""
     if not os.path.exists(imagem_path):
-        logging.error(f"❌ Arquivo '{imagem_path}' não encontrado.")
+        logging.error(f"❌ Cliente S3 não inicializado. Upload cancelado.")
         return None
 
     try:

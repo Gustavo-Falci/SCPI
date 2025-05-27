@@ -179,10 +179,10 @@ def processar_rekognition():
                             "horario": time.strftime("%Y-%m-%d %H:%M:%S")
                         })
             else:
-                logger.warning("Nenhum rosto conhecido encontrado no frame atual.")
+                logger.info("Nenhum rosto conhecido encontrado no frame atual.")
 
         except rekognition.exceptions.InvalidParameterException:
-            logger.warning("Nenhum rosto detectado no frame pelo Rekognition. Continuando...")
+            logger.info("Nenhum rosto detectado no frame pelo Rekognition. Continuando...")
 
         except ClientError as e: # Tratamento de erros do cliente AWS mais específico
             error_code = e.response['Error']['Code']

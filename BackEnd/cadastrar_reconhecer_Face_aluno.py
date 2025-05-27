@@ -1,9 +1,11 @@
+from rekognition_aws import criar_colecao, cadastrar_rosto, reconhecer_aluno
+from sistema_cadastrar_aluno import s3_client, BUCKET_NAME
+import botocore.exceptions
 import capture_camera
 import os
 import uuid
 import re
-from rekognition_aws import criar_colecao, cadastrar_rosto, reconhecer_aluno
-from sistema_cadastrar_aluno import s3_client, BUCKET_NAME
+
 
 # Função para formatar o nome/ID do aluno conforme exigido pelo Amazon Rekognition
 # Ela substitui espaços por "_" e remove caracteres não permitidos
@@ -18,7 +20,7 @@ def acao_criar_colecao():
     try:
         criar_colecao()
         print("✅ Coleção criada com sucesso (ou já existente).")
-    except Exception as e:
+    except botocore.exceptions.ClientError as e:
         print(f"❌ Erro ao criar coleção ({type(e).__name__}): {e}")
 
 # Função que cadastra um novo aluno:
@@ -50,7 +52,7 @@ def acao_cadastrar_aluno():
         # Cadastra o rosto da imagem no Rekognition usando o nome formatado
         cadastrar_rosto(s3_path, nome_formatado)
         print(f"📌 Rosto cadastrado no Rekognition para o aluno '{nome}'.")
-    except Exception as e:
+    except botocore.exceptions.ClientError as e:
         print(f"❌ Erro durante o cadastro ({type(e).__name__}): {e}")
     finally:
         # Remove a imagem local da máquina, mesmo se houver erro
@@ -69,7 +71,7 @@ def acao_reconhecer_aluno():
     try:
         # Envia a imagem para reconhecimento no Rekognition
         reconhecer_aluno(imagem_path)
-    except Exception as e:
+    except botocore.exceptionsClientError as e:
         print(f"❌ Erro no reconhecimento ({type(e).__name__}): {e}")
     finally:
         # Remove a imagem local após o reconhecimento
