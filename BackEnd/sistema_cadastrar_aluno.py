@@ -74,6 +74,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(module)s - %(message)s")
     
     imagem_local = input("Informe o caminho da imagem local: ").strip()
+    
     if not os.path.exists(imagem_local):
         logger.error(f"Caminho da imagem local '{imagem_local}' não encontrado.")
 

@@ -25,15 +25,19 @@ def capture_frame_as_jpeg_bytes() -> bytes | None:
     cap.release() # Libera a câmera imediatamente após a captura
 
     if ret and frame is not None:
+
         try:
             # Codifica o frame capturado para o formato JPEG em memória
             is_success, buffer = cv2.imencode(".jpg", frame)
+            
             if is_success:
                 logger.info("Frame capturado e codificado para JPEG com sucesso.")
                 return buffer.tobytes()
+            
             else:
                 logger.error("Erro ao codificar frame para JPEG.")
                 return None
+            
         except Exception as e:
             logger.error(f"Exceção ao codificar frame para JPEG: {e}", exc_info=True)
             return None
