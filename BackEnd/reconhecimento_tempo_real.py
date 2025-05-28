@@ -3,7 +3,6 @@ from config import AWS_REGION, COLLECTION_ID
 from datetime import datetime
 from botocore.exceptions import ClientError
 from aws_clientes import rekognition_client, verificar_conexao_rekognition
-import boto3
 import cv2
 import time
 import json
