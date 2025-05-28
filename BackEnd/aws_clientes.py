@@ -4,7 +4,7 @@ import boto3
 import logging
 
 
-# Configuração de logging é feita no ponto de entrada da aplicação.
+# Configuração de logging 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s (aws_clients): %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ except ClientError as e:
     # Em uma aplicação real, você pode querer levantar a exceção ou ter um mecanismo de fallback.
     rekognition_client = None
     s3_client = None
+
 except Exception as e:
     logger.error(f"Erro inesperado durante a inicialização dos clientes AWS: {e}")
     rekognition_client = None
@@ -31,13 +32,16 @@ def verificar_conexao_rekognition():
     if not rekognition_client:
         logger.error("Cliente Rekognition não inicializado.")
         return False
+    
     try:
         rekognition_client.list_collections(MaxResults=1) # Teste leve
         logger.info("Conexão com AWS Rekognition verificada com sucesso.")
         return True
+    
     except ClientError as e:
         logger.error(f"Erro ao verificar conexão com Rekognition: {e.response['Error']['Message']}")
         return False
+    
     except Exception as e:
         logger.error(f"Erro inesperado ao verificar conexão com Rekognition: {e}")
         return False
@@ -50,13 +54,16 @@ def verificar_conexao_s3():
     if not s3_client:
         logger.error("Cliente S3 não inicializado.")
         return False
+    
     try:
         s3_client.list_buckets() # Verifica se consegue listar buckets (requer permissão)
         logger.info("Conexão com AWS S3 verificada com sucesso.")
         return True
+    
     except ClientError as e:
         logger.error(f"Erro ao verificar conexão com S3: {e.response['Error']['Message']}")
         return False
+    
     except Exception as e:
         logger.error(f"Erro inesperado ao verificar conexão com S3: {e}")
         return False
@@ -66,10 +73,12 @@ if __name__ == "__main__":
     logger.info("Testando conexões com AWS...")
     if rekognition_client:
         verificar_conexao_rekognition()
+
     else:
         logger.warning("Cliente Rekognition não está disponível para teste.")
 
     if s3_client:
         verificar_conexao_s3()
+        
     else:
         logger.warning("Cliente S3 não está disponível para teste.")
