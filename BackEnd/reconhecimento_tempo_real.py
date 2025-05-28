@@ -2,7 +2,7 @@
 from config import AWS_REGION, COLLECTION_ID
 from datetime import datetime
 from botocore.exceptions import ClientError
-from aws_clientes import rekognition_client, verificar_conexao_rekognition
+from aws_clientes import rekognition_client
 import cv2
 import time
 import json
@@ -44,7 +44,7 @@ alunos_reconhecidos = []
 
 # Dicionário que guarda o timestamp do último reconhecimento por FaceId
 faceid_ultimo_reconhecimento = {}
-TEMPO_ESPERA = 0  # Tempo em segundos para evitar reconhecer o mesmo rosto repetidamente
+TEMPO_ESPERA = 10  # Tempo em segundos para evitar reconhecer o mesmo rosto repetidamente
 
 # Criação do diretório onde os relatórios serão salvos
 PASTA_RELATORIOS = os.path.join(BASE_DIR, "Relatorios")
@@ -312,7 +312,7 @@ if __name__ == "__main__":
     if not rekognition_client: # Verifica se o cliente global foi carregado
          logger.error("Cliente Rekognition não pôde ser inicializado. Verifique aws_clients.py e as configurações.")
          sys.exit(1)
-         
+
     # A função verificar_setup_aws_rekognition agora usa o rekognition_client importado
     if not verificar_setup_aws_rekognition(rekognition_client, COLLECTION_ID, AWS_REGION):
         logger.error("Falha crítica na verificação do setup da AWS. A aplicação será encerrada.")

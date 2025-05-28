@@ -1,111 +1,158 @@
-from rekognition_aws import criar_colecao, cadastrar_rosto, reconhecer_aluno
-from aws_clientes import s3_client
-from config import BUCKET_NAME
-import botocore.exceptions
-import capture_camera
-import os
-import uuid
-import re
+# Imports corrigidos e organizados
 import logging
+import os
+import re
+import uuid # Para gerar IDs únicos para imagens
 
+import botocore.exceptions
+
+# Importa as funções específicas que serão usadas
+from rekognition_aws import criar_colecao as rekognition_criar_colecao, \
+                            cadastrar_rosto as rekognition_cadastrar_rosto, \
+                            reconhecer_aluno_por_bytes as rekognition_reconhecer_aluno_por_bytes
+                            
+from aws_clientes import s3_client # rekognition_client é usado dentro das funções do rekognition_aws
+from config import BUCKET_NAME
+from capture_camera import capture_frame_as_jpeg_bytes # Importa a função correta
+
+# Configuração do logger para este módulo
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+# A configuração básica do logging (basicConfig) deve ser feita idealmente uma vez,
+# no ponto de entrada principal da aplicação. Se este script é um ponto de entrada, está OK.
+# Se for importado, a configuração do logger do módulo que o importa prevalecerá.
+if not logger.hasHandlers(): # Evita adicionar handlers múltiplos se já configurado
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
 
-# Função para formatar o nome/ID do aluno conforme exigido pelo Amazon Rekognition
-# Ela substitui espaços por "_" e remove caracteres não permitidos
-def formatar_nome_para_external_id(nome):
+
+def formatar_nome_para_external_id(nome: str) -> str:
+    """Formata o nome/ID do aluno para ser compatível com Amazon Rekognition."""
     nome_formatado = re.sub(r'\s+', '_', nome)  # Substitui espaços por underline
     nome_formatado = re.sub(r'[^a-zA-Z0-9_.\-:]', '', nome_formatado)  # Remove caracteres inválidos
     return nome_formatado
 
-# Função que realiza a criação da coleção de rostos no Amazon Rekognition
+
 def acao_criar_colecao():
-
-    if not s3_client: # Adiciona verificação
-        print("❌ Cliente S3 não inicializado. Cadastro cancelado.")
-        logger.error("Cliente S3 não inicializado. Cadastro cancelado.")
-        return
-
-    print("\nℹ️ Essa ação só precisa ser feita uma vez. Se a coleção já existe, será ignorada.")
-
+    """Realiza a criação da coleção de rostos no Amazon Rekognition."""
+    print("\nℹ️  Esta ação só precisa ser feita uma vez. Se a coleção já existe, será informado.")
     try:
-        criar_colecao()
-        print("✅ Coleção criada com sucesso (ou já existente).")
+        # A função rekognition_criar_colecao já verifica se o rekognition_client está disponível
+        # e também trata os erros de ClientError internamente, logando-os.
+        resultado = rekognition_criar_colecao()
+        if resultado is not None: # A função retorna a resposta da API ou None em caso de erro/já existir sem erro
+            # A mensagem de sucesso ou "já existe" é logada dentro de rekognition_criar_colecao
+            print("✅ Verificação/Criação da coleção concluída. Veja os logs para detalhes.")
+        else:
+            # Se resultado for None, um erro já foi logado dentro de rekognition_criar_colecao
+            print("❌ Falha ao verificar/criar coleção. Verifique os logs.")
+            
+    except Exception as e: # Captura qualquer outra exceção inesperada
+        print(f"❌ Erro inesperado ao tentar criar coleção: {e}")
+        logger.error(f"Erro inesperado na acao_criar_colecao: {e}", exc_info=True)
 
-    except botocore.exceptions.ClientError as e:
-        print(f"❌ Erro ao criar coleção ({type(e).__name__}): {e}")
 
-# Função que cadastra um novo aluno:
-# Captura a imagem, envia ao S3, cadastra no Rekognition e remove a imagem local
 def acao_cadastrar_aluno():
+    """Cadastra um novo aluno: captura imagem, envia bytes ao S3, cadastra no Rekognition."""
     nome = input("🧑 Digite o nome ou ID do aluno: ").strip()
-
     if not nome:
         print("⚠️ Nome inválido. Tente novamente.")
+        logger.warning("Nome de aluno inválido fornecido para cadastro.")
         return
 
-    # Captura imagem do aluno
-    imagem_path = capture_camera.capture_image()
+    print("📸 Posicione-se para a foto...")
+    image_bytes = capture_frame_as_jpeg_bytes() # Captura como bytes
 
-    if not imagem_path:
-        print("❌ Erro ao capturar imagem.")
+    if not image_bytes:
+        print("❌ Erro ao capturar imagem. Verifique a câmera e tente novamente.")
+        # O logger dentro de capture_frame_as_jpeg_bytes já deve ter logado o erro específico.
         return
 
-    # Gera um caminho único para o arquivo usando UUID
-    imagem_uuid = uuid.uuid4()
-    s3_path = f"alunos/{nome}_{imagem_uuid}.jpg"
-
-    # Formata o nome para ser compatível com Rekognition
     nome_formatado = formatar_nome_para_external_id(nome)
+    imagem_uuid = uuid.uuid4()
+    s3_path = f"alunos/{nome_formatado}_{imagem_uuid}.jpg" # Usa nome_formatado para o path S3
+    logger.info(f"Nome do arquivo S3 para cadastro: {s3_path}")
 
-    try:
-        # Envia a imagem capturada para o bucket do S3
-        s3_client.upload_file(imagem_path, BUCKET_NAME, s3_path)
-        print(f"✅ Imagem enviada: s3://{BUCKET_NAME}/{s3_path}")
-
-        # Cadastra o rosto da imagem no Rekognition usando o nome formatado
-        cadastrar_rosto(s3_path, nome_formatado)
-        print(f"📌 Rosto cadastrado no Rekognition para o aluno '{nome}'.")
-
-    except botocore.exceptions.ClientError as e:
-        print(f"❌ Erro durante o cadastro ({type(e).__name__}): {e}")
-
-    finally:
-        # Remove a imagem local da máquina, mesmo se houver erro
-        if os.path.exists(imagem_path):
-            os.remove(imagem_path)
-            print(f"🗑️ Imagem local '{imagem_path}' excluída.")
-
-# Função que realiza o reconhecimento facial de um aluno
-def acao_reconhecer_aluno():
-    # Captura imagem da câmera
-    imagem_path = capture_camera.capture_image()
-
-    if not imagem_path:
-        print("❌ Erro ao capturar imagem.")
+    if not s3_client:
+        print("❌ Cliente S3 não está disponível. Cadastro cancelado.")
+        logger.error("Cliente S3 não disponível para cadastro em acao_cadastrar_aluno.")
         return
 
     try:
-        # Envia a imagem para reconhecimento no Rekognition
-        reconhecer_aluno(imagem_path)
+        # Envia os bytes da imagem para o bucket do S3
+        s3_client.put_object(Bucket=BUCKET_NAME, Key=s3_path, Body=image_bytes, ContentType='image/jpeg')
+        print(f"✅ Imagem enviada para: s3://{BUCKET_NAME}/{s3_path}")
+        logger.info(f"Bytes da imagem enviados para s3://{BUCKET_NAME}/{s3_path}")
 
-    except botocore.exceptionsClientError as e:
-        print(f"❌ Erro no reconhecimento ({type(e).__name__}): {e}")
+        # Cadastra o rosto da imagem (que está no S3) no Rekognition
+        # rekognition_cadastrar_rosto é um wrapper que chama indexar_rosto_da_imagem_s3
+        resultado_cadastro_rekognition = rekognition_cadastrar_rosto(s3_path, nome_formatado)
         
-    finally:
-        # Remove a imagem local após o reconhecimento
-        if os.path.exists(imagem_path):
-            os.remove(imagem_path)
-            print(f"🗑️ Imagem local '{imagem_path}' excluída após o reconhecimento.")
+        # A função rekognition_cadastrar_rosto (e indexar_rosto_da_imagem_s3) já loga detalhes.
+        # Podemos adicionar uma mensagem aqui baseada no resultado.
+        if resultado_cadastro_rekognition and resultado_cadastro_rekognition.get("FaceRecords"):
+            print(f"✅ Rosto do aluno '{nome}' (ID: {nome_formatado}) registrado no Rekognition com sucesso!")
+        elif resultado_cadastro_rekognition and resultado_cadastro_rekognition.get("UnindexedFaces"):
+             print(f"⚠️ Rosto do aluno '{nome}' (ID: {nome_formatado}) NÃO foi indexado. Razão: {resultado_cadastro_rekognition.get('UnindexedFaces')[0].get('Reasons')}")
+        elif resultado_cadastro_rekognition is None: # Erro na chamada da API
+            print(f"❌ Falha ao tentar registrar o rosto do aluno '{nome}' (ID: {nome_formatado}) no Rekognition. Verifique os logs.")
+        else: # Resposta sem FaceRecords e sem UnindexedFaces (pouco comum se não houver erro)
+             print(f"❓ Resposta inesperada do Rekognition para o cadastro do aluno '{nome}' (ID: {nome_formatado}). Verifique os logs.")
 
-# Função principal que exibe o menu e chama as funcionalidades conforme a escolha do usuário
+
+    except botocore.exceptions.ClientError as e_s3:
+        print(f"❌ Erro ao enviar imagem para o S3: {e_s3.response['Error']['Message']}")
+        logger.error(f"Erro S3 durante o cadastro do aluno '{nome}': {e_s3.response['Error']['Message']}", exc_info=True)
+    except Exception as e:
+        print(f"❌ Erro inesperado durante o cadastro: {e}")
+        logger.error(f"Erro inesperado durante o cadastro do aluno '{nome}': {e}", exc_info=True)
+    # Não há 'finally' para remover arquivo local, pois não foi salvo.
+
+
+def acao_reconhecer_aluno():
+    """Realiza o reconhecimento facial de um aluno usando imagem em memória."""
+    print("📸 Posicione-se para a foto de reconhecimento...")
+    image_bytes = capture_frame_as_jpeg_bytes() # Captura como bytes
+
+    if not image_bytes:
+        print("❌ Erro ao capturar imagem. Verifique a câmera e tente novamente.")
+        return
+
+    try:
+        # Envia os bytes da imagem para reconhecimento no Rekognition
+        # A função rekognition_reconhecer_aluno_por_bytes já loga o resultado
+        aluno_id_reconhecido = rekognition_reconhecer_aluno_por_bytes(image_bytes)
+
+        if aluno_id_reconhecido:
+            print(f"🙂 Aluno reconhecido: {aluno_id_reconhecido}")
+        else:
+            # A função interna já logou "Rosto não reconhecido" ou "Nenhum rosto detectado"
+            print("🚫 Aluno não reconhecido.")
+
+        # Bloco opcional para salvar imagem de tentativa no S3 (se decidir implementar)
+        # import datetime
+        # agora = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # status_rec = f"reconhecido_{aluno_id_reconhecido}" if aluno_id_reconhecido else "nao_reconhecido"
+        # s3_path_tentativa = f"tentativas_reconhecimento/{agora}_{status_rec}.jpg"
+        # try:
+        #     if s3_client:
+        #         s3_client.put_object(Bucket=BUCKET_NAME, Key=s3_path_tentativa, Body=image_bytes, ContentType='image/jpeg')
+        #         logger.info(f"Imagem da tentativa de reconhecimento salva em S3: {s3_path_tentativa}")
+        # except Exception as e_s3_rec:
+        #     logger.error(f"Falha ao salvar imagem de tentativa de reconhecimento no S3: {e_s3_rec}")
+
+    except botocore.exceptions.ClientError as e_rek: # Erro específico do Rekognition
+        print(f"❌ Erro na chamada ao Rekognition: {e_rek.response['Error']['Message']}")
+        # O logger dentro de rekognition_reconhecer_aluno_por_bytes já deve ter logado
+    except Exception as e:
+        print(f"❌ Erro inesperado durante o reconhecimento: {e}")
+        logger.error(f"Erro inesperado na acao_reconhecer_aluno: {e}", exc_info=True)
+    # Não há 'finally' para remover arquivo local.
+
+
 def main():
     print("\n🎬 Bem-vindo ao Sistema de Reconhecimento Facial para Chamada!\n")
-
     while True:
-        # Menu de opções
         print("\nEscolha uma opção:")
-        print("1️⃣  Criar Coleção (apenas uma vez)")
+        print("1️⃣  Criar Coleção (verificar/criar se necessário)")
         print("2️⃣  Cadastrar um Aluno")
         print("3️⃣  Reconhecer um Aluno")
         print("4️⃣  Sair")
@@ -124,6 +171,5 @@ def main():
         else:
             print("❌ Opção inválida! Digite um número entre 1 e 4.")
 
-# Ponto de entrada do programa
 if __name__ == "__main__":
     main()
