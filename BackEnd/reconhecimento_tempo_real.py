@@ -200,10 +200,19 @@ def reconhecer_em_tempo_real():
     global frame_atual, rodando
 
     # Inicia a captura da câmera
-    cap = cv2.VideoCapture(0) # Tente 0 se 1 não funcionar, ou o índice correto da sua câmera
+    cap = cv2.VideoCapture(0)
+    
     if not cap.isOpened():
+        logger.warning("Câmera 0 não disponível. Tentando câmera 1...")
+        cap = cv2.VideoCapture(1)
+
+    if cap.isOpened():
+        logger.info("Câmera inicializada com sucesso.")
+
+    else:
         logger.error("Erro ao abrir a câmera. Verifique se está conectada e não em uso por outro programa.")
         return
+    
 
     # Define resolução (opcional)
     # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
