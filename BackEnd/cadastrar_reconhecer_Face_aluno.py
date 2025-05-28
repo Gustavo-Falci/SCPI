@@ -1,6 +1,5 @@
 # Imports corrigidos e organizados
 import logging
-import os
 import re
 import uuid # Para gerar IDs únicos para imagens
 
