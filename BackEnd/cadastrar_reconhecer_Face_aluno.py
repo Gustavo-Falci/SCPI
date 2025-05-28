@@ -2,17 +2,13 @@
 import logging
 import re
 import uuid # Para gerar IDs únicos para imagens
-
 import botocore.exceptions
-
-# Importa as funções específicas que serão usadas
 from rekognition_aws import criar_colecao as rekognition_criar_colecao, \
                             cadastrar_rosto as rekognition_cadastrar_rosto, \
                             reconhecer_aluno_por_bytes as rekognition_reconhecer_aluno_por_bytes
-                            
-from aws_clientes import s3_client # rekognition_client é usado dentro das funções do rekognition_aws
+from aws_clientes import s3_client 
 from config import BUCKET_NAME
-from capture_camera import capture_frame_as_jpeg_bytes # Importa a função correta
+from capture_camera import capture_frame_as_jpeg_bytes 
 
 # Configuração do logger para este módulo
 logger = logging.getLogger(__name__)
@@ -52,6 +48,7 @@ def acao_criar_colecao():
 def acao_cadastrar_aluno():
     """Cadastra um novo aluno: captura imagem, envia bytes ao S3, cadastra no Rekognition."""
     nome = input("🧑 Digite o nome ou ID do aluno: ").strip()
+
     if not nome:
         print("⚠️ Nome inválido. Tente novamente.")
         logger.warning("Nome de aluno inválido fornecido para cadastro.")
@@ -89,10 +86,13 @@ def acao_cadastrar_aluno():
         # Podemos adicionar uma mensagem aqui baseada no resultado.
         if resultado_cadastro_rekognition and resultado_cadastro_rekognition.get("FaceRecords"):
             print(f"✅ Rosto do aluno '{nome}' (ID: {nome_formatado}) registrado no Rekognition com sucesso!")
+
         elif resultado_cadastro_rekognition and resultado_cadastro_rekognition.get("UnindexedFaces"):
              print(f"⚠️ Rosto do aluno '{nome}' (ID: {nome_formatado}) NÃO foi indexado. Razão: {resultado_cadastro_rekognition.get('UnindexedFaces')[0].get('Reasons')}")
+
         elif resultado_cadastro_rekognition is None: # Erro na chamada da API
             print(f"❌ Falha ao tentar registrar o rosto do aluno '{nome}' (ID: {nome_formatado}) no Rekognition. Verifique os logs.")
+
         else: # Resposta sem FaceRecords e sem UnindexedFaces (pouco comum se não houver erro)
              print(f"❓ Resposta inesperada do Rekognition para o cadastro do aluno '{nome}' (ID: {nome_formatado}). Verifique os logs.")
 
@@ -100,6 +100,7 @@ def acao_cadastrar_aluno():
     except botocore.exceptions.ClientError as e_s3:
         print(f"❌ Erro ao enviar imagem para o S3: {e_s3.response['Error']['Message']}")
         logger.error(f"Erro S3 durante o cadastro do aluno '{nome}': {e_s3.response['Error']['Message']}", exc_info=True)
+
     except Exception as e:
         print(f"❌ Erro inesperado durante o cadastro: {e}")
         logger.error(f"Erro inesperado durante o cadastro do aluno '{nome}': {e}", exc_info=True)
@@ -122,6 +123,7 @@ def acao_reconhecer_aluno():
 
         if aluno_id_reconhecido:
             print(f"🙂 Aluno reconhecido: {aluno_id_reconhecido}")
+
         else:
             # A função interna já logou "Rosto não reconhecido" ou "Nenhum rosto detectado"
             print("🚫 Aluno não reconhecido.")
@@ -141,6 +143,7 @@ def acao_reconhecer_aluno():
     except botocore.exceptions.ClientError as e_rek: # Erro específico do Rekognition
         print(f"❌ Erro na chamada ao Rekognition: {e_rek.response['Error']['Message']}")
         # O logger dentro de rekognition_reconhecer_aluno_por_bytes já deve ter logado
+
     except Exception as e:
         print(f"❌ Erro inesperado durante o reconhecimento: {e}")
         logger.error(f"Erro inesperado na acao_reconhecer_aluno: {e}", exc_info=True)
@@ -149,6 +152,7 @@ def acao_reconhecer_aluno():
 
 def main():
     print("\n🎬 Bem-vindo ao Sistema de Reconhecimento Facial para Chamada!\n")
+
     while True:
         print("\nEscolha uma opção:")
         print("1️⃣  Criar Coleção (verificar/criar se necessário)")
