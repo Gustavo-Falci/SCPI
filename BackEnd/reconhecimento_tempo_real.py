@@ -2,8 +2,9 @@
 from config import AWS_REGION, COLLECTION_ID
 from datetime import datetime
 from botocore.exceptions import ClientError
-import cv2
+from aws_clientes import rekognition_client, verificar_conexao_rekognition
 import boto3
+import cv2
 import time
 import json
 import csv
@@ -11,6 +12,8 @@ import os
 import logging
 import threading
 import sys 
+
+logger = logging.getLogger(__name__)
 
 # Diretório base do projeto
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -36,13 +39,6 @@ if not logging.getLogger().hasHandlers():
 
 logger = logging.getLogger(__name__)
 
-# Inicializa o cliente da AWS Rekognition
-try:
-    rekognition = boto3.client('rekognition', region_name=AWS_REGION)
-except Exception as e:
-    logger.error(f"Falha ao inicializar o cliente Rekognition. Verifique a configuração do Boto3 e AWS: {e}")
-    sys.exit(1)
-
 
 # Lista para armazenar os alunos reconhecidos
 alunos_reconhecidos = []
@@ -63,28 +59,27 @@ rodando = True          # Controle de execução do loop principal
 
 
 # Função para verificar a conexão com AWS Rekognition e a existência da coleção
-def verificar_setup_aws_rekognition(client, collection_id_to_check, region_name_config):
+def verificar_setup_aws_rekognition(client_rek, collection_id_to_check, region_name_config):
     """
     Verifica a conexão com o AWS Rekognition, as permissões básicas
     e se a coleção especificada existe.
     Retorna True se tudo estiver OK, False caso contrário.
     """
+    if not client_rek:
+        logger.info("Cliente Rekognition não inicializado. Verificação de setup cancelada.")
+        return False
     logger.info("Verificando setup do AWS Rekognition...")
-    logger.info(f"Região AWS configurada: {region_name_config}")
-    logger.info(f"ID da Coleção configurado: {collection_id_to_check}")
 
     try:
         # 1. Teste de Conexão e Permissões Básicas: Listar Coleções
         logger.info("Tentando listar coleções para testar a conexão e permissões básicas...")
-
-        response_list = client.list_collections()
+        response_list = client_rek.list_collections()
 
         logger.info(f"Conexão bem-sucedida! Coleções Rekognition existentes: {response_list.get('CollectionIds', [])}")
 
         # 2. Teste de Existência da Coleção Específica
         logger.info(f"Verificando se a coleção '{collection_id_to_check}' existe...")
-
-        client.describe_collection(CollectionId=collection_id_to_check)
+        client_rek.describe_collection(CollectionId=collection_id_to_check)
 
         logger.info(f"Coleção '{collection_id_to_check}' encontrada e acessível.")
         
@@ -132,6 +127,10 @@ def verificar_setup_aws_rekognition(client, collection_id_to_check, region_name_
 # Função que envia a imagem para o Rekognition e processa os rostos detectados
 def processar_rekognition():
     global frame_atual, ultimo_envio
+    if not rekognition_client: # Adiciona verificação
+        logger.error("Cliente Rekognition não está disponível na thread processar_rekognition.")
+        return #Sinalizar erro para a thread principal
+
     while rodando:
         # Aguarda até que seja hora de processar um novo frame
         if frame_atual is None or time.time() - ultimo_envio < 1:
@@ -148,7 +147,7 @@ def processar_rekognition():
             image_bytes = buffer.tobytes()
 
             # Chama o Rekognition para procurar rostos conhecidos
-            response = rekognition.search_faces_by_image(
+            response = rekognition_client.search_faces_by_image(
                 CollectionId=COLLECTION_ID,
                 Image={'Bytes': image_bytes},
                 MaxFaces=5,
@@ -181,7 +180,7 @@ def processar_rekognition():
             else:
                 logger.info("Nenhum rosto conhecido encontrado no frame atual.")
 
-        except rekognition.exceptions.InvalidParameterException:
+        except rekognition_client.exceptions.InvalidParameterException:
             logger.info("Nenhum rosto detectado no frame pelo Rekognition. Continuando...")
 
         except ClientError as e: # Tratamento de erros do cliente AWS mais específico
@@ -297,7 +296,11 @@ if __name__ == "__main__":
     logger.info("Iniciando aplicação de reconhecimento facial em tempo real...")
 
     # Verifica a conexão e configuração da AWS antes de prosseguir
-    if not verificar_setup_aws_rekognition(rekognition, COLLECTION_ID, AWS_REGION):
+    if not rekognition_client: # Verifica se o cliente global foi carregado
+         logger.error("Cliente Rekognition não pôde ser inicializado. Verifique aws_clients.py e as configurações.")
+         sys.exit(1)
+    # A função verificar_setup_aws_rekognition agora usa o rekognition_client importado
+    if not verificar_setup_aws_rekognition(rekognition_client, COLLECTION_ID, AWS_REGION):
         logger.error("Falha crítica na verificação do setup da AWS. A aplicação será encerrada.")
         sys.exit(1) # Encerra o script se a verificação falhar
 

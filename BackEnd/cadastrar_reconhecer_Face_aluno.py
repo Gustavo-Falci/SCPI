@@ -1,11 +1,15 @@
 from rekognition_aws import criar_colecao, cadastrar_rosto, reconhecer_aluno
-from sistema_cadastrar_aluno import s3_client, BUCKET_NAME
+from aws_clientes import s3_client
+from config import BUCKET_NAME
 import botocore.exceptions
 import capture_camera
 import os
 import uuid
 import re
+import logging
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # Função para formatar o nome/ID do aluno conforme exigido pelo Amazon Rekognition
 # Ela substitui espaços por "_" e remove caracteres não permitidos
@@ -16,6 +20,12 @@ def formatar_nome_para_external_id(nome):
 
 # Função que realiza a criação da coleção de rostos no Amazon Rekognition
 def acao_criar_colecao():
+
+    if not s3_client: # Adiciona verificação
+        print("❌ Cliente S3 não inicializado. Cadastro cancelado.")
+        logger.error("Cliente S3 não inicializado. Cadastro cancelado.")
+        return
+
     print("\nℹ️ Essa ação só precisa ser feita uma vez. Se a coleção já existe, será ignorada.")
     try:
         criar_colecao()

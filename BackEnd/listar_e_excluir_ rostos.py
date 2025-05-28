@@ -1,12 +1,19 @@
-import boto3
-from config import AWS_REGION, COLLECTION_ID
+from aws_clientes import rekognition_client
+from config import COLLECTION_ID
+import logging
+
 # Configuração do Rekognition
-rekognition = boto3.client("rekognition", region_name=AWS_REGION)  # Substitua pela sua região
-COLECAO_ID = COLLECTION_ID
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 def listar_rostos():
     """Lista todos os rostos cadastrados na coleção do Rekognition."""
-    response = rekognition.list_faces(CollectionId=COLECAO_ID)
+
+    if not rekognition_client:
+        logger.error("Cliente Rekogntion não inicializado.")
+        return
+
+    response = rekognition_client.list_faces(CollectionId=COLLECTION_ID)
     faces = response.get("Faces", [])
 
     if not faces:
@@ -19,7 +26,12 @@ def listar_rostos():
 
 def excluir_todos_os_rostos():
     """Exclui todos os rostos cadastrados na coleção."""
-    response = rekognition.list_faces(CollectionId=COLECAO_ID)
+
+    if not rekognition_client:
+        logger.error("Cliente Rekognition não inicializado.")
+        return
+
+    response = rekognition_client.list_faces(CollectionId=COLLECTION_ID)
     faces = response.get("Faces", [])
 
     if not faces:
@@ -27,11 +39,15 @@ def excluir_todos_os_rostos():
         return
 
     face_ids = [face["FaceId"] for face in faces]  # Coleta todos os FaceIds
-    rekognition.delete_faces(CollectionId=COLECAO_ID, FaceIds=face_ids)  # Exclui os rostos
+    rekognition_client.delete_faces(CollectionId=COLLECTION_ID, FaceIds=face_ids)  # Exclui os rostos
 
     print("✅ Todos os rostos foram removidos da coleção.")
 
-# Testando as funções
-listar_rostos()  # Lista os rostos antes de excluir
-excluir_todos_os_rostos()  # Exclui todos os rostos
+if __name__ == "__main__": # Adiciona proteção para execução direta
+
+    if rekognition_client:
+        listar_rostos()
+        excluir_todos_os_rostos() # Comente ou adicione uma confirmação
+    else:
+        logger.error("Cliente Rekognition não disponível para listar/excluir rostos.")
 
