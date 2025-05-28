@@ -15,6 +15,7 @@ def criar_colecao():
     try:
         rekognition_client.describe_collection(CollectionId=COLLECTION_ID) # Usa o rekognition_client importado
         logger.info(f"A coleção '{COLLECTION_ID}' já existe.")
+        
     except rekognition_client.exceptions.ResourceNotFoundException: # A exceção é do cliente
 
         try:
@@ -33,77 +34,86 @@ def criar_colecao():
 
 
 def cadastrar_rosto(s3_path, aluno_id):
-    """Cadastra o rosto de um aluno a partir de uma imagem no S3."""
+    """
+    Wrapper para indexar_rosto_da_imagem_s3 com DetectionAttributes=['ALL'].
+    Usado pelo fluxo de `cadastrar_reconhecer_Face_aluno.py`.
+    """
+    logger.info(f"Chamando indexar_rosto_da_imagem_s3 para '{aluno_id}' via wrapper 'cadastrar_rosto' (DetectionAttributes: ALL).")
+    return indexar_rosto_da_imagem_s3(s3_path, aluno_id, detection_attributes=["ALL"])
+
+
+def indexar_rosto_da_imagem_s3(s3_path: str, external_image_id: str, detection_attributes: list[str] | str = "DEFAULT") -> dict | None:
+    """
+    Indexa um rosto de uma imagem no S3 para a coleção do Rekognition.
+
+    Args:
+        s3_path: O caminho para o objeto da imagem no S3 (ex: 'alunos/nome_aluno.jpg').
+        external_image_id: O ID externo a ser associado ao rosto (ex: nome do aluno).
+        detection_attributes: Atributos a serem detectados. Pode ser "DEFAULT" ou ["ALL"].
+
+    Returns:
+        A resposta da API do Rekognition ou None em caso de erro.
+    """
     if not rekognition_client:
-        logger.error("❌ Cliente Rekognition não inicializado. Cadastro de rosto cancelado.")
+        logger.error("❌ Cliente Rekognition não inicializado. Indexação de rosto cancelada.")
         return None
-    
+
     try:
+        logger.info(f"Tentando indexar rosto para ExternalImageId: '{external_image_id}' da imagem S3: 's3://{BUCKET_NAME}/{s3_path}' com DetectionAttributes: '{detection_attributes}'")
         response = rekognition_client.index_faces(
             CollectionId=COLLECTION_ID,
             Image={'S3Object': {'Bucket': BUCKET_NAME, 'Name': s3_path}},
-            ExternalImageId=aluno_id,
-            DetectionAttributes=['ALL']
+            ExternalImageId=external_image_id,
+            DetectionAttributes=[detection_attributes] if isinstance(detection_attributes, str) else detection_attributes, # Garante que seja uma lista
+            MaxFaces=1, # Indexar um rosto principal por imagem de cadastro
+            QualityFilter="AUTO" # Ou NONE, MEDIUM, HIGH - AUTO é um bom padrão
         )
 
-        faces = response.get('FaceRecords', [])
+        face_records = response.get("FaceRecords", [])
+        unindexed_faces = response.get("UnindexedFaces", [])
 
-        if len(faces) == 1:
-            logging.info(f"✅ Rosto do aluno '{aluno_id}' cadastrado com sucesso!")
+        if face_records:
+            face_id = face_records[0]['Face']['FaceId']
+            logger.info(f"✅ Rosto indexado com sucesso! ExternalImageId: '{external_image_id}', FaceId: '{face_id}'.")
 
-        elif len(faces) > 1:
-            logging.warning(f"⚠️ Mais de um rosto detectado. Apenas o primeiro foi cadastrado para '{aluno_id}'.")
+            if len(face_records) > 1:
+                logger.warning(f"⚠️ Múltiplos rostos foram detectados na imagem, mas apenas o de maior qualidade foi indexado devido a MaxFaces=1.")
+
+        elif unindexed_faces:
+            reason = unindexed_faces[0].get('Reasons', ["RAZÃO DESCONHECIDA"])[0]
+            logger.warning(f"⚠️ Rosto não foi indexado para ExternalImageId: '{external_image_id}'. Razão: {reason}")
 
         else:
-            logging.error("❌ Nenhum rosto detectado na imagem!")
-
-        return response
-    
-    except botocore.exceptions.ClientError as e:
-        logging.error(f"❌ Erro ao cadastrar rosto: {e.response['Error']['Message']}")
-        return None
-
-
-def reconhecer_aluno(nome_arquivo):
-    """Reconhece um aluno a partir de uma imagem local."""
-    if not rekognition_client:
-        logger.error("❌ Cliente Rekognition não inicializado. Reconhecimento cancelado.")
-        return None
-    
-    try:
-        with open(nome_arquivo, "rb") as image_file:
-            image_bytes = image_file.read()
-
-        response = rekognition_client.search_faces_by_image(
-            CollectionId=COLLECTION_ID,
-            Image={'Bytes': image_bytes},
-            MaxFaces=1,
-            FaceMatchThreshold=80
-        )
-
-        if response.get('FaceMatches'):
-            aluno_id = response['FaceMatches'][0]['Face']['ExternalImageId']
-            logging.info(f"✅ Aluno reconhecido: {aluno_id}")
-            return aluno_id
+            # Isso pode ocorrer se a imagem não contiver rostos que atendam aos critérios de qualidade,
+            # ou se MaxFaces=0 (o que não é o caso aqui).
+            logger.warning(f"⚠️ Nenhum rosto foi indexado para ExternalImageId: '{external_image_id}' e nenhuma razão específica foi fornecida (pode ser qualidade baixa ou nenhum rosto detectado).")
         
-        else:
-            logging.warning("❌ Rosto não reconhecido. Favor cadastrar.")
-            return None
+        return response
 
-    except FileNotFoundError:
-        logging.error(f"❌ Arquivo '{nome_arquivo}' não encontrado.")
+    except botocore.exceptions.ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        logger.error(f"❌ Erro do cliente AWS ao indexar rosto para '{external_image_id}': {error_code} - {error_message}")
+
+        if "InvalidS3ObjectException" in str(e) or "Unable to get object metadata" in str(e):
+            logger.error(f"Verifique se o objeto S3 's3://{BUCKET_NAME}/{s3_path}' existe e as permissões estão corretas.")
         return None
     
-    except botocore.exceptions.ClientError as e:
-        logging.error(f"❌ Erro ao reconhecer aluno: {e.response['Error']['Message']}")
+    except Exception as e:
+        logger.error(f"❌ Erro inesperado ao indexar rosto para '{external_image_id}': {e}")
         return None
 
 
 # Exemplo de execução protegida
 if __name__ == "__main__":
-    if rekognition_client: # Verifica se o cliente foi inicializado
+    if rekognition_client:
         criar_colecao()
-        
+        # Exemplo de teste para a nova função (requer uma imagem no S3)
+        # test_s3_path = "alunos/imagem_teste.jpg" # Substitua pelo caminho de uma imagem de teste no S3
+        # test_aluno_id = "aluno_de_teste_indexar"
+        # print(f"\nTestando indexar_rosto_da_imagem_s3 para {test_aluno_id}...")
+        # response = indexar_rosto_da_imagem_s3(test_s3_path, test_aluno_id, detection_attributes="DEFAULT")
+        # if response:
+        #     print("Resposta do teste de indexação:", response.get("FaceRecords"))
     else:
         logger.error("Cliente Rekognition não disponível para teste em rekognition_aws.py.")
-    # Testes manuais aqui, se necessário
