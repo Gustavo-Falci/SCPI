@@ -126,6 +126,7 @@ def verificar_setup_aws_rekognition(client_rek, collection_id_to_check, region_n
 # Função que envia a imagem para o Rekognition e processa os rostos detectados
 def processar_rekognition():
     global frame_atual, ultimo_envio
+
     if not rekognition_client: # Adiciona verificação
         logger.error("Cliente Rekognition não está disponível na thread processar_rekognition.")
         return #Sinalizar erro para a thread principal
@@ -226,6 +227,7 @@ def reconhecer_em_tempo_real():
     # Loop principal de captura e exibição do vídeo
     while True:
         ret, frame = cap.read()
+
         if not ret or frame is None:
             logger.error("Erro ao capturar frame da câmera. Encerrando.")
             rodando = False # Sinaliza para a thread de processamento encerrar
@@ -257,6 +259,7 @@ def reconhecer_em_tempo_real():
     if rekognition_thread.is_alive():
         logger.info("Aguardando a thread de processamento do Rekognition finalizar...")
         rekognition_thread.join(timeout=5.0) # Espera até 5 segundos
+
         if rekognition_thread.is_alive():
             logger.warning("Thread de Rekognition não finalizou a tempo.")
 
@@ -268,12 +271,14 @@ def reconhecer_em_tempo_real():
     if alunos_reconhecidos:
         gerar_relatorio_csv()
         gerar_relatorio_json()
+
     else:
         logger.info("Nenhum aluno foi reconhecido para gerar relatórios.")
 
 # Gera o relatório de presença no formato CSV
 def gerar_relatorio_csv():
     filename = os.path.join(PASTA_RELATORIOS, f"relatorio_presenca_{timestamp}.csv")
+
     try:
         with open(filename, mode='w', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
@@ -307,6 +312,7 @@ if __name__ == "__main__":
     if not rekognition_client: # Verifica se o cliente global foi carregado
          logger.error("Cliente Rekognition não pôde ser inicializado. Verifique aws_clients.py e as configurações.")
          sys.exit(1)
+         
     # A função verificar_setup_aws_rekognition agora usa o rekognition_client importado
     if not verificar_setup_aws_rekognition(rekognition_client, COLLECTION_ID, AWS_REGION):
         logger.error("Falha crítica na verificação do setup da AWS. A aplicação será encerrada.")

@@ -27,9 +27,11 @@ def acao_criar_colecao():
         return
 
     print("\nℹ️ Essa ação só precisa ser feita uma vez. Se a coleção já existe, será ignorada.")
+
     try:
         criar_colecao()
         print("✅ Coleção criada com sucesso (ou já existente).")
+
     except botocore.exceptions.ClientError as e:
         print(f"❌ Erro ao criar coleção ({type(e).__name__}): {e}")
 
@@ -37,12 +39,14 @@ def acao_criar_colecao():
 # Captura a imagem, envia ao S3, cadastra no Rekognition e remove a imagem local
 def acao_cadastrar_aluno():
     nome = input("🧑 Digite o nome ou ID do aluno: ").strip()
+
     if not nome:
         print("⚠️ Nome inválido. Tente novamente.")
         return
 
     # Captura imagem do aluno
     imagem_path = capture_camera.capture_image()
+
     if not imagem_path:
         print("❌ Erro ao capturar imagem.")
         return
@@ -62,8 +66,10 @@ def acao_cadastrar_aluno():
         # Cadastra o rosto da imagem no Rekognition usando o nome formatado
         cadastrar_rosto(s3_path, nome_formatado)
         print(f"📌 Rosto cadastrado no Rekognition para o aluno '{nome}'.")
+
     except botocore.exceptions.ClientError as e:
         print(f"❌ Erro durante o cadastro ({type(e).__name__}): {e}")
+
     finally:
         # Remove a imagem local da máquina, mesmo se houver erro
         if os.path.exists(imagem_path):
@@ -74,6 +80,7 @@ def acao_cadastrar_aluno():
 def acao_reconhecer_aluno():
     # Captura imagem da câmera
     imagem_path = capture_camera.capture_image()
+
     if not imagem_path:
         print("❌ Erro ao capturar imagem.")
         return
@@ -81,8 +88,10 @@ def acao_reconhecer_aluno():
     try:
         # Envia a imagem para reconhecimento no Rekognition
         reconhecer_aluno(imagem_path)
+
     except botocore.exceptionsClientError as e:
         print(f"❌ Erro no reconhecimento ({type(e).__name__}): {e}")
+        
     finally:
         # Remove a imagem local após o reconhecimento
         if os.path.exists(imagem_path):

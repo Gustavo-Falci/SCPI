@@ -27,6 +27,7 @@ def capture_image(aluno_id: str | None = None) -> str | None:
         cv2.imwrite(image_filename, frame)
         print(f"Imagem salva como {image_filename}")
         return image_filename
+    
     else:
         print("Erro ao capturar imagem.")
         return None

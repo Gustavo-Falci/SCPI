@@ -18,6 +18,7 @@ def listar_rostos():
 
     if not faces:
         print("✅ Nenhum rosto encontrado na coleção.")
+
     else:
         print("📌 Rostos cadastrados:")
         for face in faces:
@@ -48,6 +49,7 @@ if __name__ == "__main__": # Adiciona proteção para execução direta
     if rekognition_client:
         listar_rostos()
         excluir_todos_os_rostos() # Comente ou adicione uma confirmação
+        
     else:
         logger.error("Cliente Rekognition não disponível para listar/excluir rostos.")
 

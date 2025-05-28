@@ -19,6 +19,7 @@ def upload_imagem_s3(imagem_path, aluno_id):
         s3_client.upload_file(imagem_path, BUCKET_NAME, s3_path)
         logging.info(f"📤 Imagem enviada para: s3://{BUCKET_NAME}/{s3_path}")
         return s3_path
+    
     except botocore.exceptions.ClientError as e:
         logging.error(f"❌ Erro ao enviar para o S3: {e.response['Error']['Message']}")
         return None
@@ -37,9 +38,11 @@ def cadastrar_rosto_rekognition(s3_path, aluno_id):
         face_records = response.get("FaceRecords", [])
         if face_records:
             logging.info(f"✅ Rosto do aluno '{aluno_id}' registrado com sucesso!")
+
         else:
             logging.warning("⚠️ Nenhum rosto detectado ou erro ao registrar.")
         return response
+    
     except botocore.exceptions.ClientError as e:
         logging.error(f"❌ Erro ao registrar rosto no Rekognition: {e.response['Error']['Message']}")
         return None
@@ -49,6 +52,7 @@ def cadastrar_aluno(imagem_path):
     """Cadastra aluno no S3 e Rekognition."""
     aluno_id = input("Digite o nome ou ID do aluno: ").strip()
     s3_path = upload_imagem_s3(imagem_path, aluno_id)
+    
     if s3_path:
         return cadastrar_rosto_rekognition(s3_path, aluno_id)
     return None
