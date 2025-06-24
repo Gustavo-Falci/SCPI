@@ -59,20 +59,14 @@ def cadastrar_aluno(imagem_path):
     # Se este script NÃO for mais para ser executado diretamente, remova o input e a formatação daqui.
     # E receba o external_image_id formatado como parâmetro.
 
-    s3_path_uploaded = upload_imagem_s3(
-        imagem_path, aluno_id_input
-    )  # Usa o input para o nome do arquivo S3
+    s3_path_uploaded = upload_imagem_s3(imagem_path, aluno_id_input)  # Usa o input para o nome do arquivo S3
 
     if s3_path_uploaded:
         # Chama a função unificada de rekognition_aws.py
         # Usa aluno_id_input como ExternalImageId, que é o comportamento original desta função.
         # O `DetectionAttributes` padrão da função unificada é "DEFAULT".
-        logger.info(
-            f"Chamando indexar_rosto_da_imagem_s3 para '{aluno_id_input}' (DetectionAttributes: DEFAULT)."
-        )
-        return indexar_rosto_da_imagem_s3(
-            s3_path_uploaded, aluno_id_input
-        )  # aluno_id_input usado como ExternalImageId
+        logger.info(f"Chamando indexar_rosto_da_imagem_s3 para '{aluno_id_input}' (DetectionAttributes: DEFAULT).")
+        return indexar_rosto_da_imagem_s3(s3_path_uploaded, aluno_id_input)  # aluno_id_input usado como ExternalImageId
     return None
 
 
@@ -93,11 +87,7 @@ if __name__ == "__main__":
         resultado_cadastro = cadastrar_aluno(imagem_local)  # Passa o caminho da imagem
 
         if resultado_cadastro:
-            logger.info(
-                f"Processo de cadastro para a imagem '{imagem_local}' concluído."
-            )
+            logger.info(f"Processo de cadastro para a imagem '{imagem_local}' concluído.")
 
         else:
-            logger.error(
-                f"Falha no processo de cadastro para a imagem '{imagem_local}'."
-            )
+            logger.error(f"Falha no processo de cadastro para a imagem '{imagem_local}'.")

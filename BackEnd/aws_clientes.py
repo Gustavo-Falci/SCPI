@@ -5,9 +5,7 @@ from botocore.exceptions import ClientError
 from config import AWS_REGION
 
 # Configuração de logging
-logging.basicConfig(
-    level=logging.INFO, format="[%(asctime)s] %(levelname)s (aws_clients): %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s (aws_clients): %(message)s")
 logger = logging.getLogger(__name__)
 
 try:
@@ -42,9 +40,7 @@ def verificar_conexao_rekognition():
         return True
 
     except ClientError as e:
-        logger.error(
-            f"Erro ao verificar conexão com Rekognition: {e.response['Error']['Message']}"
-        )
+        logger.error(f"Erro ao verificar conexão com Rekognition: {e.response['Error']['Message']}")
         return False
 
     except Exception as e:
@@ -67,9 +63,7 @@ def verificar_conexao_s3():
         return True
 
     except ClientError as e:
-        logger.error(
-            f"Erro ao verificar conexão com S3: {e.response['Error']['Message']}"
-        )
+        logger.error(f"Erro ao verificar conexão com S3: {e.response['Error']['Message']}")
         return False
 
     except Exception as e:

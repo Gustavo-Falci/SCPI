@@ -9,8 +9,7 @@ from capture_camera import capture_frame_as_jpeg_bytes
 from config import BUCKET_NAME
 from rekognition_aws import cadastrar_rosto as rekognition_cadastrar_rosto
 from rekognition_aws import criar_colecao as rekognition_criar_colecao
-from rekognition_aws import \
-    reconhecer_aluno_por_bytes as rekognition_reconhecer_aluno_por_bytes
+from rekognition_aws import reconhecer_aluno_por_bytes as rekognition_reconhecer_aluno_por_bytes
 
 # Configuração do logger para este módulo
 logger = logging.getLogger(__name__)
@@ -27,28 +26,20 @@ if not logger.hasHandlers():  # Evita adicionar handlers múltiplos se já confi
 def formatar_nome_para_external_id(nome: str) -> str:
     """Formata o nome/ID do aluno para ser compatível com Amazon Rekognition."""
     nome_formatado = re.sub(r"\s+", "_", nome)  # Substitui espaços por underline
-    nome_formatado = re.sub(
-        r"[^a-zA-Z0-9_.\-:]", "", nome_formatado
-    )  # Remove caracteres inválidos
+    nome_formatado = re.sub(r"[^a-zA-Z0-9_.\-:]", "", nome_formatado)  # Remove caracteres inválidos
     return nome_formatado
 
 
 def acao_criar_colecao():
     """Realiza a criação da coleção de rostos no Amazon Rekognition."""
-    print(
-        "\nℹ️  Esta ação só precisa ser feita uma vez. Se a coleção já existe, será informado."
-    )
+    print("\nℹ️  Esta ação só precisa ser feita uma vez. Se a coleção já existe, será informado.")
     try:
         # A função rekognition_criar_colecao já verifica se o rekognition_client está disponível
         # e também trata os erros de ClientError internamente, logando-os.
         resultado = rekognition_criar_colecao()
-        if (
-            resultado is not None
-        ):  # A função retorna a resposta da API ou None em caso de erro/já existir sem erro
+        if resultado is not None:  # A função retorna a resposta da API ou None em caso de erro/já existir sem erro
             # A mensagem de sucesso ou "já existe" é logada dentro de rekognition_criar_colecao
-            print(
-                "✅ Verificação/Criação da coleção concluída. Veja os logs para detalhes."
-            )
+            print("✅ Verificação/Criação da coleção concluída. Veja os logs para detalhes.")
         else:
             # Se resultado for None, um erro já foi logado dentro de rekognition_criar_colecao
             print("❌ Falha ao verificar/criar coleção. Verifique os logs.")
@@ -87,30 +78,20 @@ def acao_cadastrar_aluno():
 
     try:
         # Envia os bytes da imagem para o bucket do S3
-        s3_client.put_object(
-            Bucket=BUCKET_NAME, Key=s3_path, Body=image_bytes, ContentType="image/jpeg"
-        )
+        s3_client.put_object(Bucket=BUCKET_NAME, Key=s3_path, Body=image_bytes, ContentType="image/jpeg")
         print(f"✅ Imagem enviada para: s3://{BUCKET_NAME}/{s3_path}")
         logger.info(f"Bytes da imagem enviados para s3://{BUCKET_NAME}/{s3_path}")
 
         # Cadastra o rosto da imagem (que está no S3) no Rekognition
         # rekognition_cadastrar_rosto é um wrapper que chama indexar_rosto_da_imagem_s3
-        resultado_cadastro_rekognition = rekognition_cadastrar_rosto(
-            s3_path, nome_formatado
-        )
+        resultado_cadastro_rekognition = rekognition_cadastrar_rosto(s3_path, nome_formatado)
 
         # A função rekognition_cadastrar_rosto (e indexar_rosto_da_imagem_s3) já loga detalhes.
         # Podemos adicionar uma mensagem aqui baseada no resultado.
-        if resultado_cadastro_rekognition and resultado_cadastro_rekognition.get(
-            "FaceRecords"
-        ):
-            print(
-                f"✅ Rosto do aluno '{nome}' (ID: {nome_formatado}) registrado no Rekognition com sucesso!"
-            )
+        if resultado_cadastro_rekognition and resultado_cadastro_rekognition.get("FaceRecords"):
+            print(f"✅ Rosto do aluno '{nome}' (ID: {nome_formatado}) registrado no Rekognition com sucesso!")
 
-        elif resultado_cadastro_rekognition and resultado_cadastro_rekognition.get(
-            "UnindexedFaces"
-        ):
+        elif resultado_cadastro_rekognition and resultado_cadastro_rekognition.get("UnindexedFaces"):
             print(
                 f"⚠️ Rosto do aluno '{nome}' (ID: {nome_formatado}) NÃO foi indexado. Razão: {resultado_cadastro_rekognition.get('UnindexedFaces')[0].get('Reasons')}"
             )
@@ -126,9 +107,7 @@ def acao_cadastrar_aluno():
             )
 
     except botocore.exceptions.ClientError as e_s3:
-        print(
-            f"❌ Erro ao enviar imagem para o S3: {e_s3.response['Error']['Message']}"
-        )
+        print(f"❌ Erro ao enviar imagem para o S3: {e_s3.response['Error']['Message']}")
         logger.error(
             f"Erro S3 durante o cadastro do aluno '{nome}': {e_s3.response['Error']['Message']}",
             exc_info=True,
@@ -136,9 +115,7 @@ def acao_cadastrar_aluno():
 
     except Exception as e:
         print(f"❌ Erro inesperado durante o cadastro: {e}")
-        logger.error(
-            f"Erro inesperado durante o cadastro do aluno '{nome}': {e}", exc_info=True
-        )
+        logger.error(f"Erro inesperado durante o cadastro do aluno '{nome}': {e}", exc_info=True)
     # Não há 'finally' para remover arquivo local, pois não foi salvo.
 
 
@@ -176,9 +153,7 @@ def acao_reconhecer_aluno():
         #     logger.error(f"Falha ao salvar imagem de tentativa de reconhecimento no S3: {e_s3_rec}")
 
     except botocore.exceptions.ClientError as e_rek:  # Erro específico do Rekognition
-        print(
-            f"❌ Erro na chamada ao Rekognition: {e_rek.response['Error']['Message']}"
-        )
+        print(f"❌ Erro na chamada ao Rekognition: {e_rek.response['Error']['Message']}")
         # O logger dentro de rekognition_reconhecer_aluno_por_bytes já deve ter logado
 
     except Exception as e:

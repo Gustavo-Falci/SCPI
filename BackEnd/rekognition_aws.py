@@ -11,20 +11,14 @@ logger = logging.getLogger(__name__)
 def criar_colecao():
     """Cria a coleção no Rekognition, se não existir."""
     if not rekognition_client:
-        logger.error(
-            "❌ Cliente Rekognition não inicializado. Criação de coleção cancelada."
-        )
+        logger.error("❌ Cliente Rekognition não inicializado. Criação de coleção cancelada.")
         return None
 
     try:
-        rekognition_client.describe_collection(
-            CollectionId=COLLECTION_ID
-        )  # Usa o rekognition_client importado
+        rekognition_client.describe_collection(CollectionId=COLLECTION_ID)  # Usa o rekognition_client importado
         logger.info(f"A coleção '{COLLECTION_ID}' já existe.")
 
-    except (
-        rekognition_client.exceptions.ResourceNotFoundException
-    ):  # A exceção é do cliente
+    except rekognition_client.exceptions.ResourceNotFoundException:  # A exceção é do cliente
 
         try:
             response = rekognition_client.create_collection(
@@ -34,16 +28,12 @@ def criar_colecao():
             return response
 
         except botocore.exceptions.ClientError as e:
-            logger.error(
-                f"❌ Erro ao criar a coleção: {e.response['Error']['Message']}"
-            )
+            logger.error(f"❌ Erro ao criar a coleção: {e.response['Error']['Message']}")
             return None
 
     # Adicionar tratamento para ClientError em describe_collection também
     except botocore.exceptions.ClientError as e:
-        logger.error(
-            f"❌ Erro ao descrever a coleção: {e.response['Error']['Message']}"
-        )
+        logger.error(f"❌ Erro ao descrever a coleção: {e.response['Error']['Message']}")
         return None
 
 
@@ -75,9 +65,7 @@ def indexar_rosto_da_imagem_s3(
         A resposta da API do Rekognition ou None em caso de erro.
     """
     if not rekognition_client:
-        logger.error(
-            "❌ Cliente Rekognition não inicializado. Indexação de rosto cancelada."
-        )
+        logger.error("❌ Cliente Rekognition não inicializado. Indexação de rosto cancelada.")
         return None
 
     try:
@@ -89,9 +77,7 @@ def indexar_rosto_da_imagem_s3(
             Image={"S3Object": {"Bucket": BUCKET_NAME, "Name": s3_path}},
             ExternalImageId=external_image_id,
             DetectionAttributes=(
-                [detection_attributes]
-                if isinstance(detection_attributes, str)
-                else detection_attributes
+                [detection_attributes] if isinstance(detection_attributes, str) else detection_attributes
             ),  # Garante que seja uma lista
             MaxFaces=1,  # Indexar um rosto principal por imagem de cadastro
             QualityFilter="AUTO",  # Ou NONE, MEDIUM, HIGH - AUTO é um bom padrão
@@ -102,9 +88,7 @@ def indexar_rosto_da_imagem_s3(
 
         if face_records:
             face_id = face_records[0]["Face"]["FaceId"]
-            logger.info(
-                f"✅ Rosto indexado com sucesso! ExternalImageId: '{external_image_id}', FaceId: '{face_id}'."
-            )
+            logger.info(f"✅ Rosto indexado com sucesso! ExternalImageId: '{external_image_id}', FaceId: '{face_id}'.")
 
             if len(face_records) > 1:
                 logger.warning(
@@ -113,9 +97,7 @@ def indexar_rosto_da_imagem_s3(
 
         elif unindexed_faces:
             reason = unindexed_faces[0].get("Reasons", ["RAZÃO DESCONHECIDA"])[0]
-            logger.warning(
-                f"⚠️ Rosto não foi indexado para ExternalImageId: '{external_image_id}'. Razão: {reason}"
-            )
+            logger.warning(f"⚠️ Rosto não foi indexado para ExternalImageId: '{external_image_id}'. Razão: {reason}")
 
         else:
             # Isso pode ocorrer se a imagem não contiver rostos que atendam aos critérios de qualidade,
@@ -133,9 +115,7 @@ def indexar_rosto_da_imagem_s3(
             f"❌ Erro do cliente AWS ao indexar rosto para '{external_image_id}': {error_code} - {error_message}"
         )
 
-        if "InvalidS3ObjectException" in str(
-            e
-        ) or "Unable to get object metadata" in str(e):
+        if "InvalidS3ObjectException" in str(e) or "Unable to get object metadata" in str(e):
             logger.error(
                 f"Verifique se o objeto S3 's3://{BUCKET_NAME}/{s3_path}' existe e as permissões estão corretas."
             )
@@ -149,9 +129,7 @@ def indexar_rosto_da_imagem_s3(
         return None
 
 
-def reconhecer_aluno_por_bytes(
-    image_bytes: bytes, face_match_threshold: int = 80
-) -> str | None:
+def reconhecer_aluno_por_bytes(image_bytes: bytes, face_match_threshold: int = 80) -> str | None:
     """
     Reconhece um aluno a partir dos bytes de uma imagem.
 
@@ -163,9 +141,7 @@ def reconhecer_aluno_por_bytes(
         O ExternalImageId do aluno reconhecido ou None.
     """
     if not rekognition_client:
-        logger.error(
-            "❌ Cliente Rekognition não inicializado. Reconhecimento cancelado."
-        )
+        logger.error("❌ Cliente Rekognition não inicializado. Reconhecimento cancelado.")
         return None
 
     if not image_bytes:
@@ -187,15 +163,11 @@ def reconhecer_aluno_por_bytes(
             match = response["FaceMatches"][0]
             aluno_id = match["Face"]["ExternalImageId"]
             confidence = match["Similarity"]
-            logger.info(
-                f"✅ Aluno reconhecido: {aluno_id} com confiança de {confidence:.2f}%"
-            )
+            logger.info(f"✅ Aluno reconhecido: {aluno_id} com confiança de {confidence:.2f}%")
             return aluno_id
 
         else:
-            logger.warning(
-                "❌ Rosto não reconhecido na imagem fornecida (nenhuma correspondência acima do limiar)."
-            )
+            logger.warning("❌ Rosto não reconhecido na imagem fornecida (nenhuma correspondência acima do limiar).")
             return None
 
     except botocore.exceptions.ClientError as e:
@@ -203,27 +175,16 @@ def reconhecer_aluno_por_bytes(
         error_message = e.response["Error"]["Message"]
 
         if error_code == "InvalidImageFormatException":
-            logger.error(
-                f"❌ Formato de imagem inválido ou imagem corrompida: {error_message}"
-            )
+            logger.error(f"❌ Formato de imagem inválido ou imagem corrompida: {error_message}")
 
-        elif (
-            error_code == "InvalidParameterException"
-            and "no faces detected" in error_message.lower()
-        ):
-            logger.warning(
-                f"⚠️ Nenhum rosto detectado na imagem pelo Rekognition para tentativa de reconhecimento."
-            )
+        elif error_code == "InvalidParameterException" and "no faces detected" in error_message.lower():
+            logger.warning(f"⚠️ Nenhum rosto detectado na imagem pelo Rekognition para tentativa de reconhecimento.")
 
         elif error_code == "InvalidParameterException":
-            logger.warning(
-                f"⚠️ Parâmetro inválido ao chamar search_faces_by_image: {error_message}"
-            )
+            logger.warning(f"⚠️ Parâmetro inválido ao chamar search_faces_by_image: {error_message}")
 
         else:
-            logger.error(
-                f"❌ Erro do cliente AWS ao reconhecer aluno: {error_code} - {error_message}"
-            )
+            logger.error(f"❌ Erro do cliente AWS ao reconhecer aluno: {error_code} - {error_message}")
         return None
 
     except Exception as e:
@@ -259,6 +220,4 @@ if __name__ == "__main__":
         #     logger.error(f"Erro ao preparar teste para reconhecer_aluno_por_bytes: {e_test}")
 
     else:
-        logger.error(
-            "Cliente Rekognition não disponível para teste em rekognition_aws.py."
-        )
+        logger.error("Cliente Rekognition não disponível para teste em rekognition_aws.py.")
