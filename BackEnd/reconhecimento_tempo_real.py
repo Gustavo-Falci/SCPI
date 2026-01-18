@@ -2,14 +2,8 @@ import cv2
 import time
 import threading
 import logging
-import os
-from datetime import datetime
-
-# Nossos módulos refatorados
 from config import COLLECTION_ID, AWS_REGION
 from aws_clientes import rekognition_client
-from database import get_db_cursor
-from utils import formatar_nome_para_external_id
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

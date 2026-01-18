@@ -1,5 +1,4 @@
 import logging
-
 import boto3
 from botocore.exceptions import ClientError
 from config import AWS_REGION
