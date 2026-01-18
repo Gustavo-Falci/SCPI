@@ -1,9 +1,15 @@
 # BackEnd/capture_camera.py
+import logging  # Adicionado para melhor feedback
+
 import cv2
+<<<<<<< HEAD
 import time
 import logging # Adicionado para melhor feedback
+=======
+>>>>>>> 6e4b5bb7014694038310bedb9aa0fc181212ba3d
 
 logger = logging.getLogger(__name__)
+
 
 def capture_frame_as_jpeg_bytes() -> bytes | None:
     """
@@ -25,22 +31,22 @@ def capture_frame_as_jpeg_bytes() -> bytes | None:
         time.sleep(0.05)
 
     ret, frame = cap.read()
-    cap.release() # Libera a câmera imediatamente após a captura
+    cap.release()  # Libera a câmera imediatamente após a captura
 
     if ret and frame is not None:
 
         try:
             # Codifica o frame capturado para o formato JPEG em memória
             is_success, buffer = cv2.imencode(".jpg", frame)
-            
+
             if is_success:
                 logger.info("Frame capturado e codificado para JPEG com sucesso.")
                 return buffer.tobytes()
-            
+
             else:
                 logger.error("Erro ao codificar frame para JPEG.")
                 return None
-            
+
         except Exception as e:
             logger.error(f"Exceção ao codificar frame para JPEG: {e}", exc_info=True)
             return None
@@ -48,10 +54,14 @@ def capture_frame_as_jpeg_bytes() -> bytes | None:
         logger.error("Erro ao capturar frame da câmera.")
         return None
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Configuração de logging para teste direto
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
-    
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
+    )
+
     image_bytes = capture_frame_as_jpeg_bytes()
     if image_bytes:
         print(f"Imagem capturada com sucesso ({len(image_bytes)} bytes).")
