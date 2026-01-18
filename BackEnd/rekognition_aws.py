@@ -14,6 +14,7 @@ def criar_colecao():
         logger.error("❌ Cliente Rekognition não inicializado. Criação de coleção cancelada.")
         return None
 
+
     try:
         rekognition_client.describe_collection(CollectionId=COLLECTION_ID)  # Usa o rekognition_client importado
         logger.info(f"A coleção '{COLLECTION_ID}' já existe.")

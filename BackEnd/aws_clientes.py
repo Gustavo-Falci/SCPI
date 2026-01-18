@@ -80,7 +80,7 @@ if __name__ == "__main__":
         logger.warning("Cliente Rekognition não está disponível para teste.")
 
     if s3_client:
-        verificar_conexao_s3()
+        verificar_conexao_s3() 
 
     else:
         logger.warning("Cliente S3 não está disponível para teste.")

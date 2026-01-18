@@ -9,6 +9,7 @@ def capture_frame_as_jpeg_bytes() -> bytes | None:
     """
     Captura um frame da câmera e retorna os bytes da imagem codificada em JPEG.
 
+    
     Returns:
         bytes: Os bytes da imagem JPEG, ou None em caso de erro.
     """

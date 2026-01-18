@@ -10,6 +10,7 @@ def registrar_presenca_por_face(external_image_id):
     with get_db_cursor(commit=True) as cur:
         if not cur: return False
 
+
         # 1. Busca Aluno
         cur.execute("SELECT aluno_id FROM Colecao_Rostos WHERE external_image_id = %s", (external_image_id,))
         aluno = cur.fetchone()

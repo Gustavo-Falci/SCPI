@@ -12,6 +12,7 @@ def criar_dados_teste():
     EXTERNAL_IMAGE_ID_TESTE = "Gustavo_Falci"  
     # --------------------------------
 
+
     try:
         cur = conn.cursor()
         print("🚀 Iniciando criacao de dados de teste (Schema Validado)...")

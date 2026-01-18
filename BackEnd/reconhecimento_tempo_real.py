@@ -9,6 +9,7 @@ from aws_clientes import rekognition_client
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+
 class SistemaReconhecimento:
     def __init__(self):
         self.rodando = False

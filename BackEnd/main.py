@@ -9,6 +9,7 @@ from utils import formatar_nome_para_external_id
 
 # --- FUNÇÕES DE CONTROLE DE CHAMADA ---
 
+
 def gerenciar_chamada(opcao, usuario_id_prof):
     with get_db_cursor(commit=True) as cur:
         if not cur: return

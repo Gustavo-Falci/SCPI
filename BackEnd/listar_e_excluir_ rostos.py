@@ -25,6 +25,7 @@ def listar_rostos():
             print(f"- FaceId: {face['FaceId']}, Nome: {face.get('ExternalImageId', 'Sem nome')}")
 
 
+
 def excluir_todos_os_rostos():
     """Exclui todos os rostos cadastrados na coleção."""
 
