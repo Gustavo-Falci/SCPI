@@ -1,5 +1,6 @@
 # BackEnd/capture_camera.py
 import cv2
+import time
 import logging # Adicionado para melhor feedback
 
 logger = logging.getLogger(__name__)
@@ -11,15 +12,17 @@ def capture_frame_as_jpeg_bytes() -> bytes | None:
     Returns:
         bytes: Os bytes da imagem JPEG, ou None em caso de erro.
     """
-    cap = cv2.VideoCapture(0)  # Ou o índice correto da sua câmera
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Ou o índice correto da sua câmera
 
     if not cap.isOpened():
         logger.error("Erro: Não foi possível acessar a câmera.")
         return None
-
-    # Define resolução (opcional, descomente e ajuste se necessário)
-    # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    
+    # Câmeras demoram uns milissegundos para ajustar o foco e a luz.
+    # Lemos alguns frames 'inúteis' para garantir que a foto final saia clara.
+    for _ in range(15):
+        cap.read()
+        time.sleep(0.05)
 
     ret, frame = cap.read()
     cap.release() # Libera a câmera imediatamente após a captura
