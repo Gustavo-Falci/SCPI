@@ -1,9 +1,6 @@
-# db_operacoes.py
 from database import get_db_cursor, logger
 import uuid
 
-
-# --- OPERAÇÕES DE AUTENTICAÇÃO ---
 
 def buscar_usuario_por_email(email):
     """Busca usuário pelo email para login."""
@@ -104,7 +101,6 @@ def registrar_presenca_por_face(external_image_id):
             return True
         return False
 
-# --- OPERAÇÕES ADMINISTRATIVAS ---
 
 def listar_turmas_professor(usuario_id_professor):
     # commit=False (padrão) pois é apenas LEITURA

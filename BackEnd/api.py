@@ -25,7 +25,6 @@ app.add_middleware(
 )
 
 
-# --- MODELOS PYDANTIC ---
 class UsuarioRegistro(BaseModel):
     nome: str
     email: str
@@ -81,7 +80,6 @@ def register(usuario: UsuarioRegistro):
 
 @app.post("/auth/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    # OAuth2PasswordRequestForm usa 'username' e 'password'
     user = buscar_usuario_por_email(form_data.username)
     if not user:
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")

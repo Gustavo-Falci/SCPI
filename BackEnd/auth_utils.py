@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configurações de Segurança
-# EM PRODUÇÃO, IS_SECRET_KEY DEVE SER UMA VARIÁVEL DE AMBIENTE FORTE!
 SECRET_KEY = os.getenv("SECRET_KEY", "uma_chave_secreta_muito_segura_123")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 horas
