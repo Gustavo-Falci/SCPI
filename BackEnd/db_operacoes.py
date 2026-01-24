@@ -2,6 +2,57 @@
 from database import get_db_cursor, logger
 import uuid
 
+
+# --- OPERAÇÕES DE AUTENTICAÇÃO ---
+
+def buscar_usuario_por_email(email):
+    """Busca usuário pelo email para login."""
+    with get_db_cursor() as cur:
+        if not cur: return None
+        # Seleciona senha também para verificação
+        cur.execute("SELECT usuario_id, nome, email, senha, tipo_usuario FROM Usuarios WHERE email = %s", (email,))
+        return cur.fetchone()
+
+def criar_usuario_completo(dados_usuario, dados_perfil):
+    """
+    Cria usuário + perfil (Professor ou Aluno) em uma transação.
+    dados_usuario: dict(nome, email, senha_hash, tipo_usuario)
+    dados_perfil: dict(ra, departamento, etc dependendo do tipo)
+    """
+    try:
+        with get_db_cursor(commit=True) as cur:
+            if not cur: return False
+
+            # 1. Cria Usuário
+            usuario_uuid = str(uuid.uuid4())
+            cur.execute("""
+                INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario)
+                VALUES (%s, %s, %s, %s, %s) 
+                RETURNING usuario_id
+            """, (usuario_uuid, dados_usuario['nome'], dados_usuario['email'], dados_usuario['senha_hash'], dados_usuario['tipo_usuario']))
+            
+            usuario_id = cur.fetchone()['usuario_id']
+
+            # 2. Cria Perfil Específico
+            if dados_usuario['tipo_usuario'] == 'Aluno':
+                aluno_uuid = str(uuid.uuid4())
+                cur.execute("""
+                    INSERT INTO Alunos (aluno_id, usuario_id, ra)
+                    VALUES (%s, %s, %s)
+                """, (aluno_uuid, usuario_id, dados_perfil.get('ra')))
+                
+            elif dados_usuario['tipo_usuario'] == 'Professor':
+                prof_uuid = str(uuid.uuid4())
+                cur.execute("""
+                    INSERT INTO Professores (professor_id, usuario_id, departamento, data_admissao)
+                    VALUES (%s, %s, %s, CURRENT_DATE)
+                """, (prof_uuid, usuario_id, dados_perfil.get('departamento', 'Geral')))
+            
+            return True
+    except Exception as e:
+        logger.error(f"Erro ao criar usuário completo: {e}")
+        return False
+
 # --- OPERAÇÕES DE RECONHECIMENTO ---
 
 def registrar_presenca_por_face(external_image_id):
