@@ -12,7 +12,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "uma_chave_secreta_muito_segura_123")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 horas
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 def verify_password(plain_password, hashed_password):
     """Verifica se a senha em texto puro bate com o hash."""

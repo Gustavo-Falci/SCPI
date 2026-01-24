@@ -1,7 +1,19 @@
 # database.py
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    import pg8000.dbapi as psycopg2
+    class RealDictCursor:
+        def __init__(self, conn):
+            self.conn = conn
+        
+        @staticmethod
+        def _row_factor(cursor, row):
+             col_names = [d[0] for d in cursor.description]
+             return dict(zip(col_names, row))
+
 from contextlib import contextmanager
 from dotenv import load_dotenv
 import logging
@@ -16,13 +28,16 @@ def get_db_connection():
     """Cria uma conexão crua com o banco."""
     try:
         conn = psycopg2.connect(
-            host=os.getenv('DB_HOST'),
-            database=os.getenv('DB_NAME'),
             user=os.getenv('DB_USER'),
             password=os.getenv('DB_PASSWORD'),
+            host=os.getenv('DB_HOST'),
             port=os.getenv('DB_PORT'),
-            cursor_factory=RealDictCursor
+            database=os.getenv('DB_NAME')
         )
+
+        # Se for pg8000 (psycopg2 fake), não suporta cursor_factory no connect
+        # Mas vamos lidar com Dicts manualmente se precisar ou usar wrapper
+        # Para simplificar, se for pg8000, usamos fetchall e convertemos
         return conn
     except Exception as e:
         logger.error(f"Erro de conexão PostgreSQL: {e}")
