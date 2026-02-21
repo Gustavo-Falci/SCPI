@@ -1,5 +1,0 @@
-vscode/
-.env
-logs/
-__pycache__/
-*.pyc
