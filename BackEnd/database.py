@@ -68,3 +68,17 @@ def get_db_cursor(commit=False):
     finally:
         cursor.close()
         conn.close()
+
+if __name__ == "__main__":
+    logger.info("Testando conexão com o banco na Oracle Cloud...")
+    try:
+        # Aproveitando o seu novo context manager
+        with get_db_cursor() as cur:
+            if cur:
+                cur.execute("SELECT version();")
+                db_version = cur.fetchone()
+                logger.info(f"Conectado com sucesso! Versão do BD: {db_version}")
+            else:
+                logger.error("Falha na conexão: O cursor retornou None. Verifique o IP, porta e credenciais no seu arquivo .env.")
+    except Exception as e:
+        logger.error(f"Erro ao tentar conectar: {e}")
