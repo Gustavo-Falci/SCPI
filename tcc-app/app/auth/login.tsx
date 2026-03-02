@@ -6,15 +6,52 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  Dimensions
+  Dimensions,
+  ActivityIndicator,
+  Alert
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
+import { loginRequest } from "../../../services/api";
 
 const { height } = Dimensions.get("window");
 
 export default function Login() {
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+
+  const handleLogin = async () => {
+    if (!email || !senha) {
+      Alert.alert("Erro", "Por favor, preencha todos os campos.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const resp = await loginRequest(email, senha);
+
+      // Token will be saved here later
+      await SecureStore.setItemAsync("access_token", resp.access_token);
+      await SecureStore.setItemAsync("user_role", resp.user_role);
+
+      // Redirect based on role
+      if (resp.user_role === "Professor") {
+        router.replace("/professor/home");
+      } else {
+        router.replace("/aluno/home");
+      }
+
+    } catch (error: any) {
+      Alert.alert("Falha no Login", error.message || "E-mail ou senha incorretos.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -31,6 +68,10 @@ export default function Login() {
           placeholder="Email"
           placeholderTextColor="#BFBFBF"
           style={styles.input}
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
         />
 
         <View style={styles.passwordWrapper}>
@@ -39,6 +80,8 @@ export default function Login() {
             placeholderTextColor="#BFBFBF"
             secureTextEntry={!showPassword}
             style={styles.passwordInput}
+            value={senha}
+            onChangeText={setSenha}
           />
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
             <Ionicons
@@ -49,14 +92,20 @@ export default function Login() {
           </TouchableOpacity>
         </View>
 
-        <LinearGradient
-          colors={["#4B39EF", "#5E47FF"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.button}
-        >
-          <Text style={styles.buttonText}>Sign In</Text>
-        </LinearGradient>
+        <TouchableOpacity onPress={handleLogin} disabled={isLoading} style={{ width: '100%' }}>
+          <LinearGradient
+            colors={["#4B39EF", "#5E47FF"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.button}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Sign In</Text>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
 
         <Text style={styles.forgotText}>
           Esqueceu sua senha?{" "}

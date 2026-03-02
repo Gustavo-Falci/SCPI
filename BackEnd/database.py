@@ -1,5 +1,6 @@
 # database.py
 import os
+import uuid
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
@@ -56,7 +57,40 @@ def get_db_cursor(commit=False):
         yield None
         return
 
-    cursor = conn.cursor()
+    raw_cursor = conn.cursor()
+
+    class DictCursorWrapper:
+        def __init__(self, cur):
+            self.cur = cur
+
+        def execute(self, *args, **kwargs):
+            self.cur.execute(*args, **kwargs)
+            return self
+
+        def fetchone(self):
+            row = self.cur.fetchone()
+            if row is None: return None
+            return self._to_dict(row)
+
+        def fetchall(self):
+            rows = self.cur.fetchall()
+            return [self._to_dict(row) for row in rows]
+            
+        def _to_dict(self, row):
+            if not getattr(self.cur, "description", None): return row
+            cols = [desc[0] for desc in self.cur.description]
+            # Convert values (like UUIDs) to string for JSON serialization
+            return {cols[i]: (str(val) if isinstance(val, uuid.UUID) else val) for i, val in enumerate(row)}
+
+        @property
+        def rowcount(self):
+            return getattr(self.cur, "rowcount", -1)
+
+        def close(self):
+            self.cur.close()
+
+    is_pg8000 = "pg8000" in str(type(conn))
+    cursor = DictCursorWrapper(raw_cursor) if is_pg8000 else raw_cursor
     try:
         yield cursor
         if commit:

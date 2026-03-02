@@ -1,4 +1,4 @@
-const API_URL = "http://192.168.15.149:8000"; 
+const API_URL = "http://192.168.15.149:8000";
 // exemplo: http://192.168.0.15:8000
 // NÃO use localhost no celular!
 
