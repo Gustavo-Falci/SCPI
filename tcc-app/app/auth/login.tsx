@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { loginRequest } from "../../../services/api";
+import { loginRequest } from "../../services/api";
 
 const { height } = Dimensions.get("window");
 
