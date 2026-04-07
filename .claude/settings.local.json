@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv \"utils.py\" \"formatadores.py\")",
+      "Bash(mv \"aws_clientes.py\" \"aws_conexao.py\")",
+      "Bash(mv \"capture_camera.py\" \"captura_webcam.py\")",
+      "Bash(mv \"rekognition_aws.py\" \"rekognition_servico.py\")",
+      "Bash(mv \"database.py\" \"db_conexao.py\")"
+    ]
+  }
+}
