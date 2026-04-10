@@ -5,7 +5,21 @@
       "Bash(mv \"aws_clientes.py\" \"aws_conexao.py\")",
       "Bash(mv \"capture_camera.py\" \"captura_webcam.py\")",
       "Bash(mv \"rekognition_aws.py\" \"rekognition_servico.py\")",
-      "Bash(mv \"database.py\" \"db_conexao.py\")"
+      "Bash(mv \"database.py\" \"db_conexao.py\")",
+      "Bash(uvicorn api:app --reload)",
+      "Bash(curl -s http://127.0.0.1:8000/)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(pip install:*)",
+      "Bash(npm install:*)",
+      "Bash(ipconfig:*)",
+      "Bash(xargs grep:*)",
+      "Bash(xargs -0 grep \"localhost\")",
+      "Bash(uvicorn:*)",
+      "Bash(pytest -v test_api.py)",
+      "Bash(export DATABASE_URL=\"postgresql://postgres:admin@localhost:5432/scpi\")",
+      "Bash(export PGOPTIONS=\"-c lc_messages=en_US.UTF-8\")",
+      "Bash(npx expo:*)"
     ]
   }
 }

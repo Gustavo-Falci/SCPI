@@ -1,3 +1,12 @@
+import os
+import sys
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+# Adiciona o diretório 'BackEnd' ao sys.path para resolver problemas de importação
+# em ambientes onde o diretório de trabalho não é a raiz do projeto.
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware

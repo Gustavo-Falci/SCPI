@@ -8,7 +8,7 @@ O sistema era um TCC acadêmico de controle de frequência por reconhecimento fa
 
 ---
 
-## Fase 1 — Corrigir Backend (imports, terminologia, auth)
+## Fase 1 — Corrigir Backend (imports, terminologia, auth) ✅ (CONCLUÍDO)
 
 ### 1.1 Corrigir imports quebrados
 
@@ -45,7 +45,7 @@ O sistema era um TCC acadêmico de controle de frequência por reconhecimento fa
 
 ---
 
-## Fase 2 — Corrigir Login e Roteamento no Frontend
+## Fase 2 — Corrigir Login e Roteamento no Frontend ✅ (CONCLUÍDO)
 
 - Salvar `usuario_id`, `empresa_id`, `user_role` no SecureStore
 - Roteamento: Admin → `/admin/home`, RH → `/rh/home`, Funcionário → `/funcionario/home`
@@ -53,7 +53,7 @@ O sistema era um TCC acadêmico de controle de frequência por reconhecimento fa
 
 ---
 
-## Fase 3 — Criar Seção RH (4 arquivos novos)
+## Fase 3 — Criar Seção RH (4 arquivos novos) ✅ (CONCLUÍDO)
 
 - `rh/home.tsx` — Dashboard RH
 - `rh/funcionarios.tsx` — Cadastro de funcionários
@@ -62,14 +62,14 @@ O sistema era um TCC acadêmico de controle de frequência por reconhecimento fa
 
 ---
 
-## Fase 4 — Conectar Todas as Telas à API Real
+## Fase 4 — Conectar Todas as Telas à API Real ✅ (CONCLUÍDO)
 
 - Atualizar `services/api.js` com auth headers e novas funções
 - Substituir dados mock em todas as telas admin e funcionário
 
 ---
 
-## Fase 5 — Criar Telas Faltantes e Corrigir Perfis
+## Fase 5 — Criar Telas Faltantes e Corrigir Perfis ✅ (CONCLUÍDO)
 
 - Criar `admin/perfil.tsx`
 - Atualizar `funcionario/perfil.tsx` com dados reais

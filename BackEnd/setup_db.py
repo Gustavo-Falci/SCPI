@@ -2,17 +2,19 @@
 Script para criar o schema do banco de dados do Sistema de Ponto Facial Empresarial (SaaS).
 Uso: python setup_db.py
 """
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 from db_conexao import get_db_cursor, logger
 
 def drop_old_tables():
-    """Remove tabelas antigas do schema academico."""
+    """Remove tabelas antigas do schema academico e tabelas novas para recriacao."""
     tables_to_drop = [
-        "Turma_Alunos",
-        "Chamadas",
-        "Presencas",
-        "Turmas",
-        "Alunos",
-        "Professores",
+        # Tabelas novas (em ordem de dependencia reversa)
+        "Admin_Empresas", "Horarios_Expediente", "Registros_Ponto", "Colecao_Rostos",
+        "Funcionarios", "Setores", "Usuarios", "Empresas",
+        # Tabelas antigas
+        "Turma_Alunos", "Chamadas", "Presencas", "Turmas", "Alunos", "Professores"
     ]
     with get_db_cursor(commit=True) as cur:
         if not cur:
@@ -245,14 +247,33 @@ def criar_empresa_teste():
 
 def main():
     logger.info("=== Setup do Banco de Dados - Ponto Facial Empresarial ===")
-    logger.info("Removendo tabelas antigas...")
-    drop_old_tables()
 
-    logger.info("Criando novas tabelas...")
-    create_tables()
+    try:
+        logger.info("Removendo tabelas antigas...")
+        if not drop_old_tables():
+            logger.error("Erro ao remover tabelas antigas. Abortando.")
+            return
+    except Exception as e:
+        logger.error(f"Exceção catastrófica em drop_old_tables: {e}", exc_info=True)
+        return
 
-    logger.info("Inserindo dados de teste...")
-    criar_empresa_teste()
+    try:
+        logger.info("Criando novas tabelas...")
+        if not create_tables():
+            logger.error("Erro ao criar novas tabelas. Abortando.")
+            return
+    except Exception as e:
+        logger.error(f"Exceção catastrófica em create_tables: {e}", exc_info=True)
+        return
+
+    try:
+        logger.info("Inserindo dados de teste...")
+        if not criar_empresa_teste():
+            logger.error("Erro ao inserir dados de teste. Abortando.")
+            return
+    except Exception as e:
+        logger.error(f"Exceção catastrófica em criar_empresa_teste: {e}", exc_info=True)
+        return
 
     logger.info("=== Setup concluido! ===")
 

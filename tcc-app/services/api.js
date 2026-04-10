@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 
-const API_URL = "http://192.168.15.149:8000";
+const API_URL = "http://127.0.0.1:8000";
 
 export { API_URL };
 

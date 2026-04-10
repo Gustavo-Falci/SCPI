@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
+import { storage } from "../../services/storage";
 import { loginRequest } from "../../services/api";
 
 const { height } = Dimensions.get("window");
@@ -25,6 +25,21 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
+  useEffect(() => {
+    // Verifica se o usuário já está logado e redireciona se necessário
+    const checkTokenAndRedirect = async () => {
+      const token = await storage.getItem("access_token");
+      if (token) {
+        const role = await storage.getItem("user_role");
+        if (role === "Admin") router.replace("/admin/home");
+        else if (role === "RH") router.replace("/rh/home");
+        else router.replace("/funcionario/home");
+      }
+    };
+    checkTokenAndRedirect();
+  }, []);
+
+
   const handleLogin = async () => {
     if (!email || !senha) {
       Alert.alert("Erro", "Por favor, preencha todos os campos.");
@@ -35,10 +50,10 @@ export default function Login() {
     try {
       const resp = await loginRequest(email, senha);
 
-      await SecureStore.setItemAsync("access_token", resp.access_token);
-      await SecureStore.setItemAsync("user_role", resp.user_role);
-      await SecureStore.setItemAsync("usuario_id", resp.usuario_id);
-      await SecureStore.setItemAsync("empresa_id", resp.empresa_id);
+      await storage.setItem("access_token", resp.access_token);
+      await storage.setItem("user_role", resp.user_role);
+      await storage.setItem("usuario_id", resp.usuario_id);
+      await storage.setItem("empresa_id", resp.empresa_id);
 
       if (resp.user_role === "Admin") {
         router.replace("/admin/home");
@@ -50,7 +65,7 @@ export default function Login() {
           const { buscarFuncionarioLogado } = require("../../services/api");
           const func = await buscarFuncionarioLogado(resp.access_token);
           if (func?.funcionario_id) {
-            await SecureStore.setItemAsync("funcionario_id", func.funcionario_id);
+            await storage.setItem("funcionario_id", func.funcionario_id);
           }
         } catch (_) {}
         router.replace("/funcionario/home");
