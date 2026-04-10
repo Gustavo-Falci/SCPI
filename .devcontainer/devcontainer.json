@@ -12,5 +12,6 @@
 				"vscode-icons-team.vscode-icons"
 			]
 		}
-	}
+	},
+	"postCreateCommand": "npm install -g @gitlawb/openclaude"
 }
