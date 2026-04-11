@@ -35,25 +35,15 @@ export default function Login() {
     try {
       const resp = await loginRequest(email, senha);
 
+      // Token will be saved here later
       await SecureStore.setItemAsync("access_token", resp.access_token);
       await SecureStore.setItemAsync("user_role", resp.user_role);
-      await SecureStore.setItemAsync("usuario_id", resp.usuario_id);
-      await SecureStore.setItemAsync("empresa_id", resp.empresa_id);
 
-      if (resp.user_role === "Admin") {
-        router.replace("/admin/home");
-      } else if (resp.user_role === "RH") {
-        router.replace("/rh/home");
+      // Redirect based on role
+      if (resp.user_role === "Professor") {
+        router.replace("/professor/home");
       } else {
-        // Funcionario — buscar funcionario_id
-        try {
-          const { buscarFuncionarioLogado } = require("../../services/api");
-          const func = await buscarFuncionarioLogado(resp.access_token);
-          if (func?.funcionario_id) {
-            await SecureStore.setItemAsync("funcionario_id", func.funcionario_id);
-          }
-        } catch (_) {}
-        router.replace("/funcionario/home");
+        router.replace("/aluno/home");
       }
 
     } catch (error: any) {

@@ -2,7 +2,7 @@ import re
 
 def formatar_nome_para_external_id(nome: str) -> str:
     """
-    Formata o nome do funcionário para o padrão aceito pelo AWS Rekognition.
+    Formata o nome do aluno para o padrão aceito pelo AWS Rekognition.
     Remove acentos, caracteres especiais e substitui espaços por underlines.
     Ex: 'João da Silva' -> 'Joao_da_Silva'
     """

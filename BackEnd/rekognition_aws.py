@@ -1,7 +1,7 @@
 import logging
 
 import botocore.exceptions
-from aws_conexao import rekognition_client
+from aws_clientes import rekognition_client
 from config import BUCKET_NAME, COLLECTION_ID  # Usa a configuração correta
 
 # Configuração de logging
@@ -38,14 +38,15 @@ def criar_colecao():
         return None
 
 
-def cadastrar_rosto(s3_path, funcionario_id):
+def cadastrar_rosto(s3_path, aluno_id):
     """
     Wrapper para indexar_rosto_da_imagem_s3 com DetectionAttributes=['ALL'].
+    Usado pelo fluxo de `cadastrar_reconhecer_Face_aluno.py`.
     """
     logger.info(
-        f"Chamando indexar_rosto_da_imagem_s3 para '{funcionario_id}' via wrapper 'cadastrar_rosto' (DetectionAttributes: ALL)."
+        f"Chamando indexar_rosto_da_imagem_s3 para '{aluno_id}' via wrapper 'cadastrar_rosto' (DetectionAttributes: ALL)."
     )
-    return indexar_rosto_da_imagem_s3(s3_path, funcionario_id, detection_attributes=["ALL"])
+    return indexar_rosto_da_imagem_s3(s3_path, aluno_id, detection_attributes=["ALL"])
 
 
 def indexar_rosto_da_imagem_s3(
@@ -57,8 +58,8 @@ def indexar_rosto_da_imagem_s3(
     Indexa um rosto de uma imagem no S3 para a coleção do Rekognition.
 
     Args:
-        s3_path: O caminho para o objeto da imagem no S3 (ex: 'funcionarios/nome.jpg').
-        external_image_id: O ID externo a ser associado ao rosto (ex: nome do funcionário).
+        s3_path: O caminho para o objeto da imagem no S3 (ex: 'alunos/nome_aluno.jpg').
+        external_image_id: O ID externo a ser associado ao rosto (ex: nome do aluno).
         detection_attributes: Atributos a serem detectados. Pode ser "DEFAULT" ou ["ALL"].
 
     Returns:
@@ -129,16 +130,16 @@ def indexar_rosto_da_imagem_s3(
         return None
 
 
-def reconhecer_funcionario_por_bytes(image_bytes: bytes, face_match_threshold: int = 80) -> str | None:
+def reconhecer_aluno_por_bytes(image_bytes: bytes, face_match_threshold: int = 80) -> str | None:
     """
-    Reconhece um funcionário a partir dos bytes de uma imagem.
+    Reconhece um aluno a partir dos bytes de uma imagem.
 
     Args:
         image_bytes: Os bytes da imagem a ser analisada.
         face_match_threshold: O limiar de confiança para considerar um rosto como correspondente.
 
     Returns:
-        O ExternalImageId do funcionário reconhecido ou None.
+        O ExternalImageId do aluno reconhecido ou None.
     """
     if not rekognition_client:
         logger.error("❌ Cliente Rekognition não inicializado. Reconhecimento cancelado.")
@@ -150,7 +151,7 @@ def reconhecer_funcionario_por_bytes(image_bytes: bytes, face_match_threshold: i
 
     try:
         logger.info(
-            f"Tentando reconhecer funcionário a partir de imagem em memória ({len(image_bytes)} bytes) com threshold de {face_match_threshold}%."
+            f"Tentando reconhecer aluno a partir de imagem em memória ({len(image_bytes)} bytes) com threshold de {face_match_threshold}%."
         )
         response = rekognition_client.search_faces_by_image(
             CollectionId=COLLECTION_ID,
@@ -161,10 +162,10 @@ def reconhecer_funcionario_por_bytes(image_bytes: bytes, face_match_threshold: i
 
         if response.get("FaceMatches"):
             match = response["FaceMatches"][0]
-            funcionario_id = match["Face"]["ExternalImageId"]
+            aluno_id = match["Face"]["ExternalImageId"]
             confidence = match["Similarity"]
-            logger.info(f"✅ Funcionário reconhecido: {funcionario_id} com confiança de {confidence:.2f}%")
-            return funcionario_id
+            logger.info(f"✅ Aluno reconhecido: {aluno_id} com confiança de {confidence:.2f}%")
+            return aluno_id
 
         else:
             logger.warning("❌ Rosto não reconhecido na imagem fornecida (nenhuma correspondência acima do limiar).")
@@ -184,11 +185,11 @@ def reconhecer_funcionario_por_bytes(image_bytes: bytes, face_match_threshold: i
             logger.warning(f"⚠️ Parâmetro inválido ao chamar search_faces_by_image: {error_message}")
 
         else:
-            logger.error(f"❌ Erro do cliente AWS ao reconhecer funcionário: {error_code} - {error_message}")
+            logger.error(f"❌ Erro do cliente AWS ao reconhecer aluno: {error_code} - {error_message}")
         return None
 
     except Exception as e:
-        logger.error(f"❌ Erro inesperado ao reconhecer funcionário: {e}", exc_info=True)
+        logger.error(f"❌ Erro inesperado ao reconhecer aluno: {e}", exc_info=True)
         return None
 
 

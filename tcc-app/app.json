@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ponto-facial",
-    "slug": "ponto-facial",
+    "name": "tcc-app",
+    "slug": "tcc-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "pontofacial",
+    "scheme": "tccapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -39,13 +39,7 @@
           }
         }
       ],
-      "expo-secure-store",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Permitir que o App acesse a câmera para reconhecimento facial."
-        }
-      ]
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
