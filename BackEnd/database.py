@@ -27,14 +27,10 @@ logger = logging.getLogger(__name__)
 
 def get_db_connection():
     """Cria uma conexão crua com o banco."""
+    # Hardcoded para desenvolvimento, idealmente viria de um .env funcional
+    DATABASE_URL = "postgresql://postgres:adminpostgres%40@168.138.134.208:5432/scpi_db"
     try:
-        conn = psycopg2.connect(
-            user=os.getenv('DB_USER'),
-            password=os.getenv('DB_PASSWORD'),
-            host=os.getenv('DB_HOST'),
-            port=os.getenv('DB_PORT'),
-            database=os.getenv('DB_NAME')
-        )
+        conn = psycopg2.connect(DATABASE_URL)
 
         # Se for pg8000 (psycopg2 fake), não suporta cursor_factory no connect
         # Mas vamos lidar com Dicts manualmente se precisar ou usar wrapper
@@ -57,7 +53,7 @@ def get_db_cursor(commit=False):
         yield None
         return
 
-    raw_cursor = conn.cursor()
+    raw_cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     class DictCursorWrapper:
         def __init__(self, cur):

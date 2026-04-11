@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
+import { storage } from "../../services/storage";
 import { loginRequest } from "../../services/api";
 
 const { height } = Dimensions.get("window");
@@ -24,6 +24,21 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    // Verifica se o usuário já está logado e redireciona se necessário
+    const checkTokenAndRedirect = async () => {
+      const token = await storage.getItem("access_token");
+      if (token) {
+        const role = await storage.getItem("user_role");
+        if (role === "Admin") router.replace("/admin/home");
+        else if (role === "RH") router.replace("/rh/home");
+        else router.replace("/funcionario/home");
+      }
+    };
+    checkTokenAndRedirect();
+  }, []);
+
 
   const handleLogin = async () => {
     if (!email || !senha) {
