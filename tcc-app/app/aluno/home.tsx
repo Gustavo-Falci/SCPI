@@ -8,8 +8,11 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 
 export default function HomeAluno() {
+  const router = useRouter();
   const frequencia = 85;
 
   const pulseAnim = useRef(new Animated.Value(1)).current;

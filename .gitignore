@@ -3,6 +3,6 @@ vscode/
 logs/
 __pycache__/
 *.pyc
-venv/
+venv_new/
 .venv/
 .openclaude-profile.json

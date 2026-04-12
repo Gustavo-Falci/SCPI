@@ -1,38 +1,59 @@
 import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
-import { Slot, useRouter } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { storage } from '../services/storage';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
+  const segments = useSegments();
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const checkAuthAndRedirect = async () => {
-      const token = await storage.getItem('access_token');
-      // A lógica de redirecionamento principal deve estar na tela de login.
-      // O layout raiz apenas garante que, se não houver token, o usuário
-      // seja enviado para a tela de login. A tela de login, por sua vez,
-      // se já houver um token, deve redirecionar para a home.
-      // Esta verificação é um fallback de segurança.
-      if (!token) {
-        router.replace('/auth/login');
+    const checkAuth = async () => {
+      try {
+        const token = await storage.getItem('access_token');
+        const role = await storage.getItem('user_role');
+        const inAuthGroup = segments[0] === 'auth';
+        
+        // Se NÃO tem token e NÃO está na página de login, manda pro login
+        if (!token && !inAuthGroup) {
+          router.replace('/auth/login');
+        } 
+        // Se TEM token e está tentando acessar a página de login, manda pra home correta
+        else if (token && inAuthGroup) {
+          if (role === 'Professor') {
+             router.replace('/professor/home');
+          } else {
+             router.replace('/aluno/home');
+          }
+        }
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setIsReady(true);
       }
     };
 
-    checkAuthAndRedirect();
-  }, []);
+    // Timeout zero para garantir que o root layout foi montado antes de rotear
+    setTimeout(() => {
+       checkAuth();
+    }, 0);
+  }, [segments]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      {/* O Slot renderiza a rota filha correspondente. A lógica de redirecionamento
-          acontece no useEffect acima e na própria tela de login. */}
-      <Slot />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+        <Stack.Screen name="aluno/home" options={{ headerShown: false }} />
+        <Stack.Screen name="aluno/cadastro-facial" options={{ headerShown: false }} />
+        <Stack.Screen name="professor/home" options={{ headerShown: false }} />
+      </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
   );
 }
-

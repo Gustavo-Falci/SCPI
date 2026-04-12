@@ -51,8 +51,8 @@ export default function Login() {
       const resp = await loginRequest(email, senha);
 
       // Token will be saved here later
-      await SecureStore.setItemAsync("access_token", resp.access_token);
-      await SecureStore.setItemAsync("user_role", resp.user_role);
+      await storage.setItem("access_token", resp.access_token);
+      await storage.setItem("user_role", resp.user_role);
 
       // Redirect based on role
       if (resp.user_role === "Professor") {

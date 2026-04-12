@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Read(//c/Users/gufal/OneDrive/Documentos/GitHub/SCPI/**)",
+      "Bash(node fix_ip.js)",
+      "Bash(python:*)",
+      "Bash(node fix_index.js)",
+      "Bash(node fix_login2.js)"
+    ]
+  }
+}

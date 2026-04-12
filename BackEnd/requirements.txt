@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-dotenv
+psycopg2-binary
+pg8000
+pydantic
+boto3
+opencv-python
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart

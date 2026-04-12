@@ -1,6 +1,76 @@
-const API_URL = "http://192.168.15.149:8000";
+const API_URL = "http://192.168.15.35:8000";
 // exemplo: http://192.168.0.15:8000
 // NÃO use localhost no celular!
+
+import { storage } from "./storage";
+
+async function getAuthHeaders(contentType = "application/json") {
+  const token = await storage.getItem("access_token");
+  const headers = {
+    Accept: "application/json",
+  };
+
+  if (contentType) {
+      headers["Content-Type"] = contentType;
+  }
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+export async function apiGet(endpoint) {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: "GET",
+      headers,
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || `Erro HTTP ${response.status}`);
+    return data;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function apiPost(endpoint, body) {
+  try {
+    const headers = await getAuthHeaders("application/json");
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || `Erro HTTP ${response.status}`);
+    return data;
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function apiPostFormData(endpoint, formData) {
+    try {
+        // Para FormData, o navegador/fetch cuida do Content-Type e do boundary automaticamente
+        const headers = await getAuthHeaders(null);
+
+        const response = await fetch(`${API_URL}${endpoint}`, {
+            method: "POST",
+            headers,
+            body: formData,
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || `Erro HTTP ${response.status}`);
+        return data;
+    } catch (error) {
+        throw error;
+    }
+}
 
 export async function loginRequest(email, senha) {
   try {

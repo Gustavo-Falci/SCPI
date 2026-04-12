@@ -3,6 +3,8 @@ import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { apiPostFormData } from "../../services/api";
+import { Alert, ActivityIndicator } from "react-native";
 
 export default function CadastroFacial() {
 
@@ -11,6 +13,7 @@ export default function CadastroFacial() {
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraOpen, setCameraOpen] = useState(false);
   const cameraRef = useRef<CameraView | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const tirarFoto = async () => {
     if (cameraRef.current) {
@@ -63,7 +66,7 @@ export default function CadastroFacial() {
               <Ionicons name="arrow-back" size={22} color="#333" />
             </TouchableOpacity>
 
-            <Text style={styles.headerTitle}>Cadastro facial</Text>
+            <Text style={styles.headerTitle}>Registrar Presença</Text>
 
             <View style={{ width: 22 }} />
           </View>
@@ -84,14 +87,14 @@ export default function CadastroFacial() {
 
             <View style={styles.readyContainer}>
               <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
-              <Text style={styles.readyText}>Pronto para se registrar</Text>
+              <Text style={styles.readyText}>Pronto para bater ponto</Text>
             </View>
           </View>
 
           {/* INSTRUÇÕES */}
           <View style={styles.instructionsCard}>
             <Text style={styles.instructionsTitle}>
-              Instruções de registro facial:
+              Instruções de check-in facial:
             </Text>
 
             <View style={styles.instructionItem}>
@@ -122,7 +125,7 @@ export default function CadastroFacial() {
             onPress={() => setCameraOpen(true)}
           >
             <Feather name="camera" size={18} color="#fff" />
-            <Text style={styles.buttonText}>Tirar foto</Text>
+            <Text style={styles.buttonText}>Bater Ponto</Text>
           </TouchableOpacity>
 
         </>

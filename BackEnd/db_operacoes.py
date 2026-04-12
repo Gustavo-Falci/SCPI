@@ -107,12 +107,19 @@ def listar_turmas_professor(usuario_id_professor):
     with get_db_cursor() as cur:
         if not cur: return []
         cur.execute("""
-            SELECT t.turma_id, t.nome_disciplina, t.codigo_turma 
+            SELECT t.turma_id, t.nome_disciplina, t.codigo_turma
             FROM Turmas t
             JOIN Professores p ON t.professor_id = p.professor_id
             WHERE p.usuario_id = %s
         """, (usuario_id_professor,))
         return cur.fetchall()
+
+def obter_professor_id(usuario_id):
+    with get_db_cursor() as cur:
+        if not cur: return None
+        cur.execute("SELECT professor_id FROM Professores WHERE usuario_id = %s", (usuario_id,))
+        res = cur.fetchone()
+        return res['professor_id'] if res else None
 
 def cadastrar_novo_aluno(nome, email, ra, turma_id, external_id, face_id_aws, s3_path):
     """Cadastra toda a cadeia de dados do aluno."""

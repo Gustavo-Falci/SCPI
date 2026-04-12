@@ -9,7 +9,11 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { apiGet, apiPost } from '../../services/api';
+import { storage } from '../../services/storage';
+import { useFocusEffect } from 'expo-router';
+import { Alert, TouchableOpacity } from 'react-native';
 
 export default function HomeProfessor() {
   const totalAlunos = 28;
