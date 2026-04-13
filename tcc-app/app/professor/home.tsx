@@ -9,13 +9,14 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useState, useCallback } from 'react';
-import { apiGet, apiPost } from '../../services/api';
-import { storage } from '../../services/storage';
-import { useFocusEffect } from 'expo-router';
-import { Alert, TouchableOpacity } from 'react-native';
+import { useState, useCallback } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { Alert, TouchableOpacity } from "react-native";
+
+import { storage } from "../../services/storage";
 
 export default function HomeProfessor() {
+  const router = useRouter();
   const totalAlunos = 28;
   const presentes = 23;
   const ausentes = totalAlunos - presentes;
@@ -78,24 +79,18 @@ export default function HomeProfessor() {
           </Text>
         </LinearGradient>
 
-        {/* DOIS CARDS */}
-        <View style={styles.row}>
-          <View style={styles.smallCard}>
-            <Ionicons name="people-outline" size={24} color="#5B3EFF" />
-            <Text style={styles.smallCardTitle}>Minhas Turmas</Text>
-            <Text style={styles.smallCardText}>
-              Gerencie suas turmas
+        <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
+          <LinearGradient
+            colors={["#000000", "#000000"]}
+            style={styles.bigCard}
+          >
+            <Ionicons name="people-outline" size={26} color="#7C4DFF" />
+            <Text style={styles.bigCardTitle}>Minhas Turmas</Text>
+            <Text style={styles.bigCardSubtitle}>
+              Gerencie suas turmas.
             </Text>
-          </View>
-
-          <View style={styles.smallCard}>
-            <Ionicons name="stats-chart-outline" size={24} color="#5B3EFF" />
-            <Text style={styles.smallCardTitle}>Horarios de aulas</Text>
-            <Text style={styles.smallCardText}>
-              Veja seus horarios de aulas
-            </Text>
-          </View>
-        </View>
+          </LinearGradient>
+        </TouchableOpacity>
 
         <View style={styles.divider} />
 
@@ -103,7 +98,9 @@ export default function HomeProfessor() {
         <View style={styles.todayCard}>
           <View style={styles.todayHeader}>
             <Text style={styles.todayTitle}>Aulas de hoje</Text>
-            <Text style={styles.seeAll}>Ver tudo</Text>
+            <TouchableOpacity onPress={() => router.push("/professor/horarios-turmas")}>
+              <Text style={styles.seeAll}>Ver tudo</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.classItem}>
@@ -157,12 +154,11 @@ export default function HomeProfessor() {
         <View style={{ height: 90 }} />
       </ScrollView>
 
-      {/* MENU RÁPIDO PROFESSOR */}
       <View style={styles.bottomMenu}>
-        <Ionicons name="home" size={24} color="#5B3EFF" />
-        <Ionicons name="clipboard-outline" size={24} color="#aaa" />
-        <Ionicons name="people-outline" size={24} color="#aaa" />
-        <Ionicons name="person-outline" size={24} color="#aaa" />
+          <Ionicons name="home-outline" size={22} color="#7C4DFF" />
+          <Ionicons name="clipboard-outline" size={22} color="#aaa" />
+          <Ionicons name="calendar-outline" size={22} color="#aaa" />
+          <Ionicons name="person-outline" size={22} color="#aaa" />
       </View>
     </View>
   );
@@ -308,14 +304,14 @@ const styles = StyleSheet.create({
 
   bottomMenu: {
     position: "absolute",
-    bottom: 0,
-    width: "100%",
-    height: 70,
+    bottom: 15,
+    left: 15,
+    right: 15,
+    height: 65,
     backgroundColor: "#111",
+    borderRadius: 20,
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#222",
   },
 });

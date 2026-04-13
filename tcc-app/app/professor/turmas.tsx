@@ -29,7 +29,6 @@ export default function Turmas() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* BUSCA */}
         <View style={styles.searchBox}>
           <Ionicons name="search-outline" size={18} color="#9CA3AF" />
           <TextInput
@@ -39,13 +38,10 @@ export default function Turmas() {
           />
         </View>
 
-        {/* TITULO */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Turmas de hoje</Text>
-          <Text style={styles.day}>Segunda-Feira</Text>
+          <Text style={styles.sectionTitle}>Turmas</Text>
         </View>
 
-        {/* CARD 1 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.className}>ADS 2º</Text>
@@ -58,7 +54,15 @@ export default function Turmas() {
 
           <Text style={styles.classInfo}>Sala 2 • 28 Estudantes</Text>
 
-          <TouchableOpacity style={styles.button}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() =>
+              router.push({
+                pathname: "/professor/lista-presencas",
+                params: { turma: "ADS 2º" },
+              })
+            }
+          >
             <Feather name="user-check" size={16} color="#5B3EFF" />
             <Text style={styles.buttonText}>Lista de presença</Text>
           </TouchableOpacity>
@@ -77,7 +81,15 @@ export default function Turmas() {
 
           <Text style={styles.classInfo}>Sala 3 • 24 Estudantes</Text>
 
-          <TouchableOpacity style={styles.button}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() =>
+              router.push({
+                pathname: "/professor/lista-presencas",
+                params: { turma: "COMEX 1°" },
+              })
+            }
+          >
             <Feather name="user-check" size={16} color="#5B3EFF" />
             <Text style={styles.buttonText}>Lista de presença</Text>
           </TouchableOpacity>
@@ -96,7 +108,15 @@ export default function Turmas() {
 
           <Text style={styles.classInfo}>Lab 1 • 35 Estudantes</Text>
 
-          <TouchableOpacity style={styles.button}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() =>
+              router.push({
+                pathname: "/professor/lista-presencas",
+                params: { turma: "ADS 4º" },
+              })
+            }
+          >
             <Feather name="user-check" size={16} color="#5B3EFF" />
             <Text style={styles.buttonText}>Lista de presença</Text>
           </TouchableOpacity>
@@ -115,7 +135,15 @@ export default function Turmas() {
 
           <Text style={styles.classInfo}>Lab 4 • 30 Estudantes</Text>
 
-          <TouchableOpacity style={styles.button}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() =>
+              router.push({
+                pathname: "/professor/lista-presencas",
+                params: { turma: "GPI 1º" },
+              })
+            }
+          >
             <Feather name="user-check" size={16} color="#5B3EFF" />
             <Text style={styles.buttonText}>Lista de presença</Text>
           </TouchableOpacity>
@@ -124,25 +152,13 @@ export default function Turmas() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* MENU INFERIOR */}
-      <View style={styles.bottomMenu}>
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="home-outline" size={24} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="clipboard-outline" size={24} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="people" size={24} color="#6C4DFF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="person-outline" size={24} color="#9CA3AF" />
-        </TouchableOpacity>
-      </View>
-    </View>
+            <View style={styles.bottomMenu}>
+              <Ionicons name="home-outline" size={22} color="#aaa" />
+              <Ionicons name="clipboard-outline" size={22} color="#7C4DFF" />
+              <Ionicons name="calendar-outline" size={22} color="#aaa" />
+              <Ionicons name="person-outline" size={22} color="#aaa" />
+            </View>
+          </View>
   );
 }
 
@@ -197,12 +213,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginHorizontal: 20,
-    marginTop: 22,
-    marginBottom: 10,
+    marginTop: 30,
+    marginBottom: 20,
   },
 
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 28,
     fontWeight: "600",
   },
 
@@ -271,17 +287,15 @@ const styles = StyleSheet.create({
   },
 
   bottomMenu: {
+    position: "absolute",
+    bottom: 15,
+    left: 15,
+    right: 15,
+    height: 65,
+    backgroundColor: "#111",
+    borderRadius: 20,
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    backgroundColor: "#0B0B0B",
-    height: 75,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-  },
-
-  menuItem: {
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

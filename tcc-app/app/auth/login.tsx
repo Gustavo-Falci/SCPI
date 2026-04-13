@@ -15,7 +15,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { storage } from "../../services/storage";
 import { loginRequest } from "../../services/api";
-
 const { height } = Dimensions.get("window");
 
 export default function Login() {
@@ -28,14 +27,18 @@ export default function Login() {
   useEffect(() => {
     // Verifica se o usuário já está logado e redireciona se necessário
     const checkTokenAndRedirect = async () => {
-      const token = await storage.getItem("access_token");
-      if (token) {
-        const role = await storage.getItem("user_role");
-        if (role === "Admin") router.replace("/admin/home");
-        else if (role === "RH") router.replace("/rh/home");
-        else router.replace("/funcionario/home");
-      }
-    };
+  const token = await storage.getItem("access_token");
+
+  if (token) {
+    const role = await storage.getItem("user_role"); // 👈 FALTAVA ISSO
+
+    if (role === "Professor") {
+      router.replace("/professor/home");
+    } else {
+      router.replace("/aluno/home");
+    }
+  }
+};
     checkTokenAndRedirect();
   }, []);
 
@@ -60,9 +63,11 @@ export default function Login() {
       } else {
         router.replace("/aluno/home");
       }
-
     } catch (error: any) {
-      Alert.alert("Falha no Login", error.message || "E-mail ou senha incorretos.");
+      Alert.alert(
+        "Falha no Login",
+        error.message || "E-mail ou senha incorretos.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -107,7 +112,11 @@ export default function Login() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity onPress={handleLogin} disabled={isLoading} style={{ width: '100%' }}>
+        <TouchableOpacity
+          onPress={handleLogin}
+          disabled={isLoading}
+          style={{ width: "100%" }}
+        >
           <LinearGradient
             colors={["#4B39EF", "#5E47FF"]}
             start={{ x: 0, y: 0 }}
@@ -123,8 +132,7 @@ export default function Login() {
         </TouchableOpacity>
 
         <Text style={styles.forgotText}>
-          Esqueceu sua senha?{" "}
-          <Text style={styles.link}>Clique aqui</Text>
+          Esqueceu sua senha? <Text style={styles.link}>Clique aqui</Text>
         </Text>
       </View>
     </SafeAreaView>
