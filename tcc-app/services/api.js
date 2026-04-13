@@ -1,4 +1,4 @@
-const API_URL = "http://192.168.15.35:8000";
+const API_URL = "http://192.168.5.157:8000";
 // exemplo: http://192.168.0.15:8000
 // N√ÉO use localhost no celular!
 
@@ -53,10 +53,19 @@ export async function apiPost(endpoint, body) {
   }
 }
 
+
 export async function apiPostFormData(endpoint, formData) {
     try {
-        // Para FormData, o navegador/fetch cuida do Content-Type e do boundary automaticamente
-        const headers = await getAuthHeaders(null);
+        const token = await storage.getItem("access_token");
+        const headers = {
+            Accept: "application/json",
+        };
+        if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+        }
+        
+        // Em React Native (Expo Web), quando enviamos FormData que n„o tem boundary definido no header,
+        // N√O podemos passar o Content-Type. O navegador cria isso sozinho com o boundary type.
 
         const response = await fetch(`${API_URL}${endpoint}`, {
             method: "POST",
@@ -71,6 +80,7 @@ export async function apiPostFormData(endpoint, formData) {
         throw error;
     }
 }
+
 
 export async function loginRequest(email, senha) {
   try {

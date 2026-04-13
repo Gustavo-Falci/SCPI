@@ -15,10 +15,41 @@ export default function CadastroFacial() {
   const cameraRef = useRef<CameraView | null>(null);
   const [loading, setLoading] = useState(false);
 
+  
+  
+  
   const tirarFoto = async () => {
     if (cameraRef.current) {
-      const photo = await cameraRef.current.takePictureAsync();
-      console.log(photo);
+      setLoading(true);
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.7
+        });
+        
+        console.log("Foto tirada, enviando cadastro...");
+        setCameraOpen(false);
+
+        const formData = new FormData();
+        
+        formData.append("nome", "Aluno Teste");
+        formData.append("email", "aluno@teste.com");
+        formData.append("ra", "RA12345");
+        formData.append("turma_id", "74d2725d-b7f2-41f7-bab2-76f7cef2271f"); 
+
+        // Tratamento para Web vs Mobile no React Native
+        const responseImage = await fetch(photo.uri);
+        const blob = await responseImage.blob();
+        
+        formData.append("foto", blob, "cadastro.jpg");
+
+        const response = await apiPostFormData("/alunos/cadastrar", formData);
+        Alert.alert("Sucesso!", "Sua face foi cadastrada no sistema!");
+        router.back();
+      } catch (error: any) {
+        Alert.alert("Erro", error.message || "Erro ao cadastrar face");
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -87,7 +118,7 @@ export default function CadastroFacial() {
 
             <View style={styles.readyContainer}>
               <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
-              <Text style={styles.readyText}>Pronto para bater ponto</Text>
+              <Text style={styles.readyText}>Pronto para cadastrar</Text>
             </View>
           </View>
 
@@ -125,7 +156,7 @@ export default function CadastroFacial() {
             onPress={() => setCameraOpen(true)}
           >
             <Feather name="camera" size={18} color="#fff" />
-            <Text style={styles.buttonText}>Bater Ponto</Text>
+            <Text style={styles.buttonText}>Cadastrar Face</Text>
           </TouchableOpacity>
 
         </>
@@ -159,7 +190,7 @@ const styles = StyleSheet.create({
   },
 
   cameraCard: {
-    height: 480,
+    height: 320,
     backgroundColor: "#D9DBDF",
     borderRadius: 18,
     justifyContent: "center",

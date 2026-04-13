@@ -37,7 +37,8 @@ export default function HomeAluno() {
   return (
     <View style={styles.container}>
       {/* HEADER */}
-      <LinearGradient
+      <TouchableOpacity onPress={() => router.push("/aluno/cadastro-facial")}>
+        <LinearGradient
         colors={["#5B3EFF", "#4B2FD6"]}
         style={styles.header}
       >
@@ -47,12 +48,14 @@ export default function HomeAluno() {
           <Feather name="bell" size={18} color="#fff" />
         </View>
       </LinearGradient>
+        </TouchableOpacity>
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         {/* CADASTRAR FACE */}
+        <TouchableOpacity onPress={() => router.push("/aluno/cadastro-facial")}>
         <LinearGradient
           colors={["#5B3EFF", "#4B2FD6"]}
           style={styles.bigCard}
@@ -67,6 +70,7 @@ export default function HomeAluno() {
             Cadastre a face do aluno aqui!
           </Text>
         </LinearGradient>
+        </TouchableOpacity>
 
         {/* DOIS CARDS */}
         <View style={styles.row}>

@@ -6,7 +6,16 @@
       "Bash(node fix_ip.js)",
       "Bash(python:*)",
       "Bash(node fix_index.js)",
-      "Bash(node fix_login2.js)"
+      "Bash(node fix_login2.js)",
+      "Bash(aws sts:*)",
+      "Bash(aws s3:*)",
+      "Bash(aws s3api:*)",
+      "Bash(aws rekognition:*)",
+      "Bash(pip install:*)",
+      "Bash(find . -name \"*.tsx\" -exec grep -l \"Cadastrar face\" {} +)",
+      "Bash(sed -i 's/<LinearGradient/<TouchableOpacity onPress={\\(\\) => router.push\\(\"\"\\\\/aluno\\\\/cadastro-facial\"\"\\)}>\\\\n        <LinearGradient/g' app/aluno/home.tsx)",
+      "Bash(sed -i 's/<\\\\/LinearGradient>/<\\\\/LinearGradient>\\\\n        <\\\\/TouchableOpacity>/g' app/aluno/home.tsx)",
+      "Bash(cd:*)"
     ]
   }
 }
