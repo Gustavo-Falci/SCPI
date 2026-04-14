@@ -124,14 +124,16 @@ class SistemaReconhecimento:
             except Exception as e:
                 logger.error(f"Erro AWS: {e}")
 
-    def iniciar(self):
-        """Inicia a captura de vídeo e as threads."""
+    def iniciar(self, visualizar=False):
+        """Inicia a captura de vídeo e as threads.
+        visualizar: Se True, abre janela com o feed da câmera.
+        """
         self.rodando = True
-        
+
         # Inicia Câmera
         # CAP_DSHOW ajuda no Windows a iniciar a câmera mais rápido
-        cap = cv2.VideoCapture(self.CAM_INDEX, cv2.CAP_DSHOW) 
-        
+        cap = cv2.VideoCapture(self.CAM_INDEX, cv2.CAP_DSHOW)
+
         if not cap.isOpened():
             logger.error("❌ Não foi possível abrir a câmera.")
             return
@@ -145,12 +147,12 @@ class SistemaReconhecimento:
         t_aws.daemon = True # Morre se o programa principal fechar
         t_aws.start()
 
-        logger.info("🎥 Sistema iniciado. Pressione 'ESC' para sair.")
-        print(f"📡 Conectado à AWS Region: {AWS_REGION}")
-        print(f"📂 Coleção: {COLLECTION_ID}")
+        logger.info(f"🎥 Sistema iniciado (Headless: {not visualizar}).")
+        if visualizar:
+            logger.info("Pressione 'ESC' para sair.")
 
         try:
-            while True:
+            while self.rodando:
                 ret, frame = cap.read()
                 if not ret:
                     logger.error("Falha ao receber frame da câmera.")
@@ -160,30 +162,40 @@ class SistemaReconhecimento:
                 with self.lock:
                     self.frame_atual = frame
 
-                # --- DESENHO NA TELA (UI) ---
-                # Cria uma barra preta semitransparente no topo para o texto
-                overlay = frame.copy()
-                cv2.rectangle(overlay, (0, 0), (640, 50), (0, 0, 0), -1)
-                alpha = 0.6
-                cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+                if visualizar:
+                    # --- DESENHO NA TELA (UI) ---
+                    overlay = frame.copy()
+                    cv2.rectangle(overlay, (0, 0), (640, 50), (0, 0, 0), -1)
+                    alpha = 0.6
+                    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
 
-                # Escreve o status
-                cv2.putText(frame, self.texto_na_tela, (10, 35), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, self.cor_texto, 2)
+                    # Escreve o status
+                    cv2.putText(frame, self.texto_na_tela, (10, 35),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, self.cor_texto, 2)
 
-                # Mostra janela
-                cv2.imshow('SCPI - Reconhecimento Facial', frame)
+                    # Mostra janela
+                    cv2.imshow('SCPI - Reconhecimento Facial', frame)
 
-                # Sai com ESC
-                if cv2.waitKey(1) == 27:
-                    break
-        
+                    # Sai com ESC
+                    if cv2.waitKey(1) == 27:
+                        break
+                else:
+                    # Em modo headless, apenas um pequeno sleep para não fritar a CPU no loop de leitura
+                    # A thread da AWS já tem seu próprio controle de tempo
+                    time.sleep(0.01)
+
         finally:
             self.rodando = False
             cap.release()
-            cv2.destroyAllWindows()
-            logger.info("Sistema encerrado.")
+            if visualizar:
+                cv2.destroyAllWindows()
+            logger.info("Sistema de reconhecimento encerrado.")
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--visualizar", action="store_true", help="Abre a janela da câmera")
+    args = parser.parse_args()
+
     app = SistemaReconhecimento()
-    app.iniciar()
+    app.iniciar(visualizar=args.visualizar)

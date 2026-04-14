@@ -5,11 +5,11 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Dimensions,
   ActivityIndicator,
   Alert
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -56,6 +56,8 @@ export default function Login() {
       // Token will be saved here later
       await storage.setItem("access_token", resp.access_token);
       await storage.setItem("user_role", resp.user_role);
+      await storage.setItem("user_id", resp.user_id);
+      await storage.setItem("user_name", resp.user_name);
 
       // Redirect based on role
       if (resp.user_role === "Professor") {
@@ -131,9 +133,11 @@ export default function Login() {
           </LinearGradient>
         </TouchableOpacity>
 
-        <Text style={styles.forgotText}>
-          Esqueceu sua senha? <Text style={styles.link}>Clique aqui</Text>
-        </Text>
+        <TouchableOpacity onPress={() => router.push("/auth/register")}>
+          <Text style={styles.forgotText}>
+            Ainda não tem uma conta? <Text style={styles.link}>Cadastre-se</Text>
+          </Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );

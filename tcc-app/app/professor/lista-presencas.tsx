@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocalSearchParams } from "expo-router";
 import {
   ScrollView,
@@ -8,87 +8,123 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
+import { apiGet, apiPost } from "../../services/api";
 
 export default function ListaPresenca() {
-  const { turma } = useLocalSearchParams();
+  const { turma_id, turma_nome } = useLocalSearchParams();
   const router = useRouter();
 
-  const [alunos, setAlunos] = useState([
-    { id: 1, nome: "Marcos da Silva", presente: true },
-    { id: 2, nome: "Maria Clara", presente: false },
-    { id: 3, nome: "Carlos Lima", presente: false },
-    { id: 4, nome: "Fernanda Alves", presente: true },
-    { id: 5, nome: "João Pedro", presente: false },
-    { id: 6, nome: "Gustavo Falci", presente: true },
-    { id: 7, nome: "Pedro Oliveira", presente: true },
-    { id: 8, nome: "Bruno Augusto", presente: true },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [statusChamada, setStatusChamada] = useState<any>(null);
+  const [alunos, setAlunos] = useState<any[]>([]);
 
-  const togglePresenca = (id: number) => {
-    setAlunos((prev) =>
-      prev.map((aluno) =>
-        aluno.id === id
-          ? { ...aluno, presente: !aluno.presente }
-          : aluno
-      )
-    );
+  const carregarStatus = async () => {
+    try {
+      if (!turma_id) return;
+      
+      const statusResp = await apiGet(`/chamadas/status/${turma_id}`);
+      setStatusChamada(statusResp);
+
+      if (statusResp.status === "Aberta") {
+         try {
+             const listResp = await apiGet(`/chamadas/${statusResp.chamada_id}/alunos`);
+             if(listResp && listResp.alunos){
+                 setAlunos(listResp.alunos);
+             }
+         } catch(e) {
+             console.log("Erro ao buscar alunos", e);
+         }
+      }
+
+    } catch (err: any) {
+      console.error("Erro ao carregar status:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const presentes = alunos.filter((a) => a.presente).length;
-  const ausentes = alunos.length - presentes;
+  useEffect(() => {
+    carregarStatus();
+    const intervalId = setInterval(carregarStatus, 3000);
+    return () => clearInterval(intervalId);
+  }, [turma_id]);
+
+  const fecharChamada = async () => {
+    try {
+        await apiPost(`/chamadas/fechar/${turma_id}`, {});
+        Alert.alert("Sucesso", "Chamada encerrada e salva no histórico!");
+        router.back();
+    } catch(err: any) {
+        Alert.alert("Erro", err.message || "Erro ao fechar chamada");
+    }
+  }
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-
         <Text style={styles.headerTitle}>Lista de presença</Text>
-
         <View style={{ width: 22 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* RESUMO */}
         <View style={styles.summaryCard}>
-          <Text style={styles.classTitle}>{turma}</Text>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.present}>
-              ✅ {presentes} presentes
-            </Text>
-            <Text style={styles.absent}>
-              ❌ {ausentes} ausentes
-            </Text>
-          </View>
+          <Text style={styles.classTitle}>{turma_nome || "Turma"}</Text>
+          
+          {loading ? (
+              <ActivityIndicator color="#5B3EFF" />
+          ) : (
+              <>
+                <Text style={{color: '#fff', marginBottom: 10}}>
+                    Status: {statusChamada?.status || 'Desconhecido'}
+                </Text>
+                <View style={styles.summaryRow}>
+                  <Text style={{color: '#fff'}}>👥 {statusChamada?.total_alunos || 0} alunos</Text>
+                  <Text style={styles.present}>✅ {statusChamada?.presentes || 0} presentes</Text>
+                  <Text style={styles.absent}>❌ {statusChamada?.ausentes || 0} ausentes</Text>
+                </View>
+              </>
+          )}
         </View>
+        
+        {statusChamada?.status === "Aberta" && (
+           <TouchableOpacity 
+              style={{backgroundColor: '#EF4444', marginHorizontal: 20, padding: 15, borderRadius: 10, alignItems: 'center', marginBottom: 20}}
+              onPress={fecharChamada}
+           >
+               <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>Encerrar Chamada e Salvar</Text>
+           </TouchableOpacity>
+        )}
 
-        {/* LISTA */}
-        {alunos.map((aluno) => (
+        {alunos.length > 0 ? alunos.map((aluno) => (
           <View style={styles.studentCard} key={aluno.id}>
             <Text style={styles.studentName}>{aluno.nome}</Text>
 
-            <TouchableOpacity
+            <View
               style={[
                 styles.statusButton,
                 aluno.presente ? styles.presentBtn : styles.absentBtn,
               ]}
-              onPress={() => togglePresenca(aluno.id)}
             >
               <Text style={styles.statusText}>
                 {aluno.presente ? "Presente" : "Ausente"}
               </Text>
-            </TouchableOpacity>
+            </View>
           </View>
-        ))}
+        )) : (
+            <Text style={{textAlign: 'center', color: '#888', marginTop: 20, paddingHorizontal: 20}}>
+               {statusChamada?.status === "Aberta" ? "Aguardando dados..." : "Não há chamada aberta."}
+            </Text>
+        )}
 
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* MENU */}
       <View style={styles.bottomMenu}>
         <Ionicons name="home-outline" size={22} color="#aaa" />
         <Ionicons name="clipboard-outline" size={22} color="#7C4DFF" />
@@ -101,7 +137,6 @@ export default function ListaPresenca() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#E9EAEC" },
-
   header: {
     backgroundColor: "#5B3EFF",
     paddingTop: 60,
@@ -113,42 +148,12 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 25,
     borderBottomRightRadius: 25,
   },
-
-  headerTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-
-  summaryCard: {
-    backgroundColor: "#111",
-    margin: 20,
-    borderRadius: 16,
-    padding: 16,
-  },
-
-  classTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 10,
-  },
-
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-
-  present: {
-    color: "#22C55E",
-    fontWeight: "600",
-  },
-
-  absent: {
-    color: "#EF4444",
-    fontWeight: "600",
-  },
-
+  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  summaryCard: { backgroundColor: "#111", margin: 20, borderRadius: 16, padding: 16 },
+  classTitle: { color: "#fff", fontSize: 16, fontWeight: "700", marginBottom: 10 },
+  summaryRow: { flexDirection: "row", justifyContent: "space-between" },
+  present: { color: "#22C55E", fontWeight: "600" },
+  absent: { color: "#EF4444", fontWeight: "600" },
   studentCard: {
     backgroundColor: "#111",
     marginHorizontal: 20,
@@ -159,32 +164,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-
-  studentName: {
-    color: "#fff",
-    fontSize: 14,
-  },
-
-  statusButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-
-  presentBtn: {
-    backgroundColor: "#22C55E",
-  },
-
-  absentBtn: {
-    backgroundColor: "#EF4444",
-  },
-
-  statusText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-
+  studentName: { color: "#fff", fontSize: 14 },
+  statusButton: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  presentBtn: { backgroundColor: "#22C55E" },
+  absentBtn: { backgroundColor: "#EF4444" },
+  statusText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   bottomMenu: {
     position: "absolute",
     bottom: 15,

@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { apiGet, apiPost } from "../../services/api";
 import {
   ScrollView,
   StyleSheet,
@@ -8,10 +9,60 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Alert,
+  ActivityIndicator
 } from "react-native";
+import { storage } from "../../services/storage";
+
+
 
 export default function Turmas() {
   const router = useRouter();
+  const [turmas, setTurmas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  const turmasFiltradas = turmas.filter(t =>
+    t.nome_disciplina.toLowerCase().includes(search.toLowerCase()) ||
+    t.codigo_turma.toLowerCase().includes(search.toLowerCase())
+  );
+
+  useEffect(() => {
+    async function loadTurmas() {
+      try {
+        const userId = await storage.getItem("user_id"); // Precisamos salvar no login ou extrair do token
+        // Como o auth/login no FastAPI n�o retorna o user_id, vamos usar a rota chamando /turmas/{user_id} 
+        // Para simplificar no teste, usaremos o ID do profTeste conhecido
+        if (!userId) {
+          Alert.alert("Erro", "Usuário não identificado.");
+          router.replace("/auth/login");
+          return;
+        }
+        
+        const response = await apiGet(`/turmas/${userId}`);
+        setTurmas(response.turmas || []);
+      } catch (err: any) {
+        console.log("Erro carregar turmas", err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadTurmas();
+  }, []);
+
+  const abrirChamada = async (turmaId: string, nomeTurma: string) => {
+    try {
+      const resp = await apiPost("/chamadas/abrir", { turma_id: turmaId });
+      Alert.alert("Sucesso!", `Chamada aberta para a turma: ${nomeTurma}`);
+      
+      router.push({
+        pathname: "/professor/lista-presencas",
+        params: { turma_id: turmaId, turma_nome: nomeTurma },
+      });
+    } catch (err: any) {
+      Alert.alert("Erro", err.message || "Falha ao abrir a chamada.");
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -35,132 +86,70 @@ export default function Turmas() {
             placeholder="Buscar turmas..."
             placeholderTextColor="#9CA3AF"
             style={styles.input}
+            value={search}
+            onChangeText={setSearch}
           />
         </View>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Turmas</Text>
+          <Text style={styles.sectionTitle}>Turmas Cadastradas</Text>
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.className}>ADS 2º</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#5B3EFF" style={{ marginTop: 20 }} />
+        ) : turmasFiltradas.length === 0 ? (
+          <Text style={{ textAlign: 'center', color: '#9CA3AF', marginTop: 20 }}>Nenhuma turma encontrada.</Text>
+        ) : (
+          turmasFiltradas.map((t: any) => (
+            <View style={styles.card} key={t.turma_id}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.className}>{t.nome_disciplina}</Text>
 
-            <View style={styles.time}>
-              <Ionicons name="time-outline" size={14} color="#5B3EFF" />
-              <Text style={styles.timeText}>9:00 AM</Text>
+                <View style={styles.time}>
+                  <Ionicons name="time-outline" size={14} color="#5B3EFF" />
+                  <Text style={styles.timeText}>{t.codigo_turma}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.classInfo}>ID Interno: {t.turma_id.split("-")[0]}</Text>
+
+              <TouchableOpacity
+                style={styles.button}
+                onPress={() => abrirChamada(t.turma_id, t.nome_disciplina)}
+              >
+                <Feather name="video" size={16} color="#5B3EFF" />
+                <Text style={styles.buttonText}>Abrir Chamada (C�mera Ativa)</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.button, { marginTop: 10, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#5B3EFF' }]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/professor/lista-presencas",
+                    params: { turma_id: t.turma_id, turma_nome: t.nome_disciplina },
+                  })
+                }
+              >
+                <Feather name="list" size={16} color="#5B3EFF" />
+                <Text style={[styles.buttonText, { color: '#5B3EFF' }]}>Ver Presen�as (Status)</Text>
+              </TouchableOpacity>
             </View>
-          </View>
-
-          <Text style={styles.classInfo}>Sala 2 • 28 Estudantes</Text>
-
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() =>
-              router.push({
-                pathname: "/professor/lista-presencas",
-                params: { turma: "ADS 2º" },
-              })
-            }
-          >
-            <Feather name="user-check" size={16} color="#5B3EFF" />
-            <Text style={styles.buttonText}>Lista de presença</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* CARD 2 */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.className}>COMEX 1º</Text>
-
-            <View style={styles.time}>
-              <Ionicons name="time-outline" size={14} color="#5B3EFF" />
-              <Text style={styles.timeText}>11:30 AM</Text>
-            </View>
-          </View>
-
-          <Text style={styles.classInfo}>Sala 3 • 24 Estudantes</Text>
-
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() =>
-              router.push({
-                pathname: "/professor/lista-presencas",
-                params: { turma: "COMEX 1°" },
-              })
-            }
-          >
-            <Feather name="user-check" size={16} color="#5B3EFF" />
-            <Text style={styles.buttonText}>Lista de presença</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* CARD 3 */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.className}>ADS 4º</Text>
-
-            <View style={styles.time}>
-              <Ionicons name="time-outline" size={14} color="#5B3EFF" />
-              <Text style={styles.timeText}>2:15 PM</Text>
-            </View>
-          </View>
-
-          <Text style={styles.classInfo}>Lab 1 • 35 Estudantes</Text>
-
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() =>
-              router.push({
-                pathname: "/professor/lista-presencas",
-                params: { turma: "ADS 4º" },
-              })
-            }
-          >
-            <Feather name="user-check" size={16} color="#5B3EFF" />
-            <Text style={styles.buttonText}>Lista de presença</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* CARD 4 */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.className}>GPI 1º</Text>
-
-            <View style={styles.time}>
-              <Ionicons name="time-outline" size={14} color="#5B3EFF" />
-              <Text style={styles.timeText}>3:15 PM</Text>
-            </View>
-          </View>
-
-          <Text style={styles.classInfo}>Lab 4 • 30 Estudantes</Text>
-
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() =>
-              router.push({
-                pathname: "/professor/lista-presencas",
-                params: { turma: "GPI 1º" },
-              })
-            }
-          >
-            <Feather name="user-check" size={16} color="#5B3EFF" />
-            <Text style={styles.buttonText}>Lista de presença</Text>
-          </TouchableOpacity>
-        </View>
+          ))
+        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
 
-            <View style={styles.bottomMenu}>
-              <Ionicons name="home-outline" size={22} color="#aaa" />
-              <Ionicons name="clipboard-outline" size={22} color="#7C4DFF" />
-              <Ionicons name="calendar-outline" size={22} color="#aaa" />
-              <Ionicons name="person-outline" size={22} color="#aaa" />
-            </View>
-          </View>
+      <View style={styles.bottomMenu}>
+        <Ionicons name="home-outline" size={22} color="#aaa" />
+        <Ionicons name="clipboard-outline" size={22} color="#7C4DFF" />
+        <Ionicons name="calendar-outline" size={22} color="#aaa" />
+        <Ionicons name="person-outline" size={22} color="#aaa" />
+      </View>
+    </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {

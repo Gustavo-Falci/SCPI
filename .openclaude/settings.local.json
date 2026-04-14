@@ -15,7 +15,24 @@
       "Bash(find . -name \"*.tsx\" -exec grep -l \"Cadastrar face\" {} +)",
       "Bash(sed -i 's/<LinearGradient/<TouchableOpacity onPress={\\(\\) => router.push\\(\"\"\\\\/aluno\\\\/cadastro-facial\"\"\\)}>\\\\n        <LinearGradient/g' app/aluno/home.tsx)",
       "Bash(sed -i 's/<\\\\/LinearGradient>/<\\\\/LinearGradient>\\\\n        <\\\\/TouchableOpacity>/g' app/aluno/home.tsx)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(npm run:*)",
+      "Bash(sed -i 's/<LinearGradient/<TouchableOpacity onPress={\\(\\) => router.push\\(\"\"\\\\/professor\\\\/turmas\"\"\\)}>\\\\n        <LinearGradient/g' ../tcc-app/app/professor/home.tsx)",
+      "Bash(sed -i 's/Inicie a chamada com reconhecimento facial\\\\n          <\\\\/Text>\\\\n        <\\\\/LinearGradient>/Inicie a chamada com reconhecimento facial\\\\n          <\\\\/Text>\\\\n        <\\\\/LinearGradient>\\\\n        <\\\\/TouchableOpacity>/g' ../tcc-app/app/professor/home.tsx)",
+      "Bash(node -e \":*)",
+      "Bash(npx kill-port:*)",
+      "Bash(dir:*)",
+      "Bash(curl:*)",
+      "Bash(tasklist)",
+      "Bash(taskkill:*)",
+      "Bash(powershell -c \"Stop-Process -Id 15648 -Force; Stop-Process -Id 14728 -Force\")",
+      "Bash(powershell -c \"Stop-Process -Id 15648 -Force\")",
+      "Bash(powershell -c \"Stop-Process -Id 14728 -Force\")",
+      "Bash(uvicorn api:app --host 0.0.0.0 --port 8000 --reload)",
+      "Bash(uvicorn api:app --host 0.0.0.0 --port 8000)",
+      "Bash(netstat -ano)",
+      "Bash(uvicorn api:app --host 0.0.0.0 --port 8001)",
+      "Bash(uvicorn api:app --host 0.0.0.0 --port 8002)"
     ]
   }
 }

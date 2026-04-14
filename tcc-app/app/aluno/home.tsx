@@ -11,9 +11,45 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { storage } from "../../services/storage";
+import { apiGet } from "../../services/api";
+import { useState, useCallback } from "react";
+import { useFocusEffect } from "expo-router";
+
 export default function HomeAluno() {
   const router = useRouter();
-  const frequencia = 85;
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadDashboard = async () => {
+    try {
+      const userId = await storage.getItem("user_id");
+      if (!userId) {
+        router.replace("/auth/login");
+        return;
+      }
+      const resp = await apiGet(`/aluno/dashboard/${userId}`);
+      setData(resp);
+    } catch (err) {
+      console.error("Erro ao carregar dashboard aluno:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [])
+  );
+
+  const handleLogout = async () => {
+    await storage.removeItem('access_token');
+    await storage.removeItem('user_role');
+    await storage.removeItem('user_id');
+    await storage.removeItem('user_name');
+    router.replace('/auth/login');
+  };
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -37,18 +73,19 @@ export default function HomeAluno() {
   return (
     <View style={styles.container}>
       {/* HEADER */}
-      <TouchableOpacity onPress={() => router.push("/aluno/cadastro-facial")}>
-        <LinearGradient
+      <LinearGradient
         colors={["#5B3EFF", "#4B2FD6"]}
         style={styles.header}
       >
-        <Text style={styles.headerTitle}>Portal do Aluno</Text>
+        <Text style={styles.headerTitle}>Olá, {data?.nome?.split(' ')[0] || 'Aluno'}</Text>
 
-        <View style={styles.bellContainer}>
-          <Feather name="bell" size={18} color="#fff" />
-        </View>
-      </LinearGradient>
+        <TouchableOpacity
+          style={styles.bellContainer}
+          onPress={handleLogout}
+        >
+          <Feather name="log-out" size={18} color="#fff" />
         </TouchableOpacity>
+      </LinearGradient>
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -97,29 +134,22 @@ export default function HomeAluno() {
         <View style={styles.todayCard}>
           <View style={styles.todayHeader}>
             <Text style={styles.todayTitle}>Aulas de hoje</Text>
-            <Text style={styles.seeAll}>Ver tudo</Text>
+            <TouchableOpacity onPress={() => router.push("/aluno/horarios")}>
+                <Text style={styles.seeAll}>Ver tudo</Text>
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.classItem}>
-            <Text style={styles.classTitle}>Matemática 1</Text>
-            <Text style={styles.classTime}>
-              09:00 AM - 10:30 AM - Sala 305
-            </Text>
-          </View>
-
-          <View style={styles.classItem}>
-            <Text style={styles.classTitle}>Engenharia de Software 2</Text>
-            <Text style={styles.classTime}>
-              11:00 AM - 12:30 PM - Lab 201
-            </Text>
-          </View>
-
-          <View style={styles.classItem}>
-            <Text style={styles.classTitle}>Estrutura de Dados</Text>
-            <Text style={styles.classTime}>
-              12:40 PM - 13:35 PM - Lab 205
-            </Text>
-          </View>
+          {data?.aulas_hoje?.map((aula: any) => (
+            <View style={styles.classItem} key={aula.id}>
+              <Text style={styles.classTitle}>{aula.nome}</Text>
+              <Text style={styles.classTime}>
+                {aula.horario} • {aula.sala}
+              </Text>
+            </View>
+          ))}
+          {(!data?.aulas_hoje || data.aulas_hoje.length === 0) && (
+             <Text style={{color: '#aaa'}}>Nenhuma aula hoje.</Text>
+          )}
         </View>
 
         {/* 🔥 AULA EM ANDAMENTO AGORA EMBAIXO */}
@@ -131,30 +161,22 @@ export default function HomeAluno() {
                 { transform: [{ scale: pulseAnim }] },
               ]}
             />
-            <Text style={styles.liveText}>Aula em andamento</Text>
+            <Text style={styles.liveText}>Frequência Geral</Text>
           </View>
 
           <Text style={styles.currentSubject}>
-            Engenharia de Software 2
-          </Text>
-
-          <Text style={styles.currentTime}>
-            11:00 - 12:30 • Lab 201
-          </Text>
-
-          <Text style={styles.frequencyLabel}>
-            Frequência nesta aula
+            Média de presença em todas as disciplinas
           </Text>
 
           <Text style={styles.frequencyValue}>
-            {frequencia}%
+            {data?.frequencia_geral || 0}%
           </Text>
 
           <View style={styles.frequencyBar}>
             <View
               style={[
                 styles.frequencyFill,
-                { width: `${frequencia}%` },
+                { width: `${data?.frequencia_geral || 0}%` },
               ]}
             />
           </View>

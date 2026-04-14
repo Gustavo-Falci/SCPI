@@ -14,19 +14,36 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Alert, TouchableOpacity } from "react-native";
 
 import { storage } from "../../services/storage";
+import { apiGet } from "../../services/api";
 
 export default function HomeProfessor() {
   const router = useRouter();
-  const totalAlunos = 28;
-  const presentes = 23;
-  const ausentes = totalAlunos - presentes;
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any>(null);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  const [facing, setFacing] = useState("front");
-  const [permission, requestPermission] = useCameraPermissions();
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const cameraRef = useRef(null);
+  const loadDashboard = async () => {
+    try {
+      const userId = await storage.getItem("user_id");
+      if (!userId) {
+        router.replace("/auth/login");
+        return;
+      }
+      const resp = await apiGet(`/professor/dashboard/${userId}`);
+      setData(resp);
+    } catch (err) {
+      console.error("Erro ao carregar dashboard:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [])
+  );
 
   useEffect(() => {
     Animated.loop(
@@ -52,11 +69,18 @@ export default function HomeProfessor() {
         colors={["#5B3EFF", "#4B2FD6"]}
         style={styles.header}
       >
-        <Text style={styles.headerTitle}>Portal do Professor</Text>
+        <Text style={styles.headerTitle}>Olá, {data?.nome?.split(' ')[0] || 'Professor'}</Text>
 
-        <View style={styles.bellContainer}>
-          <Feather name="bell" size={18} color="#fff" />
-        </View>
+        <TouchableOpacity
+          style={styles.bellContainer}
+          onPress={async () => {
+            await storage.removeItem('access_token');
+            await storage.removeItem('user_role');
+            router.replace('/auth/login');
+          }}
+        >
+          <Feather name="log-out" size={18} color="#fff" />
+        </TouchableOpacity>
       </LinearGradient>
 
       <ScrollView
@@ -64,20 +88,22 @@ export default function HomeProfessor() {
         showsVerticalScrollIndicator={false}
       >
         {/* CARD PRINCIPAL */}
-        <LinearGradient
-          colors={["#5B3EFF", "#4B2FD6"]}
-          style={styles.bigCard}
-        >
-          <MaterialCommunityIcons
-            name="clipboard-check-outline"
-            size={26}
-            color="#fff"
-          />
-          <Text style={styles.bigCardTitle}>Abrir chamada</Text>
-          <Text style={styles.bigCardSubtitle}>
-            Inicie a chamada com reconhecimento facial
-          </Text>
-        </LinearGradient>
+        <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
+          <LinearGradient
+            colors={["#5B3EFF", "#4B2FD6"]}
+            style={styles.bigCard}
+          >
+            <MaterialCommunityIcons
+              name="clipboard-check-outline"
+              size={26}
+              color="#fff"
+            />
+            <Text style={styles.bigCardTitle}>Abrir chamada</Text>
+            <Text style={styles.bigCardSubtitle}>
+              Inicie a chamada com reconhecimento facial
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
 
         <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
           <LinearGradient
@@ -103,22 +129,20 @@ export default function HomeProfessor() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.classItem}>
-            <Text style={styles.classTitle}>Engenharia de Software 2</Text>
-            <Text style={styles.classTime}>
-              11:00 - 12:30 • Lab 201
-            </Text>
-          </View>
-
-          <View style={styles.classItem}>
-            <Text style={styles.classTitle}>Estrutura de Dados</Text>
-            <Text style={styles.classTime}>
-              14:00 - 15:30 • Lab 205
-            </Text>
-          </View>
+          {data?.aulas_hoje?.map((aula: any) => (
+            <View style={styles.classItem} key={aula.id}>
+              <Text style={styles.classTitle}>{aula.nome}</Text>
+              <Text style={styles.classTime}>
+                {aula.horario} • {aula.sala}
+              </Text>
+            </View>
+          ))}
+          {(!data?.aulas_hoje || data.aulas_hoje.length === 0) && (
+             <Text style={{color: '#aaa'}}>Nenhuma aula agendada.</Text>
+          )}
         </View>
 
-        {/* 🔴 AULA EM ANDAMENTO */}
+        {/* 🔴 AULA EM ANDAMENTO / ÚLTIMA CHAMADA */}
         <View style={styles.currentClassCard}>
           <View style={styles.liveIndicator}>
             <Animated.View
@@ -127,26 +151,22 @@ export default function HomeProfessor() {
                 { transform: [{ scale: pulseAnim }] },
               ]}
             />
-            <Text style={styles.liveText}>Aula em andamento</Text>
+            <Text style={styles.liveText}>Estatísticas da Chamada</Text>
           </View>
 
           <Text style={styles.currentSubject}>
-            Engenharia de Software 2
-          </Text>
-
-          <Text style={styles.currentTime}>
-            11:00 - 12:30 • Lab 201
+            {data?.estatisticas?.disciplina || 'Sem dados'}
           </Text>
 
           <View style={styles.presenceContainer}>
             <Text style={styles.presenceText}>
-              👥 {totalAlunos} alunos
+              👥 {data?.estatisticas?.total || 0} alunos
             </Text>
             <Text style={styles.presentText}>
-              ✅ {presentes} presentes
+              ✅ {data?.estatisticas?.presentes || 0} presentes
             </Text>
             <Text style={styles.absentText}>
-              ❌ {ausentes} ausentes
+              ❌ {data?.estatisticas?.ausentes || 0} ausentes
             </Text>
           </View>
         </View>
