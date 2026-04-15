@@ -53,7 +53,6 @@ export default function AulasDoDia() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -67,7 +66,6 @@ export default function AulasDoDia() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {aulas.map((aula) => (
           <View style={styles.card} key={aula.id}>
-            {/* STATUS */}
             {aula.status === "agora" && (
               <View style={styles.liveContainer}>
                 <View style={styles.liveDot} />
@@ -97,13 +95,20 @@ export default function AulasDoDia() {
 
         <View style={{ height: 120 }} />
       </ScrollView>
-
-      {/* MENU */}
+      
       <View style={styles.bottomMenu}>
-        <Ionicons name="home-outline" size={22} color="#aaa" />
-        <Ionicons name="clipboard-outline" size={22} color="#aaa" />
-        <Ionicons name="calendar-outline" size={22} color="#7C4DFF" />
-        <Ionicons name="person-outline" size={22} color="#aaa" />
+        <TouchableOpacity onPress={() => router.replace("/professor/home")}>
+          <Ionicons name="home-outline" size={22} color="#aaa" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
+          <Ionicons name="clipboard-outline" size={22} color="#aaa" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/professor/horarios-turmas")}>
+          <Ionicons name="calendar-outline" size={22} color="#7C4DFF" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/professor/perfil")}>
+          <Ionicons name="person-outline" size={22} color="#aaa" />
+        </TouchableOpacity>
       </View>
     </View>
   );

@@ -141,10 +141,18 @@ export default function Turmas() {
       </ScrollView>
 
       <View style={styles.bottomMenu}>
-        <Ionicons name="home-outline" size={22} color="#aaa" />
-        <Ionicons name="clipboard-outline" size={22} color="#7C4DFF" />
-        <Ionicons name="calendar-outline" size={22} color="#aaa" />
-        <Ionicons name="person-outline" size={22} color="#aaa" />
+        <TouchableOpacity onPress={() => router.replace("/professor/home")}>
+          <Ionicons name="home-outline" size={22} color="#aaa" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
+         <Ionicons name="clipboard-outline" size={22} color="#7C4DFF" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/professor/horarios-turmas")}>
+          <Ionicons name="calendar-outline" size={22} color="#aaa" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/professor/perfil")}>
+          <Ionicons name="person-outline" size={22} color="#aaa" />
+        </TouchableOpacity>
       </View>
     </View>
   );
