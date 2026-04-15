@@ -23,21 +23,26 @@ export default function HomeProfessor() {
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  //Atualizado 15/04
   const loadDashboard = async () => {
-    try {
-      const userId = await storage.getItem("user_id");
-      if (!userId) {
-        router.replace("/auth/login");
-        return;
-      }
-      const resp = await apiGet(`/professor/dashboard/${userId}`);
-      setData(resp);
-    } catch (err) {
-      console.error("Erro ao carregar dashboard:", err);
-    } finally {
-      setLoading(false);
+  try {
+    const userId = await storage.getItem("user_id");
+
+    if (!userId) {
+      console.log("user_id não encontrado");
+      return;
     }
-  };
+
+    const resp = await apiGet(`/professor/dashboard/${userId}`);
+    setData(resp);
+
+  } catch (err) {
+    console.error("Erro ao carregar dashboard:", err);
+    // NÃO REDIRECIONA
+  } finally {
+    setLoading(false);
+  }
+};
 
   useFocusEffect(
     useCallback(() => {
@@ -64,7 +69,6 @@ export default function HomeProfessor() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <LinearGradient
         colors={["#5B3EFF", "#4B2FD6"]}
         style={styles.header}
@@ -87,7 +91,6 @@ export default function HomeProfessor() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* CARD PRINCIPAL */}
         <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
           <LinearGradient
             colors={["#5B3EFF", "#4B2FD6"]}
@@ -120,7 +123,6 @@ export default function HomeProfessor() {
 
         <View style={styles.divider} />
 
-        {/* AULAS DE HOJE */}
         <View style={styles.todayCard}>
           <View style={styles.todayHeader}>
             <Text style={styles.todayTitle}>Aulas de hoje</Text>
@@ -142,7 +144,6 @@ export default function HomeProfessor() {
           )}
         </View>
 
-        {/* 🔴 AULA EM ANDAMENTO / ÚLTIMA CHAMADA */}
         <View style={styles.currentClassCard}>
           <View style={styles.liveIndicator}>
             <Animated.View
@@ -175,10 +176,18 @@ export default function HomeProfessor() {
       </ScrollView>
 
       <View style={styles.bottomMenu}>
+        <TouchableOpacity onPress={() => router.replace("/professor/home")}>
           <Ionicons name="home-outline" size={22} color="#7C4DFF" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
           <Ionicons name="clipboard-outline" size={22} color="#aaa" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/professor/horarios-turmas")}>
           <Ionicons name="calendar-outline" size={22} color="#aaa" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/professor/perfil")}>
           <Ionicons name="person-outline" size={22} color="#aaa" />
+        </TouchableOpacity>
       </View>
     </View>
   );

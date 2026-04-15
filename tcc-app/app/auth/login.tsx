@@ -24,23 +24,19 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
+  //Login fake
   useEffect(() => {
-    // Verifica se o usuário já está logado e redireciona se necessário
-    const checkTokenAndRedirect = async () => {
-  const token = await storage.getItem("access_token");
+  const fakeLogin = async () => {
+    await storage.setItem("access_token", "fake-token");
+    await storage.setItem("user_role", "Professor");
+    await storage.setItem("user_id", "1");
+    await storage.setItem("user_name", "Pedro");
 
-  if (token) {
-    const role = await storage.getItem("user_role"); // 👈 FALTAVA ISSO
+    router.replace("/professor/home");
+  };
 
-    if (role === "Professor") {
-      router.replace("/professor/home");
-    } else {
-      router.replace("/aluno/home");
-    }
-  }
-};
-    checkTokenAndRedirect();
-  }, []);
+  fakeLogin();
+}, []);
 
 
   const handleLogin = async () => {
