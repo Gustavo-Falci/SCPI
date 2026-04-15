@@ -1,5 +1,5 @@
 // Altere o IP abaixo para o IP do seu notebook na rede local
-const BASE_IP = "192.168.5.169";
+const BASE_IP = "10.106.254.121";
 const API_URL = `http://${BASE_IP}:8000`;
 
 import { storage } from "./storage";
