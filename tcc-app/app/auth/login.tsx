@@ -24,20 +24,6 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  //Login fake
-  useEffect(() => {
-  const fakeLogin = async () => {
-    await storage.setItem("access_token", "fake-token");
-    await storage.setItem("user_role", "Professor");
-    await storage.setItem("user_id", "1");
-    await storage.setItem("user_name", "Pedro");
-
-    router.replace("/professor/home");
-  };
-
-  fakeLogin();
-}, []);
-
 
   const handleLogin = async () => {
     if (!email || !senha) {

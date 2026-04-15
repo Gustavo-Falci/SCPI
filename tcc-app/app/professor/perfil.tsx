@@ -29,11 +29,19 @@ export default function Perfil() {
   }, []);
 
   const handleLogout = async () => {
-    await storage.removeItem("access_token");
-    await storage.removeItem("user_role");
-    await storage.removeItem("user_id");
-    await storage.removeItem("user_name");
+    // Primeiro limpamos TUDO localmente para garantir que o usuário saia
+    // independente de erro na rede ou token expirado
+    try {
+      await storage.removeItem("access_token");
+      await storage.removeItem("user_role");
+      await storage.removeItem("user_id");
+      await storage.removeItem("user_name");
+      await storage.removeItem("user_email");
+    } catch (e) {
+      console.error("Erro ao limpar storage:", e);
+    }
 
+    // Depois de limpar, redirecionamos
     router.replace("/auth/login");
   };
 

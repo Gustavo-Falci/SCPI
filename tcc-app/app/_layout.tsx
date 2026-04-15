@@ -18,37 +18,42 @@ export default function RootLayout() {
         const token = await storage.getItem('access_token');
         const role = await storage.getItem('user_role');
         const inAuthGroup = segments[0] === 'auth';
-        
-        // Se NÃO tem token e NÃO está na página de login, manda pro login
-        if (!token && !inAuthGroup) {
-          router.replace('/auth/login');
-        } 
-        // Se TEM token e está tentando acessar a página de login, manda pra home correta
-        else if (token && inAuthGroup) {
-          if (role === 'Professor') {
-             router.replace('/professor/home');
-          } else {
-             router.replace('/aluno/home');
+        const isIndex = segments.length === 0 || segments[0] === '';
+
+        if (!token) {
+          // Se não tem token e não está na tela de auth, vai pro login
+          if (!inAuthGroup) {
+            router.replace('/auth/login');
+          }
+        } else {
+          // Se tem token e está na index, vai pra home
+          // Removi o redirecionamento automático de quem já está em /auth/login
+          if (isIndex) {
+            if (role === 'Professor') {
+              router.replace('/professor/home');
+            } else {
+              router.replace('/aluno/home');
+            }
           }
         }
       } catch (e) {
-        console.warn(e);
+        console.error('Erro no RootLayout:', e);
       } finally {
         setIsReady(true);
       }
     };
 
-    // Timeout zero para garantir que o root layout foi montado antes de rotear
-    setTimeout(() => {
-       checkAuth();
-    }, 0);
+    checkAuth();
   }, [segments]);
+
+  if (!isReady) return null;
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+        <Stack.Screen name="auth/register" options={{ headerShown: false }} />
         <Stack.Screen name="aluno/home" options={{ headerShown: false }} />
         <Stack.Screen name="aluno/cadastro-facial" options={{ headerShown: false }} />
         <Stack.Screen name="professor/home" options={{ headerShown: false }} />

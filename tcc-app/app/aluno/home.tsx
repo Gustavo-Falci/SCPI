@@ -44,10 +44,14 @@ export default function HomeAluno() {
   );
 
   const handleLogout = async () => {
-    await storage.removeItem('access_token');
-    await storage.removeItem('user_role');
-    await storage.removeItem('user_id');
-    await storage.removeItem('user_name');
+    try {
+      await storage.removeItem('access_token');
+      await storage.removeItem('user_role');
+      await storage.removeItem('user_id');
+      await storage.removeItem('user_name');
+    } catch (e) {
+      console.error("Erro logout aluno:", e);
+    }
     router.replace('/auth/login');
   };
 

@@ -29,6 +29,12 @@ export async function apiGet(endpoint) {
     });
 
     const data = await response.json();
+    if (response.status === 401) {
+      await storage.removeItem("access_token");
+      await storage.removeItem("user_role");
+      await storage.removeItem("user_id");
+      await storage.removeItem("user_name");
+    }
     if (!response.ok) throw new Error(data.detail || `Erro HTTP ${response.status}`);
     return data;
   } catch (error) {
@@ -46,6 +52,12 @@ export async function apiPost(endpoint, body) {
     });
 
     const data = await response.json();
+    if (response.status === 401) {
+      await storage.removeItem("access_token");
+      await storage.removeItem("user_role");
+      await storage.removeItem("user_id");
+      await storage.removeItem("user_name");
+    }
     if (!response.ok) throw new Error(data.detail || `Erro HTTP ${response.status}`);
     return data;
   } catch (error) {
