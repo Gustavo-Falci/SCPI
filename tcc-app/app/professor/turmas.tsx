@@ -1,20 +1,23 @@
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  StatusBar,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+
 import { apiGet, apiPost } from "../../services/api";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  Alert,
-  ActivityIndicator
-} from "react-native";
 import { storage } from "../../services/storage";
-
-
+import { Colors } from "../../constants/theme";
+import { Input } from "../../components/ui/input";
+import { FloatingMenu } from "../../components/layout/floating-menu";
 
 export default function Turmas() {
   const router = useRouter();
@@ -30,19 +33,15 @@ export default function Turmas() {
   useEffect(() => {
     async function loadTurmas() {
       try {
-        const userId = await storage.getItem("user_id"); // Precisamos salvar no login ou extrair do token
-        // Como o auth/login no FastAPI n�o retorna o user_id, vamos usar a rota chamando /turmas/{user_id} 
-        // Para simplificar no teste, usaremos o ID do profTeste conhecido
+        const userId = await storage.getItem("user_id");
         if (!userId) {
-          Alert.alert("Erro", "Usuário não identificado.");
           router.replace("/auth/login");
           return;
         }
-        
         const response = await apiGet(`/turmas/${userId}`);
         setTurmas(response.turmas || []);
       } catch (err: any) {
-        console.log("Erro carregar turmas", err.message);
+        console.error("Erro carregar turmas:", err.message);
       } finally {
         setLoading(false);
       }
@@ -52,7 +51,7 @@ export default function Turmas() {
 
   const abrirChamada = async (turmaId: string, nomeTurma: string) => {
     try {
-      const resp = await apiPost("/chamadas/abrir", { turma_id: turmaId });
+      await apiPost("/chamadas/abrir", { turma_id: turmaId });
       Alert.alert("Sucesso!", `Chamada aberta para a turma: ${nomeTurma}`);
       
       router.push({
@@ -64,235 +63,206 @@ export default function Turmas() {
     }
   };
 
+  const menuItems: any[] = [
+    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
+    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil' },
+  ];
+
   return (
-    <View style={styles.container}>
-      {/* HEADER */}
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" />
+      
+      {/* HEADER PERSONALIZADO */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>Minhas turmas</Text>
-        </View>
-
-        <Ionicons name="notifications-outline" size={22} color="#fff" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Minhas Turmas</Text>
+        <View style={{ width: 44 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.searchBox}>
-          <Ionicons name="search-outline" size={18} color="#9CA3AF" />
-          <TextInput
-            placeholder="Buscar turmas..."
-            placeholderTextColor="#9CA3AF"
-            style={styles.input}
-            value={search}
-            onChangeText={setSearch}
-          />
-        </View>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* BUSCA */}
+        <Input
+          placeholder="Buscar disciplina ou código..."
+          value={search}
+          onChangeText={setSearch}
+          icon="search-outline"
+          containerStyle={styles.searchContainer}
+        />
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Turmas Cadastradas</Text>
+          <Text style={styles.sectionTitle}>Turmas ativas</Text>
+          <Text style={styles.countText}>{turmasFiltradas.length} turmas</Text>
         </View>
 
         {loading ? (
-          <ActivityIndicator size="large" color="#5B3EFF" style={{ marginTop: 20 }} />
+          <ActivityIndicator size="large" color={Colors.brand.primary} style={{ marginTop: 40 }} />
         ) : turmasFiltradas.length === 0 ? (
-          <Text style={{ textAlign: 'center', color: '#9CA3AF', marginTop: 20 }}>Nenhuma turma encontrada.</Text>
+          <View style={styles.emptyContainer}>
+            <Ionicons name="search" size={50} color={Colors.brand.textSecondary} />
+            <Text style={styles.emptyText}>Nenhuma turma encontrada.</Text>
+          </View>
         ) : (
           turmasFiltradas.map((t: any) => (
             <View style={styles.card} key={t.turma_id}>
-              <View style={styles.cardHeader}>
+              <View style={styles.cardInfo}>
                 <Text style={styles.className}>{t.nome_disciplina}</Text>
-
-                <View style={styles.time}>
-                  <Ionicons name="time-outline" size={14} color="#5B3EFF" />
-                  <Text style={styles.timeText}>{t.codigo_turma}</Text>
+                <View style={styles.codeRow}>
+                   <Ionicons name="barcode-outline" size={14} color={Colors.brand.textSecondary} />
+                   <Text style={styles.codeText}>{t.codigo_turma}</Text>
                 </View>
               </View>
 
-              <Text style={styles.classInfo}>ID Interno: {t.turma_id.split("-")[0]}</Text>
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  style={styles.primaryAction}
+                  onPress={() => abrirChamada(t.turma_id, t.nome_disciplina)}
+                >
+                  <Ionicons name="camera-outline" size={18} color="#fff" />
+                  <Text style={styles.primaryActionText}>Abrir Chamada</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.button}
-                onPress={() => abrirChamada(t.turma_id, t.nome_disciplina)}
-              >
-                <Feather name="video" size={16} color="#5B3EFF" />
-                <Text style={styles.buttonText}>Abrir Chamada (C�mera Ativa)</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.button, { marginTop: 10, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#5B3EFF' }]}
-                onPress={() =>
-                  router.push({
-                    pathname: "/professor/lista-presencas",
-                    params: { turma_id: t.turma_id, turma_nome: t.nome_disciplina },
-                  })
-                }
-              >
-                <Feather name="list" size={16} color="#5B3EFF" />
-                <Text style={[styles.buttonText, { color: '#5B3EFF' }]}>Ver Presen�as (Status)</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.secondaryAction}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/professor/lista-presencas",
+                      params: { turma_id: t.turma_id, turma_nome: t.nome_disciplina },
+                    })
+                  }
+                >
+                  <Ionicons name="list-outline" size={18} color={Colors.brand.primary} />
+                </TouchableOpacity>
+              </View>
             </View>
           ))
         )}
 
-        <View style={{ height: 100 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
 
-      <View style={styles.bottomMenu}>
-        <TouchableOpacity onPress={() => router.replace("/professor/home")}>
-          <Ionicons name="home-outline" size={22} color="#aaa" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
-         <Ionicons name="clipboard-outline" size={22} color="#7C4DFF" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/professor/horarios-turmas")}>
-          <Ionicons name="calendar-outline" size={22} color="#aaa" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/professor/perfil")}>
-          <Ionicons name="person-outline" size={22} color="#aaa" />
-        </TouchableOpacity>
-      </View>
-    </View>
+      <FloatingMenu items={menuItems} />
+    </SafeAreaView>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#E9EAEC",
+    backgroundColor: Colors.brand.background,
   },
-
   header: {
-    backgroundColor: "#5B3EFF",
-    paddingTop: 60,
-    paddingBottom: 25,
-    paddingHorizontal: 20,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
+    paddingHorizontal: 20,
+    height: 60,
   },
-
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-
   headerTitle: {
+    fontSize: 18,
+    fontWeight: "800",
     color: "#fff",
-    fontSize: 22,
-    fontWeight: "700",
   },
-
-  searchBox: {
-    marginTop: 20,
-    marginHorizontal: 20,
-    backgroundColor: "#F3F4F6",
-    borderRadius: 12,
+  backBtn: {
+    width: 44,
     height: 44,
-    flexDirection: "row",
+    borderRadius: 22,
+    backgroundColor: Colors.brand.card,
+    justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 12,
   },
-
-  input: {
-    marginLeft: 8,
-    flex: 1,
-    fontSize: 14,
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 10,
   },
-
+  searchContainer: {
+    marginBottom: 24,
+  },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginHorizontal: 20,
-    marginTop: 30,
-    marginBottom: 20,
+    alignItems: "flex-end",
+    marginBottom: 16,
+    paddingHorizontal: 4,
   },
-
   sectionTitle: {
-    fontSize: 28,
-    fontWeight: "600",
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "800",
   },
-
-  day: {
-    color: "#6B7280",
-    fontSize: 13,
+  countText: {
+    color: Colors.brand.textSecondary,
+    fontSize: 14,
+    marginBottom: 4,
   },
-
   card: {
-    backgroundColor: "#111",
-    marginHorizontal: 20,
-    marginTop: 14,
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: Colors.brand.card,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
-
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  cardInfo: {
+    marginBottom: 16,
   },
-
   className: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
   },
-
-  classInfo: {
-    color: "#9CA3AF",
-    marginTop: 4,
-    marginBottom: 12,
-  },
-
-  time: {
-    backgroundColor: "#EEF2FF",
+  codeRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
+    marginTop: 6,
+    gap: 6,
   },
-
-  timeText: {
-    marginLeft: 4,
-    fontSize: 12,
-    color: "#5B3EFF",
-    fontWeight: "600",
+  codeText: {
+    color: Colors.brand.textSecondary,
+    fontSize: 14,
   },
-
-  button: {
-    backgroundColor: "#F3F4F6",
+  actionRow: {
     flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    gap: 12,
   },
-
-  buttonText: {
-    marginLeft: 6,
-    color: "#5B3EFF",
-    fontSize: 13,
-    fontWeight: "500",
-  },
-
-  bottomMenu: {
-    position: "absolute",
-    bottom: 15,
-    left: 15,
-    right: 15,
-    height: 65,
-    backgroundColor: "#111",
-    borderRadius: 20,
+  primaryAction: {
+    flex: 1,
+    backgroundColor: Colors.brand.primary,
+    height: 48,
+    borderRadius: 14,
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "center",
     alignItems: "center",
+    gap: 8,
+  },
+  primaryActionText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  secondaryAction: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "rgba(75, 57, 239, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(75, 57, 239, 0.2)",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  emptyText: {
+    color: Colors.brand.textSecondary,
+    fontSize: 16,
+    marginTop: 16,
   },
 });

@@ -9,6 +9,15 @@ const tintColorLight = '#0a7ea4';
 const tintColorDark = '#fff';
 
 export const Colors = {
+  brand: {
+    background: '#0C0C12',
+    card: '#3A262F',
+    primary: '#4B39EF',
+    secondary: '#5E47FF',
+    text: '#FFFFFF',
+    textSecondary: '#BFBFBF',
+    error: '#FF4B4B',
+  },
   light: {
     text: '#11181C',
     background: '#fff',

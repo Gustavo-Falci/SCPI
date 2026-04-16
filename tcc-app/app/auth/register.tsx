@@ -2,19 +2,21 @@ import { useState } from "react";
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
   Dimensions,
-  ActivityIndicator,
   Alert,
   ScrollView,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { apiPost } from "../../services/api";
+import { Input } from "../../components/ui/input";
+import { Button } from "../../components/ui/button";
+import { Colors } from "../../constants/theme";
 
 const { height } = Dimensions.get("window");
 
@@ -23,7 +25,7 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
-  const [tipoUsuario, setTipoUsuario] = useState("Aluno"); // 'Aluno' ou 'Professor'
+  const [tipoUsuario, setTipoUsuario] = useState<"Aluno" | "Professor">("Aluno");
   const [ra, setRa] = useState("");
   const [departamento, setDepartamento] = useState("");
 
@@ -72,134 +74,130 @@ export default function Register() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.topArea}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ flexGrow: 1 }}
+        >
+          <View style={styles.header}>
             <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.title}>Criar Conta</Text>
-          <Text style={styles.subtitle}>Junte-se ao sistema de presença inteligente</Text>
-
-          <View style={styles.divider} />
-
-          {/* Nome */}
-          <TextInput
-            placeholder="Nome Completo"
-            placeholderTextColor="#BFBFBF"
-            style={styles.input}
-            value={nome}
-            onChangeText={setNome}
-          />
-
-          {/* Email */}
-          <TextInput
-            placeholder="E-mail"
-            placeholderTextColor="#BFBFBF"
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-
-          {/* Seletor de Tipo */}
-          <View style={styles.typeSelector}>
-            <TouchableOpacity
-                style={[styles.typeBtn, tipoUsuario === 'Aluno' && styles.typeBtnActive]}
-                onPress={() => setTipoUsuario('Aluno')}
-            >
-                <Text style={[styles.typeText, tipoUsuario === 'Aluno' && styles.typeTextActive]}>Sou Aluno</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-                style={[styles.typeBtn, tipoUsuario === 'Professor' && styles.typeBtnActive]}
-                onPress={() => setTipoUsuario('Professor')}
-            >
-                <Text style={[styles.typeText, tipoUsuario === 'Professor' && styles.typeTextActive]}>Sou Professor</Text>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
 
-          {/* Campo Condicional: RA ou Departamento */}
-          {tipoUsuario === 'Aluno' ? (
-            <TextInput
-                placeholder="RA (Registro Acadêmico)"
-                placeholderTextColor="#BFBFBF"
-                style={styles.input}
+          <View style={styles.card}>
+            <Text style={styles.title}>Criar Conta</Text>
+            <Text style={styles.subtitle}>Junte-se ao sistema de presença inteligente</Text>
+
+            <View style={styles.divider} />
+
+            <Input
+              label="Nome Completo"
+              placeholder="Ex: João Silva"
+              value={nome}
+              onChangeText={setNome}
+              icon="person-outline"
+            />
+
+            <Input
+              label="E-mail"
+              placeholder="seu@email.com"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              icon="mail-outline"
+            />
+
+            <Text style={styles.sectionLabel}>Eu sou:</Text>
+            <View style={styles.typeSelector}>
+              <TouchableOpacity
+                style={[styles.typeBtn, tipoUsuario === "Aluno" && styles.typeBtnActive]}
+                onPress={() => setTipoUsuario("Aluno")}
+              >
+                <Ionicons 
+                  name="school-outline" 
+                  size={20} 
+                  color={tipoUsuario === "Aluno" ? "#fff" : "#aaa"} 
+                />
+                <Text style={[styles.typeText, tipoUsuario === "Aluno" && styles.typeTextActive]}>Aluno</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.typeBtn, tipoUsuario === "Professor" && styles.typeBtnActive]}
+                onPress={() => setTipoUsuario("Professor")}
+              >
+                <Ionicons 
+                  name="briefcase-outline" 
+                  size={20} 
+                  color={tipoUsuario === "Professor" ? "#fff" : "#aaa"} 
+                />
+                <Text style={[styles.typeText, tipoUsuario === "Professor" && styles.typeTextActive]}>Professor</Text>
+              </TouchableOpacity>
+            </View>
+
+            {tipoUsuario === "Aluno" ? (
+              <Input
+                label="RA (Registro Acadêmico)"
+                placeholder="000000"
                 value={ra}
                 onChangeText={setRa}
                 keyboardType="numeric"
-            />
-          ) : (
-            <TextInput
-                placeholder="Departamento (Ex: Computação)"
-                placeholderTextColor="#BFBFBF"
-                style={styles.input}
+                icon="id-card-outline"
+              />
+            ) : (
+              <Input
+                label="Departamento"
+                placeholder="Ex: Engenharia"
                 value={departamento}
                 onChangeText={setDepartamento}
-            />
-          )}
+                icon="business-outline"
+              />
+            )}
 
-          {/* Senha */}
-          <View style={styles.passwordWrapper}>
-            <TextInput
-              placeholder="Senha"
-              placeholderTextColor="#BFBFBF"
-              secureTextEntry={!showPassword}
-              style={styles.passwordInput}
+            <Input
+              label="Senha"
+              placeholder="Mínimo 6 caracteres"
               value={senha}
               onChangeText={setSenha}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons
-                name={showPassword ? "eye-off-outline" : "eye-outline"}
-                size={18}
-                color="#BFBFBF"
-              />
-            </TouchableOpacity>
-          </View>
-
-          {/* Confirmar Senha */}
-          <View style={styles.passwordWrapper}>
-            <TextInput
-              placeholder="Confirmar Senha"
-              placeholderTextColor="#BFBFBF"
               secureTextEntry={!showPassword}
-              style={styles.passwordInput}
+              icon="lock-closed-outline"
+              rightIcon={showPassword ? "eye-off-outline" : "eye-outline"}
+              onRightIconPress={() => setShowPassword(!showPassword)}
+            />
+
+            <Input
+              label="Confirmar Senha"
+              placeholder="Repita sua senha"
               value={confirmarSenha}
               onChangeText={setConfirmarSenha}
+              secureTextEntry={!showPassword}
+              icon="checkmark-circle-outline"
             />
-          </View>
 
-          <TouchableOpacity
-            onPress={handleRegister}
-            disabled={isLoading}
-            style={{ width: "100%" }}
-          >
-            <LinearGradient
-              colors={["#4B39EF", "#5E47FF"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.button}
+            <Button
+              title="Cadastrar"
+              onPress={handleRegister}
+              loading={isLoading}
+              style={{ marginTop: 10 }}
+            />
+
+            <TouchableOpacity 
+              onPress={() => router.replace("/auth/login")}
+              style={styles.footer}
             >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Cadastrar</Text>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
+              <Text style={styles.footerText}>
+                Já tem uma conta? <Text style={styles.link}>Faça Login</Text>
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => router.replace("/auth/login")}>
-            <Text style={styles.footerText}>
-              Já tem uma conta? <Text style={styles.link}>Faça Login</Text>
-            </Text>
-          </TouchableOpacity>
-
-          <View style={{ height: 40 }} />
-        </View>
-      </ScrollView>
+            <View style={{ height: 40 }} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -207,115 +205,94 @@ export default function Register() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0C0C12",
+    backgroundColor: Colors.brand.background,
   },
-  topArea: {
-    height: 80,
-    justifyContent: 'center',
+  header: {
+    height: 60,
+    justifyContent: "center",
     paddingHorizontal: 20,
+    marginTop: 10,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "rgba(255,255,255,0.1)",
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   card: {
     flex: 1,
-    backgroundColor: "#1A1A24",
+    backgroundColor: Colors.brand.card,
     borderTopLeftRadius: 40,
     borderTopRightRadius: 40,
-    paddingHorizontal: 30,
+    paddingHorizontal: 24,
     paddingTop: 40,
-    minHeight: height - 80,
+    minHeight: height - 70,
   },
   title: {
-    color: "#FFFFFF",
+    color: Colors.brand.text,
     fontSize: 28,
     fontWeight: "800",
     textAlign: "center",
   },
   subtitle: {
-    color: "#aaa",
+    color: Colors.brand.textSecondary,
     fontSize: 14,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 8,
   },
   divider: {
     height: 1,
     backgroundColor: "rgba(255,255,255,0.1)",
-    marginVertical: 25,
+    marginVertical: 24,
   },
-  input: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    borderRadius: 14,
-    padding: 16,
-    color: "#FFFFFF",
-    marginBottom: 16,
+  sectionLabel: {
+    color: Colors.brand.text,
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 12,
+    marginLeft: 4,
   },
   typeSelector: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    gap: 10,
+    flexDirection: "row",
+    marginBottom: 20,
+    gap: 12,
   },
   typeBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
+    flexDirection: "row",
+    paddingVertical: 14,
+    borderRadius: 14,
     backgroundColor: "rgba(255,255,255,0.05)",
-    alignItems: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
+    gap: 8,
   },
   typeBtnActive: {
-    backgroundColor: "rgba(75, 57, 239, 0.2)",
-    borderColor: "#4B39EF",
+    backgroundColor: "rgba(75, 57, 239, 0.15)",
+    borderColor: Colors.brand.primary,
   },
   typeText: {
-    color: "#aaa",
-    fontWeight: '600',
+    color: Colors.brand.textSecondary,
+    fontWeight: "600",
+    fontSize: 15,
   },
   typeTextActive: {
-    color: "#fff",
+    color: Colors.brand.text,
   },
-  passwordWrapper: {
-    flexDirection: "row",
+  footer: {
+    marginTop: 20,
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  passwordInput: {
-    flex: 1,
-    paddingVertical: 16,
-    color: "#FFFFFF",
-  },
-  button: {
-    paddingVertical: 18,
-    borderRadius: 14,
-    alignItems: "center",
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
   },
   footerText: {
-    color: "#D9D9D9",
-    textAlign: "center",
+    color: Colors.brand.textSecondary,
     fontSize: 14,
   },
   link: {
-    color: "#4B39EF",
+    color: Colors.brand.primary,
     fontWeight: "700",
   },
 });

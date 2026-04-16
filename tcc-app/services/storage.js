@@ -41,5 +41,24 @@ export const storage = {
     } else {
       await SecureStore.deleteItemAsync(key);
     }
+  },
+
+  async clear() {
+    const keys = ['access_token', 'user_role', 'user_id', 'user_name', 'user_email', 'user_ra'];
+    if (Platform.OS === 'web') {
+      try {
+        localStorage.clear();
+      } catch (e) {
+        console.error('Failed to clear localStorage', e);
+      }
+    } else {
+      for (const key of keys) {
+        try {
+          await SecureStore.deleteItemAsync(key);
+        } catch (e) {
+          console.error(`Failed to delete key ${key} from SecureStore`, e);
+        }
+      }
+    }
   }
 };

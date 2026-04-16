@@ -1,48 +1,46 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Animated,
+  TouchableOpacity,
+  ActivityIndicator,
+  StatusBar,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useState, useCallback } from "react";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
-import { Alert, TouchableOpacity } from "react-native";
 
 import { storage } from "../../services/storage";
 import { apiGet } from "../../services/api";
+import { Colors } from "../../constants/theme";
+import { DashboardHeader } from "../../components/layout/dashboard-header";
+import { FloatingMenu } from "../../components/layout/floating-menu";
 
 export default function HomeProfessor() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
-
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  //Atualizado 15/04
   const loadDashboard = async () => {
-  try {
-    const userId = await storage.getItem("user_id");
-
-    if (!userId) {
-      console.log("user_id não encontrado");
-      return;
+    try {
+      const userId = await storage.getItem("user_id");
+      if (!userId) {
+        router.replace("/auth/login");
+        return;
+      }
+      const resp = await apiGet(`/professor/dashboard/${userId}`);
+      setData(resp);
+    } catch (err) {
+      console.error("Erro ao carregar dashboard professor:", err);
+    } finally {
+      setLoading(false);
     }
-
-    const resp = await apiGet(`/professor/dashboard/${userId}`);
-    setData(resp);
-
-  } catch (err) {
-    console.error("Erro ao carregar dashboard:", err);
-    // NÃO REDIRECIONA
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -53,294 +51,185 @@ export default function HomeProfessor() {
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.4,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
+        Animated.timing(pulseAnim, { toValue: 1.2, duration: 1000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
       ])
     ).start();
   }, []);
 
+  const handleLogout = async () => {
+    await storage.clear();
+    router.replace('/auth/login');
+  };
+
+  const menuItems: any[] = [
+    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
+    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil' },
+  ];
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={Colors.brand.primary} />
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={["#5B3EFF", "#4B2FD6"]}
-        style={styles.header}
-      >
-        <Text style={styles.headerTitle}>Olá, {data?.nome?.split(' ')[0] || 'Professor'}</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" />
+      
+      <DashboardHeader 
+        greeting="Bem-vindo, Prof." 
+        userName={data?.nome?.split(' ')[0] || 'Professor'} 
+        onLogout={handleLogout} 
+      />
 
-        <TouchableOpacity
-          style={styles.bellContainer}
-          onPress={async () => {
-            await storage.removeItem('access_token');
-            await storage.removeItem('user_role');
-            router.replace('/auth/login');
-          }}
-        >
-          <Feather name="log-out" size={18} color="#fff" />
-        </TouchableOpacity>
-      </LinearGradient>
-
-      <ScrollView
-        contentContainerStyle={styles.content}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
+        <TouchableOpacity 
+          activeOpacity={0.9}
+          onPress={() => router.push("/professor/turmas")}
+        >
           <LinearGradient
-            colors={["#5B3EFF", "#4B2FD6"]}
-            style={styles.bigCard}
+            colors={[Colors.brand.primary, Colors.brand.secondary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.mainActionCard}
           >
-            <MaterialCommunityIcons
-              name="clipboard-check-outline"
-              size={26}
-              color="#fff"
-            />
-            <Text style={styles.bigCardTitle}>Abrir chamada</Text>
-            <Text style={styles.bigCardSubtitle}>
-              Inicie a chamada com reconhecimento facial
-            </Text>
+            <View style={styles.actionCardContent}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.actionCardTitle}>Iniciar Chamada</Text>
+                <Text style={styles.actionCardSubtitle}>
+                  Abra a frequência facial para seus alunos agora
+                </Text>
+              </View>
+              <View style={styles.actionIconContainer}>
+                <MaterialCommunityIcons name="face-recognition" size={32} color="#fff" />
+              </View>
+            </View>
           </LinearGradient>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
-          <LinearGradient
-            colors={["#000000", "#000000"]}
-            style={styles.bigCard}
-          >
-            <Ionicons name="people-outline" size={26} color="#7C4DFF" />
-            <Text style={styles.bigCardTitle}>Minhas Turmas</Text>
-            <Text style={styles.bigCardSubtitle}>
-              Gerencie suas turmas.
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Resumo da Última Chamada</Text>
+          <View style={styles.statsRow}>
+             <View style={styles.statItem}>
+                <Text style={styles.statValue}>{data?.estatisticas?.total || 0}</Text>
+                <Text style={styles.statLabel}>Alunos</Text>
+             </View>
+             <View style={[styles.statItem, { borderColor: 'rgba(29, 185, 84, 0.3)' }]}>
+                <Text style={[styles.statValue, { color: '#1DB954' }]}>{data?.estatisticas?.presentes || 0}</Text>
+                <Text style={styles.statLabel}>Presentes</Text>
+             </View>
+             <View style={[styles.statItem, { borderColor: 'rgba(255, 75, 75, 0.3)' }]}>
+                <Text style={[styles.statValue, { color: '#FF4B4B' }]}>{data?.estatisticas?.ausentes || 0}</Text>
+                <Text style={styles.statLabel}>Ausentes</Text>
+             </View>
+          </View>
+        </View>
 
-        <View style={styles.divider} />
-
-        <View style={styles.todayCard}>
-          <View style={styles.todayHeader}>
-            <Text style={styles.todayTitle}>Aulas de hoje</Text>
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Aulas de Hoje</Text>
             <TouchableOpacity onPress={() => router.push("/professor/horarios-turmas")}>
-              <Text style={styles.seeAll}>Ver tudo</Text>
+              <Text style={styles.seeAllText}>Ver todas</Text>
             </TouchableOpacity>
           </View>
 
-          {data?.aulas_hoje?.map((aula: any) => (
-            <View style={styles.classItem} key={aula.id}>
-              <Text style={styles.classTitle}>{aula.nome}</Text>
-              <Text style={styles.classTime}>
-                {aula.horario} • {aula.sala}
-              </Text>
+          {data?.aulas_hoje && data.aulas_hoje.length > 0 ? (
+            data.aulas_hoje.map((aula: any, index: number) => (
+              <TouchableOpacity 
+                key={index} 
+                style={styles.classCard}
+                onPress={() => router.push("/professor/turmas")}
+              >
+                <View style={styles.classInfo}>
+                  <Text style={styles.className}>{aula.nome}</Text>
+                  <View style={styles.classMetaRow}>
+                    <Ionicons name="time-outline" size={14} color={Colors.brand.textSecondary} />
+                    <Text style={styles.classMetaText}>{aula.horario}</Text>
+                    <Ionicons name="location-outline" size={14} color={Colors.brand.textSecondary} style={{ marginLeft: 8 }} />
+                    <Text style={styles.classMetaText}>{aula.sala}</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.brand.textSecondary} />
+              </TouchableOpacity>
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="calendar-outline" size={40} color={Colors.brand.textSecondary} />
+              <Text style={styles.emptyText}>Sem aulas agendadas para hoje.</Text>
             </View>
-          ))}
-          {(!data?.aulas_hoje || data.aulas_hoje.length === 0) && (
-             <Text style={{color: '#aaa'}}>Nenhuma aula agendada.</Text>
           )}
         </View>
 
-        <View style={styles.currentClassCard}>
-          <View style={styles.liveIndicator}>
-            <Animated.View
-              style={[
-                styles.liveDot,
-                { transform: [{ scale: pulseAnim }] },
-              ]}
-            />
-            <Text style={styles.liveText}>Estatísticas da Chamada</Text>
+        <TouchableOpacity 
+          style={styles.secondaryCard}
+          onPress={() => router.push("/professor/turmas")}
+        >
+          <View style={[styles.iconCircle, { backgroundColor: 'rgba(75, 57, 239, 0.1)' }]}>
+            <Ionicons name="people" size={24} color={Colors.brand.primary} />
           </View>
-
-          <Text style={styles.currentSubject}>
-            {data?.estatisticas?.disciplina || 'Sem dados'}
-          </Text>
-
-          <View style={styles.presenceContainer}>
-            <Text style={styles.presenceText}>
-              👥 {data?.estatisticas?.total || 0} alunos
-            </Text>
-            <Text style={styles.presentText}>
-              ✅ {data?.estatisticas?.presentes || 0} presentes
-            </Text>
-            <Text style={styles.absentText}>
-              ❌ {data?.estatisticas?.ausentes || 0} ausentes
-            </Text>
+          <View style={{ flex: 1, marginLeft: 16 }}>
+            <Text style={styles.secondaryCardTitle}>Minhas Turmas</Text>
+            <Text style={styles.secondaryCardSubtitle}>Gerenciar listas e presenças</Text>
           </View>
-        </View>
+          <Ionicons name="arrow-forward" size={20} color={Colors.brand.textSecondary} />
+        </TouchableOpacity>
 
-        <View style={{ height: 90 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
 
-      <View style={styles.bottomMenu}>
-        <TouchableOpacity onPress={() => router.replace("/professor/home")}>
-          <Ionicons name="home-outline" size={22} color="#7C4DFF" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
-          <Ionicons name="clipboard-outline" size={22} color="#aaa" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/professor/horarios-turmas")}>
-          <Ionicons name="calendar-outline" size={22} color="#aaa" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/professor/perfil")}>
-          <Ionicons name="person-outline" size={22} color="#aaa" />
-        </TouchableOpacity>
-      </View>
-    </View>
+      <FloatingMenu items={menuItems} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F2F2F2" },
-
-  header: {
-    paddingTop: 60,
-    paddingBottom: 28,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  container: { flex: 1, backgroundColor: Colors.brand.background },
+  center: { justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 10 },
+  mainActionCard: {
+    borderRadius: 24, padding: 24, marginBottom: 32,
+    elevation: 8, shadowColor: Colors.brand.primary,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
   },
-
-  headerTitle: { color: "#fff", fontSize: 20, fontWeight: "700" },
-
-  bellContainer: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    justifyContent: "center",
-    alignItems: "center",
+  actionCardContent: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  actionCardTitle: { color: "#fff", fontSize: 22, fontWeight: "800" },
+  actionCardSubtitle: { color: "rgba(255,255,255,0.8)", fontSize: 14, marginTop: 6, paddingRight: 20 },
+  actionIconContainer: { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
+  sectionContainer: { marginBottom: 32 },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  sectionTitle: { color: Colors.brand.text, fontSize: 18, fontWeight: "700", marginBottom: 16 },
+  seeAllText: { color: Colors.brand.primary, fontSize: 14, fontWeight: "600" },
+  statsRow: { flexDirection: "row", gap: 12 },
+  statItem: { flex: 1, backgroundColor: Colors.brand.card, borderRadius: 20, padding: 16, alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" },
+  statValue: { color: Colors.brand.text, fontSize: 22, fontWeight: "800" },
+  statLabel: { color: Colors.brand.textSecondary, fontSize: 12, marginTop: 4 },
+  classCard: {
+    backgroundColor: Colors.brand.card, borderRadius: 20, padding: 18,
+    flexDirection: "row", alignItems: "center", marginBottom: 12,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-
-  content: { paddingHorizontal: 20, paddingTop: 20 },
-
-  bigCard: { borderRadius: 16, padding: 20, marginBottom: 22 },
-
-  bigCardTitle: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "700",
-    marginTop: 10,
+  classInfo: { flex: 1 },
+  className: { color: Colors.brand.text, fontSize: 16, fontWeight: "700" },
+  classMetaRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
+  classMetaText: { color: Colors.brand.textSecondary, fontSize: 12 },
+  secondaryCard: {
+    backgroundColor: Colors.brand.card, borderRadius: 24, padding: 20,
+    flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-
-  bigCardSubtitle: { color: "#E0E0E0", fontSize: 12, marginTop: 4 },
-
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 22,
+  iconCircle: { width: 50, height: 50, borderRadius: 25, justifyContent: "center", alignItems: "center" },
+  secondaryCardTitle: { color: Colors.brand.text, fontSize: 16, fontWeight: "700" },
+  secondaryCardSubtitle: { color: Colors.brand.textSecondary, fontSize: 13, marginTop: 2 },
+  emptyContainer: {
+    alignItems: "center", paddingVertical: 30, backgroundColor: Colors.brand.card,
+    borderRadius: 24, borderStyle: "dashed", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
   },
-
-  smallCard: {
-    width: "48%",
-    backgroundColor: "#111",
-    borderRadius: 16,
-    padding: 16,
-  },
-
-  smallCardTitle: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-    marginTop: 10,
-  },
-
-  smallCardText: { color: "#aaa", fontSize: 11, marginTop: 4 },
-
-  divider: {
-    height: 1,
-    backgroundColor: "#D9D9D9",
-    marginBottom: 22,
-  },
-
-  todayCard: {
-    backgroundColor: "#111",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-  },
-
-  todayHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-
-  todayTitle: { color: "#fff", fontSize: 16, fontWeight: "700" },
-
-  seeAll: { color: "#5B3EFF", fontSize: 12 },
-
-  classItem: { marginBottom: 12 },
-
-  classTitle: { color: "#fff", fontSize: 14, fontWeight: "600" },
-
-  classTime: { color: "#aaa", fontSize: 11, marginTop: 2 },
-
-  currentClassCard: {
-    backgroundColor: "#111",
-    borderRadius: 16,
-    padding: 16,
-  },
-
-  liveIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-
-  liveDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#1DB954",
-    marginRight: 8,
-  },
-
-  liveText: {
-    color: "#1DB954",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-
-  currentSubject: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  currentTime: {
-    color: "#aaa",
-    fontSize: 12,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-
-  presenceContainer: {
-    gap: 6,
-  },
-
-  presenceText: { color: "#fff", fontSize: 13 },
-
-  presentText: { color: "#1DB954", fontSize: 13 },
-
-  absentText: { color: "#FF3B30", fontSize: 13 },
-
-  bottomMenu: {
-    position: "absolute",
-    bottom: 15,
-    left: 15,
-    right: 15,
-    height: 65,
-    backgroundColor: "#111",
-    borderRadius: 20,
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-  },
+  emptyText: { color: Colors.brand.textSecondary, marginTop: 12, fontSize: 14 },
 });

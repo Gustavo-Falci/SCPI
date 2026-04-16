@@ -16,17 +16,20 @@ import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 import { Button } from "../../components/ui/button";
 
-export default function Perfil() {
+export default function PerfilAluno() {
   const router = useRouter();
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
+  const [ra, setRa] = useState("");
 
   useEffect(() => {
     const loadUser = async () => {
       const userName = await storage.getItem("user_name");
       const userEmail = await storage.getItem("user_email");
-      setNome(userName || "Professor");
-      setEmail(userEmail || "email@exemplo.com");
+      const userRa = await storage.getItem("user_ra");
+      setNome(userName || "Aluno");
+      setEmail(userEmail || "aluno@exemplo.com");
+      setRa(userRa || "000000");
     };
     loadUser();
   }, []);
@@ -37,10 +40,10 @@ export default function Perfil() {
   };
 
   const menuItems: any[] = [
-    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
-    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas' },
-    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas' },
-    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil' },
+    { icon: 'home-outline', activeIcon: 'home', route: '/aluno/home' },
+    { icon: 'stats-chart-outline', activeIcon: 'stats-chart', route: '/aluno/frequencia' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/aluno/horarios' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/aluno/perfil' },
   ];
 
   return (
@@ -64,37 +67,37 @@ export default function Perfil() {
             colors={[Colors.brand.primary, Colors.brand.secondary]}
             style={styles.avatarGradient}
           >
-            <Ionicons name="person" size={50} color="#fff" />
+            <Ionicons name="school" size={50} color="#fff" />
           </LinearGradient>
           
           <Text style={styles.nameText}>{nome}</Text>
           <Text style={styles.emailText}>{email}</Text>
           
           <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>PROFESSOR</Text>
+            <Text style={styles.roleText}>ALUNO</Text>
           </View>
         </View>
 
         <View style={styles.infoSection}>
-          <Text style={styles.sectionTitle}>Informações da Conta</Text>
+          <Text style={styles.sectionTitle}>Dados Acadêmicos</Text>
           
+          <View style={styles.infoItem}>
+            <View style={styles.iconBox}>
+              <Ionicons name="id-card-outline" size={20} color={Colors.brand.primary} />
+            </View>
+            <View style={styles.infoTexts}>
+              <Text style={styles.infoLabel}>Registro Acadêmico (RA)</Text>
+              <Text style={styles.infoValue}>{ra}</Text>
+            </View>
+          </View>
+
           <View style={styles.infoItem}>
             <View style={styles.iconBox}>
               <Ionicons name="mail-outline" size={20} color={Colors.brand.primary} />
             </View>
             <View style={styles.infoTexts}>
-              <Text style={styles.infoLabel}>E-mail</Text>
+              <Text style={styles.infoLabel}>E-mail Institucional</Text>
               <Text style={styles.infoValue}>{email}</Text>
-            </View>
-          </View>
-
-          <View style={styles.infoItem}>
-            <View style={styles.iconBox}>
-              <Ionicons name="shield-checkmark-outline" size={20} color={Colors.brand.primary} />
-            </View>
-            <View style={styles.infoTexts}>
-              <Text style={styles.infoLabel}>Status da Conta</Text>
-              <Text style={styles.infoValue}>Ativa</Text>
             </View>
           </View>
         </View>

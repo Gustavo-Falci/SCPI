@@ -1,20 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
   Dimensions,
-  ActivityIndicator,
-  Alert
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  TouchableOpacity
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { storage } from "../../services/storage";
 import { loginRequest } from "../../services/api";
+import { Input } from "../../components/ui/input";
+import { Button } from "../../components/ui/button";
+import { Colors } from "../../constants/theme";
+
 const { height } = Dimensions.get("window");
 
 export default function Login() {
@@ -23,7 +26,6 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-
 
   const handleLogin = async () => {
     if (!email || !senha) {
@@ -35,13 +37,11 @@ export default function Login() {
     try {
       const resp = await loginRequest(email, senha);
 
-      // Token will be saved here later
       await storage.setItem("access_token", resp.access_token);
       await storage.setItem("user_role", resp.user_role);
       await storage.setItem("user_id", resp.user_id);
       await storage.setItem("user_name", resp.user_name);
 
-      // Redirect based on role
       if (resp.user_role === "Professor") {
         router.replace("/professor/home");
       } else {
@@ -59,68 +59,63 @@ export default function Login() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Parte escura superior */}
-      <View style={styles.topArea} />
-
-      {/* Card */}
-      <View style={styles.card}>
-        <Text style={styles.title}>Bem-vindo!</Text>
-
-        <View style={styles.divider} />
-
-        <TextInput
-          placeholder="Email"
-          placeholderTextColor="#BFBFBF"
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-
-        <View style={styles.passwordWrapper}>
-          <TextInput
-            placeholder="Password"
-            placeholderTextColor="#BFBFBF"
-            secureTextEntry={!showPassword}
-            style={styles.passwordInput}
-            value={senha}
-            onChangeText={setSenha}
-          />
-          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-            <Ionicons
-              name={showPassword ? "eye-off-outline" : "eye-outline"}
-              size={18}
-              color="#BFBFBF"
-            />
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
-          onPress={handleLogin}
-          disabled={isLoading}
-          style={{ width: "100%" }}
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView 
+          contentContainerStyle={{ flexGrow: 1 }}
+          bounces={false}
+          showsVerticalScrollIndicator={false}
         >
-          <LinearGradient
-            colors={["#4B39EF", "#5E47FF"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.button}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
+          {/* Parte superior (Espaçamento para o design) */}
+          <View style={styles.topArea} />
 
-        <TouchableOpacity onPress={() => router.push("/auth/register")}>
-          <Text style={styles.forgotText}>
-            Ainda não tem uma conta? <Text style={styles.link}>Cadastre-se</Text>
-          </Text>
-        </TouchableOpacity>
-      </View>
+          {/* Card de Login */}
+          <View style={styles.card}>
+            <Text style={styles.title}>Bem-vindo!</Text>
+            
+            <View style={styles.divider} />
+
+            <Input
+              label="Email"
+              placeholder="seu@email.com"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              icon="mail-outline"
+            />
+
+            <Input
+              label="Senha"
+              placeholder="Sua senha secreta"
+              value={senha}
+              onChangeText={setSenha}
+              secureTextEntry={!showPassword}
+              icon="lock-closed-outline"
+              rightIcon={showPassword ? "eye-off-outline" : "eye-outline"}
+              onRightIconPress={() => setShowPassword(!showPassword)}
+            />
+
+            <Button
+              title="Entrar"
+              onPress={handleLogin}
+              loading={isLoading}
+              style={{ marginTop: 10 }}
+            />
+
+            <TouchableOpacity 
+              onPress={() => router.push("/auth/register")}
+              style={styles.registerContainer}
+            >
+              <Text style={styles.registerText}>
+                Ainda não tem uma conta? <Text style={styles.link}>Cadastre-se</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -128,84 +123,43 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0C0C12",
+    backgroundColor: Colors.brand.background,
   },
-
   topArea: {
-    height: height * 0.25,
-    backgroundColor: "#0C0C12",
+    height: height * 0.20, // Reduzi um pouco para caber melhor em telas menores
+    backgroundColor: Colors.brand.background,
   },
-
   card: {
     flex: 1,
-    backgroundColor: "#3A262F",
+    backgroundColor: Colors.brand.card,
     borderTopLeftRadius: 40,
     borderTopRightRadius: 40,
-    paddingHorizontal: 30,
-    paddingTop: 45,
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 20,
+    minHeight: height * 0.75, // Garante que o card ocupe o resto da tela
   },
-
   title: {
-    color: "#FFFFFF",
+    color: Colors.brand.text,
     fontSize: 32,
     fontWeight: "800",
     textAlign: "center",
   },
-
   divider: {
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.35)",
-    marginVertical: 25,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    marginVertical: 24,
   },
-
-  input: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
-    borderRadius: 14,
-    padding: 16,
-    color: "#FFFFFF",
-    marginBottom: 20,
-  },
-
-  passwordWrapper: {
-    flexDirection: "row",
+  registerContainer: {
+    marginTop: 20,
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    marginBottom: 30,
   },
-
-  passwordInput: {
-    flex: 1,
-    paddingVertical: 16,
-    color: "#FFFFFF",
+  registerText: {
+    color: Colors.brand.textSecondary,
+    fontSize: 14,
   },
-
-  button: {
-    paddingVertical: 18,
-    borderRadius: 14,
-    alignItems: "center",
-    marginBottom: 25,
-  },
-
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-
-  forgotText: {
-    color: "#D9D9D9",
-    textAlign: "center",
-    fontSize: 13,
-  },
-
   link: {
-    color: "#4B39EF",
+    color: Colors.brand.primary,
     fontWeight: "700",
   },
 });

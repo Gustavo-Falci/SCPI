@@ -1,7 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
-import { useLocalSearchParams } from "expo-router";
 import {
   ScrollView,
   StyleSheet,
@@ -10,8 +7,15 @@ import {
   View,
   ActivityIndicator,
   Alert,
+  StatusBar,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter, useLocalSearchParams } from "expo-router";
+
 import { apiGet, apiPost } from "../../services/api";
+import { Colors } from "../../constants/theme";
+import { FloatingMenu } from "../../components/layout/floating-menu";
 
 export default function ListaPresenca() {
   const { turma_id, turma_nome } = useLocalSearchParams();
@@ -24,21 +28,15 @@ export default function ListaPresenca() {
   const carregarStatus = async () => {
     try {
       if (!turma_id) return;
-      
       const statusResp = await apiGet(`/chamadas/status/${turma_id}`);
       setStatusChamada(statusResp);
 
       if (statusResp.status === "Aberta") {
          try {
              const listResp = await apiGet(`/chamadas/${statusResp.chamada_id}/alunos`);
-             if(listResp && listResp.alunos){
-                 setAlunos(listResp.alunos);
-             }
-         } catch(e) {
-             console.log("Erro ao buscar alunos", e);
-         }
+             if(listResp && listResp.alunos) setAlunos(listResp.alunos);
+         } catch(e) { console.log("Erro ao buscar alunos", e); }
       }
-
     } catch (err: any) {
       console.error("Erro ao carregar status:", err);
     } finally {
@@ -62,131 +60,140 @@ export default function ListaPresenca() {
     }
   }
 
+  const menuItems: any[] = [
+    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
+    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil' },
+  ];
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" />
+      
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Lista de presença</Text>
-        <View style={{ width: 22 }} />
+        <Text style={styles.headerTitle}>Chamada em Tempo Real</Text>
+        <View style={{ width: 44 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.summaryCard}>
-          <Text style={styles.classTitle}>{turma_nome || "Turma"}</Text>
-          
-          {loading ? (
-              <ActivityIndicator color="#5B3EFF" />
-          ) : (
-              <>
-                <Text style={{color: '#fff', marginBottom: 10}}>
-                    Status: {statusChamada?.status || 'Desconhecido'}
-                </Text>
-                <View style={styles.summaryRow}>
-                  <Text style={{color: '#fff'}}>👥 {statusChamada?.total_alunos || 0} alunos</Text>
-                  <Text style={styles.present}>✅ {statusChamada?.presentes || 0} presentes</Text>
-                  <Text style={styles.absent}>❌ {statusChamada?.ausentes || 0} ausentes</Text>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.statusCard}>
+          <View style={styles.statusHeader}>
+            <View>
+              <Text style={styles.classTitle}>{turma_nome || "Turma"}</Text>
+              <View style={styles.badgeRow}>
+                <View style={[styles.statusBadge, statusChamada?.status === "Aberta" ? styles.badgeOpen : styles.badgeClosed]}>
+                  <Text style={styles.badgeText}>{statusChamada?.status || 'Aguardando'}</Text>
                 </View>
-              </>
-          )}
-        </View>
-        
-        {statusChamada?.status === "Aberta" && (
-           <TouchableOpacity 
-              style={{backgroundColor: '#EF4444', marginHorizontal: 20, padding: 15, borderRadius: 10, alignItems: 'center', marginBottom: 20}}
-              onPress={fecharChamada}
-           >
-               <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>Encerrar Chamada e Salvar</Text>
-           </TouchableOpacity>
-        )}
+              </View>
+            </View>
+            <Ionicons name="radio-outline" size={32} color={statusChamada?.status === "Aberta" ? "#22C55E" : Colors.brand.textSecondary} />
+          </View>
 
-        {alunos.length > 0 ? alunos.map((aluno) => (
-          <View style={styles.studentCard} key={aluno.id}>
-            <Text style={styles.studentName}>{aluno.nome}</Text>
-
-            <View
-              style={[
-                styles.statusButton,
-                aluno.presente ? styles.presentBtn : styles.absentBtn,
-              ]}
-            >
-              <Text style={styles.statusText}>
-                {aluno.presente ? "Presente" : "Ausente"}
-              </Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{statusChamada?.total_alunos || 0}</Text>
+              <Text style={styles.statLabel}>Total</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={[styles.statValue, { color: "#22C55E" }]}>{statusChamada?.presentes || 0}</Text>
+              <Text style={styles.statLabel}>Presentes</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={[styles.statValue, { color: Colors.brand.error }]}>{statusChamada?.ausentes || 0}</Text>
+              <Text style={styles.statLabel}>Ausentes</Text>
             </View>
           </View>
-        )) : (
-            <Text style={{textAlign: 'center', color: '#888', marginTop: 20, paddingHorizontal: 20}}>
-               {statusChamada?.status === "Aberta" ? "Aguardando dados..." : "Não há chamada aberta."}
+
+          {statusChamada?.status === "Aberta" && (
+            <TouchableOpacity style={styles.closeCallBtn} onPress={fecharChamada}>
+              <Text style={styles.closeCallText}>Encerrar e Salvar Chamada</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <Text style={styles.sectionTitle}>Lista de Alunos</Text>
+
+        {loading ? (
+          <ActivityIndicator size="large" color={Colors.brand.primary} style={{ marginTop: 20 }} />
+        ) : alunos.length > 0 ? (
+          alunos.map((aluno) => (
+            <View style={styles.studentCard} key={aluno.id}>
+              <View style={styles.studentInfo}>
+                <View style={[styles.avatar, { backgroundColor: aluno.presente ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255, 75, 75, 0.1)' }]}>
+                  <Text style={[styles.avatarText, { color: aluno.presente ? '#22C55E' : Colors.brand.error }]}>
+                    {aluno.nome.charAt(0)}
+                  </Text>
+                </View>
+                <Text style={styles.studentName}>{aluno.nome}</Text>
+              </View>
+
+              <View style={[styles.statusTag, aluno.presente ? styles.tagPresent : styles.tagAbsent]}>
+                <Ionicons name={aluno.presente ? "checkmark-circle" : "close-circle"} size={14} color="#fff" />
+                <Text style={styles.tagText}>{aluno.presente ? "Presente" : "Ausente"}</Text>
+              </View>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="people-outline" size={40} color={Colors.brand.textSecondary} />
+            <Text style={styles.emptyText}>
+              {statusChamada?.status === "Aberta" ? "Nenhum aluno identificado ainda..." : "Aguardando início da chamada."}
             </Text>
+          </View>
         )}
 
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      <View style={styles.bottomMenu}>
-        <TouchableOpacity onPress={() => router.replace("/professor/home")}>
-          <Ionicons name="home-outline" size={22} color="#aaa" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/professor/turmas")}>
-          <Ionicons name="clipboard-outline" size={22} color="#7C4DFF" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/professor/horarios-turmas")}>
-          <Ionicons name="calendar-outline" size={22} color="#aaa" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/professor/perfil")}>
-          <Ionicons name="person-outline" size={22} color="#aaa" />
-        </TouchableOpacity>
-      </View>
-    </View>
+      <FloatingMenu items={menuItems} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#E9EAEC" },
-  header: {
-    backgroundColor: "#5B3EFF",
-    paddingTop: 60,
-    paddingBottom: 25,
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
+  container: { flex: 1, backgroundColor: Colors.brand.background },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: 60 },
+  headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.brand.card, justifyContent: "center", alignItems: "center" },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 10 },
+  statusCard: {
+    backgroundColor: Colors.brand.card, borderRadius: 24, padding: 24, marginBottom: 32,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  summaryCard: { backgroundColor: "#111", margin: 20, borderRadius: 16, padding: 16 },
-  classTitle: { color: "#fff", fontSize: 16, fontWeight: "700", marginBottom: 10 },
-  summaryRow: { flexDirection: "row", justifyContent: "space-between" },
-  present: { color: "#22C55E", fontWeight: "600" },
-  absent: { color: "#EF4444", fontWeight: "600" },
+  statusHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 },
+  classTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  badgeRow: { flexDirection: "row", marginTop: 8 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  badgeOpen: { backgroundColor: "rgba(34, 197, 94, 0.15)" },
+  badgeClosed: { backgroundColor: "rgba(255, 255, 255, 0.05)" },
+  badgeText: { color: "#fff", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
+  statsRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
+  statBox: { alignItems: "center", flex: 1 },
+  statValue: { color: "#fff", fontSize: 24, fontWeight: "800" },
+  statLabel: { color: Colors.brand.textSecondary, fontSize: 12, marginTop: 4 },
+  closeCallBtn: { backgroundColor: Colors.brand.error, height: 50, borderRadius: 14, justifyContent: "center", alignItems: "center" },
+  closeCallText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 16, marginLeft: 4 },
   studentCard: {
-    backgroundColor: "#111",
-    marginHorizontal: 20,
-    marginBottom: 14,
-    borderRadius: 14,
-    padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    backgroundColor: Colors.brand.card, borderRadius: 20, padding: 12, marginBottom: 12,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-  studentName: { color: "#fff", fontSize: 14 },
-  statusButton: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
-  presentBtn: { backgroundColor: "#22C55E" },
-  absentBtn: { backgroundColor: "#EF4444" },
-  statusText: { color: "#fff", fontSize: 12, fontWeight: "600" },
-  bottomMenu: {
-    position: "absolute",
-    bottom: 15,
-    left: 15,
-    right: 15,
-    height: 65,
-    backgroundColor: "#111",
-    borderRadius: 20,
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-  },
+  studentInfo: { flexDirection: "row", alignItems: "center", flex: 1 },
+  avatar: { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center", marginRight: 12 },
+  avatarText: { fontWeight: "800", fontSize: 16 },
+  studentName: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  statusTag: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  tagPresent: { backgroundColor: "#22C55E" },
+  tagAbsent: { backgroundColor: Colors.brand.error },
+  tagText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  emptyContainer: { alignItems: "center", paddingVertical: 40 },
+  emptyText: { color: Colors.brand.textSecondary, textAlign: "center", fontSize: 14, marginTop: 12 },
 });

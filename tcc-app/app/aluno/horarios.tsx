@@ -1,5 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import React from "react";
 import {
   StyleSheet,
@@ -7,320 +5,126 @@ import {
   View,
   TouchableOpacity,
   ScrollView,
+  StatusBar,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+
+import { Colors } from "../../constants/theme";
+import { FloatingMenu } from "../../components/layout/floating-menu";
 
 export default function Horarios() {
   const router = useRouter();
 
+  const aulas = [
+    { id: 1, nome: "Engenharia de Software I", horario: "08:00 - 09:30", sala: "Sala 02", status: "agora" },
+    { id: 2, nome: "Cálculo II", horario: "10:00 - 11:30", sala: "Sala 05", status: "proxima" },
+    { id: 3, nome: "Estrutura de Dados", horario: "13:00 - 14:30", sala: "Lab 03", status: "proxima" },
+    { id: 4, nome: "Inglês Instrumental", horario: "15:00 - 16:30", sala: "Sala 09", status: "proxima" },
+    { id: 5, nome: "Programação Linear", horario: "17:00 - 18:30", sala: "Lab 07", status: "proxima" },
+  ];
+
+  const menuItems: any[] = [
+    { icon: 'home-outline', activeIcon: 'home', route: '/aluno/home' },
+    { icon: 'stats-chart-outline', activeIcon: 'stats-chart', route: '/aluno/frequencia' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/aluno/horarios' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/aluno/perfil' },
+  ];
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" />
       
-      {/* HEADER */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>Horarios de aula</Text>
-        </View>
-
-        <Ionicons name="calendar-outline" size={22} color="#fff" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Horários de Aula</Text>
+        <View style={{ width: 44 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-
-        {/* TOP CARD */}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.todayCard}>
-          <Text style={styles.todayTitle}>Aulas de hoje</Text>
-          <Text style={styles.todayDate}>Segunda, 15 de abril</Text>
+          <View>
+            <Text style={styles.todayTitle}>Agenda de Hoje</Text>
+            <Text style={styles.todayDate}>Segunda, 15 de Abril</Text>
+          </View>
+          <Ionicons name="calendar" size={32} color={Colors.brand.primary} />
         </View>
 
-        {/* CARD 1 */}
-        <View style={styles.classCard}>
-          <View style={styles.timeBox}>
-            <Text style={styles.timeText}>8:00</Text>
-            <Text style={styles.timeText}>AM</Text>
-          </View>
-
-          <View style={styles.classInfo}>
-            <Text style={styles.className}>Engenharia de software 1</Text>
-            <Text style={styles.room}>Sala 02</Text>
-
-            <View style={styles.statusRow}>
-              <View style={styles.timeTag}>
-                <Text style={styles.timeTagText}>8:00–9:30</Text>
+        <View style={styles.timeline}>
+          {aulas.map((aula, index) => (
+            <View key={aula.id} style={styles.timelineItem}>
+              <View style={styles.timeColumn}>
+                <Text style={styles.timeText}>{aula.horario.split(' - ')[0]}</Text>
+                <View style={[styles.timelineLine, index === aulas.length - 1 && { backgroundColor: 'transparent' }]} />
               </View>
 
-              <View style={styles.activeTag}>
-                <Text style={styles.activeText}>Em andamento</Text>
+              <View style={[styles.classCard, aula.status === 'agora' && styles.activeCard]}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.className}>{aula.nome}</Text>
+                  {aula.status === 'agora' && (
+                    <View style={styles.liveBadge}>
+                      <Text style={styles.liveText}>AGORA</Text>
+                    </View>
+                  )}
+                </View>
+                
+                <View style={styles.cardFooter}>
+                  <View style={styles.infoRow}>
+                    <Ionicons name="location-outline" size={14} color={Colors.brand.textSecondary} />
+                    <Text style={styles.infoText}>{aula.sala}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Ionicons name="time-outline" size={14} color={Colors.brand.textSecondary} />
+                    <Text style={styles.infoText}>{aula.horario}</Text>
+                  </View>
+                </View>
               </View>
             </View>
-          </View>
+          ))}
         </View>
 
-        {/* CARD 2 */}
-        <View style={styles.classCard}>
-          <View style={styles.timeBox}>
-            <Text style={styles.timeText}>10:00</Text>
-            <Text style={styles.timeText}>AM</Text>
-          </View>
-
-          <View style={styles.classInfo}>
-            <Text style={styles.className}>Calculo 2</Text>
-            <Text style={styles.room}>Sala 05</Text>
-
-            <View style={styles.statusRow}>
-              <View style={styles.timeTag}>
-                <Text style={styles.timeTagText}>10:00–11:30</Text>
-              </View>
-
-              <View style={styles.waitTag}>
-                <Text style={styles.waitText}>Aguardando inicio</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* CARD 3 */}
-        <View style={styles.classCard}>
-          <View style={styles.timeBox}>
-            <Text style={styles.timeText}>1:00</Text>
-            <Text style={styles.timeText}>PM</Text>
-          </View>
-
-          <View style={styles.classInfo}>
-            <Text style={styles.className}>Estrutura de dados</Text>
-            <Text style={styles.room}>Lab 03</Text>
-
-            <View style={styles.statusRow}>
-              <View style={styles.timeTag}>
-                <Text style={styles.timeTagText}>1:00–2:30</Text>
-              </View>
-
-              <View style={styles.waitTag}>
-                <Text style={styles.waitText}>Aguardando inicio</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* CARD 4 */}
-        <View style={styles.classCard}>
-          <View style={styles.timeBox}>
-            <Text style={styles.timeText}>3:00</Text>
-            <Text style={styles.timeText}>PM</Text>
-          </View>
-
-          <View style={styles.classInfo}>
-            <Text style={styles.className}>Ingles</Text>
-            <Text style={styles.room}>Sala 09</Text>
-
-            <View style={styles.statusRow}>
-              <View style={styles.timeTag}>
-                <Text style={styles.timeTagText}>3:00–4:30</Text>
-              </View>
-
-              <View style={styles.waitTag}>
-                <Text style={styles.waitText}>Aguardando inicio</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* CARD 5 */}
-        <View style={styles.classCard}>
-          <View style={styles.timeBox}>
-            <Text style={styles.timeText}>5:00</Text>
-            <Text style={styles.timeText}>PM</Text>
-          </View>
-
-          <View style={styles.classInfo}>
-            <Text style={styles.className}>Programação Linear</Text>
-            <Text style={styles.room}>Lab 07</Text>
-
-            <View style={styles.statusRow}>
-              <View style={styles.timeTag}>
-                <Text style={styles.timeTagText}>5:00–6:30</Text>
-              </View>
-
-              <View style={styles.waitTag}>
-                <Text style={styles.waitText}>Aguardando inicio</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={{ height: 40 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* MENU INFERIOR */}
-      <View style={styles.bottomMenu}>
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="home-outline" size={24} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="clipboard-outline" size={24} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="people-outline" size={24} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="person-outline" size={24} color="#9CA3AF" />
-        </TouchableOpacity>
-      </View>
-
-    </View>
+      <FloatingMenu items={menuItems} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-
-  container: {
-    flex: 1,
-    backgroundColor: "#E9EAEC",
-  },
-
-  header: {
-    backgroundColor: "#5B3EFF",
-    paddingTop: 60,
-    paddingBottom: 25,
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
-  },
-
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  headerTitle: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "700",
-  },
-
+  container: { flex: 1, backgroundColor: Colors.brand.background },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: 60 },
+  headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.brand.card, justifyContent: "center", alignItems: "center" },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 10 },
   todayCard: {
-    backgroundColor: "#111",
-    margin: 20,
-    borderRadius: 14,
-    padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    backgroundColor: Colors.brand.card, borderRadius: 24, padding: 24, marginBottom: 32,
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-
-  todayTitle: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-
-  todayDate: {
-    color: "#9CA3AF",
-  },
-
+  todayTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  todayDate: { color: Colors.brand.textSecondary, fontSize: 14, marginTop: 4 },
+  timeline: { paddingLeft: 4 },
+  timelineItem: { flexDirection: "row", marginBottom: 12 },
+  timeColumn: { alignItems: "center", width: 50, marginRight: 16 },
+  timeText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  timelineLine: { width: 2, flex: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 8 },
   classCard: {
-    backgroundColor: "#111",
-    marginHorizontal: 20,
-    marginBottom: 14,
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: "row",
+    flex: 1, backgroundColor: Colors.brand.card, borderRadius: 20, padding: 16,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-
-  timeBox: {
-    backgroundColor: "#2C1E7A",
-    borderRadius: 10,
-    padding: 10,
-    width: 65,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 14,
-  },
-
-  timeText: {
-    color: "#8B7CFF",
-    fontWeight: "700",
-  },
-
-  classInfo: {
-    flex: 1,
-  },
-
-  className: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  room: {
-    color: "#9CA3AF",
-    marginTop: 2,
-  },
-
-  statusRow: {
-    flexDirection: "row",
-    marginTop: 8,
-    gap: 8,
-  },
-
-  timeTag: {
-    backgroundColor: "#3B1F15",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-
-  timeTagText: {
-    color: "#F59E0B",
-    fontSize: 12,
-  },
-
-  activeTag: {
-    backgroundColor: "#134E4A",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-
-  activeText: {
-    color: "#34D399",
-    fontSize: 12,
-  },
-
-  waitTag: {
-    backgroundColor: "#3F3F46",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-
-  waitText: {
-    color: "#D4D4D8",
-    fontSize: 12,
-  },
-
-  bottomMenu: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    backgroundColor: "#0B0B0B",
-    height: 75,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-  },
-
-  menuItem: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
+  activeCard: { borderColor: Colors.brand.primary, borderWidth: 1.5 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
+  className: { color: "#fff", fontSize: 15, fontWeight: "700", flex: 1, marginRight: 8 },
+  liveBadge: { backgroundColor: Colors.brand.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  liveText: { color: "#fff", fontSize: 10, fontWeight: "800" },
+  cardFooter: { flexDirection: "row", gap: 16 },
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  infoText: { color: Colors.brand.textSecondary, fontSize: 12 },
 });

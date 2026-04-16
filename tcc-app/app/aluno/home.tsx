@@ -1,25 +1,30 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Animated,
+  TouchableOpacity,
+  ActivityIndicator,
+  StatusBar,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter, useFocusEffect } from "expo-router";
 
 import { storage } from "../../services/storage";
 import { apiGet } from "../../services/api";
-import { useState, useCallback } from "react";
-import { useFocusEffect } from "expo-router";
+import { Colors } from "../../constants/theme";
+import { DashboardHeader } from "../../components/layout/dashboard-header";
+import { FloatingMenu } from "../../components/layout/floating-menu";
 
 export default function HomeAluno() {
   const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const loadDashboard = async () => {
     try {
@@ -43,338 +48,179 @@ export default function HomeAluno() {
     }, [])
   );
 
-  const handleLogout = async () => {
-    try {
-      await storage.removeItem('access_token');
-      await storage.removeItem('user_role');
-      await storage.removeItem('user_id');
-      await storage.removeItem('user_name');
-    } catch (e) {
-      console.error("Erro logout aluno:", e);
-    }
-    router.replace('/auth/login');
-  };
-
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.4,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
+        Animated.timing(pulseAnim, { toValue: 1.2, duration: 1000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
       ])
     ).start();
   }, []);
 
+  const handleLogout = async () => {
+    await storage.clear(); // Limpa tudo por segurança
+    router.replace('/auth/login');
+  };
+
+  const menuItems: any[] = [
+    { icon: 'home-outline', activeIcon: 'home', route: '/aluno/home' },
+    { icon: 'stats-chart-outline', activeIcon: 'stats-chart', route: '/aluno/frequencia' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/aluno/horarios' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/aluno/perfil' },
+  ];
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={Colors.brand.primary} />
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      {/* HEADER */}
-      <LinearGradient
-        colors={["#5B3EFF", "#4B2FD6"]}
-        style={styles.header}
-      >
-        <Text style={styles.headerTitle}>Olá, {data?.nome?.split(' ')[0] || 'Aluno'}</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" />
+      
+      <DashboardHeader 
+        greeting="Olá," 
+        userName={data?.nome?.split(' ')[0] || 'Aluno'} 
+        onLogout={handleLogout} 
+      />
 
-        <TouchableOpacity
-          style={styles.bellContainer}
-          onPress={handleLogout}
-        >
-          <Feather name="log-out" size={18} color="#fff" />
-        </TouchableOpacity>
-      </LinearGradient>
-
-      <ScrollView
-        contentContainerStyle={styles.content}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* CADASTRAR FACE */}
-        <TouchableOpacity onPress={() => router.push("/aluno/cadastro-facial")}>
-        <LinearGradient
-          colors={["#5B3EFF", "#4B2FD6"]}
-          style={styles.bigCard}
+        <TouchableOpacity 
+          activeOpacity={0.9}
+          onPress={() => router.push("/aluno/cadastro-facial")}
         >
-          <MaterialCommunityIcons
-            name="face-recognition"
-            size={26}
-            color="#fff"
-          />
-          <Text style={styles.bigCardTitle}>Cadastrar face</Text>
-          <Text style={styles.bigCardSubtitle}>
-            Cadastre a face do aluno aqui!
-          </Text>
-        </LinearGradient>
+          <LinearGradient
+            colors={[Colors.brand.primary, Colors.brand.secondary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.faceCard}
+          >
+            <View style={styles.faceCardContent}>
+              <View>
+                <Text style={styles.faceCardTitle}>Biometria Facial</Text>
+                <Text style={styles.faceCardStatus}>
+                  {data?.face_registrada ? "Face cadastrada com sucesso" : "Cadastre sua face agora"}
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="face-recognition" size={40} color="#fff" />
+            </View>
+          </LinearGradient>
         </TouchableOpacity>
 
-        {/* DOIS CARDS */}
-        <View style={styles.row}>
-          <View style={styles.smallCard}>
-            <Ionicons name="book-outline" size={24} color="#5B3EFF" />
-            <Text style={styles.smallCardTitle}>Frequências</Text>
-            <Text style={styles.smallCardText}>
-              Veja suas frequências nas aulas!
-            </Text>
-          </View>
+        <View style={styles.statsRow}>
+          <TouchableOpacity style={styles.statCard} onPress={() => router.push("/aluno/frequencia")}>
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(75, 57, 239, 0.1)' }]}>
+              <Ionicons name="stats-chart" size={20} color={Colors.brand.primary} />
+            </View>
+            <Text style={styles.statValue}>{data?.frequencia_geral || 0}%</Text>
+            <Text style={styles.statLabel}>Frequência</Text>
+          </TouchableOpacity>
 
-          <View style={styles.smallCard}>
-            <Ionicons name="calendar-outline" size={24} color="#5B3EFF" />
-            <Text style={styles.smallCardTitle}>Horários</Text>
-            <Text style={styles.smallCardText}>
-              Veja os horários de suas aulas!
-            </Text>
-          </View>
+          <TouchableOpacity style={styles.statCard} onPress={() => router.push("/aluno/horarios")}>
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(29, 185, 84, 0.1)' }]}>
+              <Ionicons name="calendar" size={20} color="#1DB954" />
+            </View>
+            <Text style={styles.statValue}>{data?.aulas_hoje?.length || 0}</Text>
+            <Text style={styles.statLabel}>Aulas hoje</Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.divider} />
-
-        {/* AULAS DE HOJE */}
-        <View style={styles.todayCard}>
-          <View style={styles.todayHeader}>
-            <Text style={styles.todayTitle}>Aulas de hoje</Text>
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Aulas de Hoje</Text>
             <TouchableOpacity onPress={() => router.push("/aluno/horarios")}>
-                <Text style={styles.seeAll}>Ver tudo</Text>
+              <Text style={styles.seeAllText}>Ver todas</Text>
             </TouchableOpacity>
           </View>
 
-          {data?.aulas_hoje?.map((aula: any) => (
-            <View style={styles.classItem} key={aula.id}>
-              <Text style={styles.classTitle}>{aula.nome}</Text>
-              <Text style={styles.classTime}>
-                {aula.horario} • {aula.sala}
-              </Text>
+          {data?.aulas_hoje && data.aulas_hoje.length > 0 ? (
+            data.aulas_hoje.map((aula: any, index: number) => (
+              <View key={index} style={styles.classCard}>
+                <View style={styles.classTimeContainer}>
+                  <Text style={styles.classTimeText}>{aula.horario?.split(' - ')[0]}</Text>
+                  <View style={styles.timeDivider} />
+                  <Text style={styles.classTimeTextEnd}>{aula.horario?.split(' - ')[1]}</Text>
+                </View>
+                <View style={styles.classInfo}>
+                  <Text style={styles.className}>{aula.nome}</Text>
+                  <View style={styles.classRoomRow}>
+                    <Ionicons name="location-outline" size={14} color={Colors.brand.textSecondary} />
+                    <Text style={styles.classRoomText}>{aula.sala}</Text>
+                  </View>
+                </View>
+                {index === 0 && (
+                   <View style={styles.liveBadge}>
+                      <Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
+                      <Text style={styles.liveText}>Agora</Text>
+                   </View>
+                )}
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cafe-outline" size={40} color={Colors.brand.textSecondary} />
+              <Text style={styles.emptyText}>Nenhuma aula para hoje!</Text>
             </View>
-          ))}
-          {(!data?.aulas_hoje || data.aulas_hoje.length === 0) && (
-             <Text style={{color: '#aaa'}}>Nenhuma aula hoje.</Text>
           )}
         </View>
 
-        {/* 🔥 AULA EM ANDAMENTO AGORA EMBAIXO */}
-        <View style={styles.currentClassCard}>
-          <View style={styles.liveIndicator}>
-            <Animated.View
-              style={[
-                styles.liveDot,
-                { transform: [{ scale: pulseAnim }] },
-              ]}
-            />
-            <Text style={styles.liveText}>Frequência Geral</Text>
-          </View>
-
-          <Text style={styles.currentSubject}>
-            Média de presença em todas as disciplinas
-          </Text>
-
-          <Text style={styles.frequencyValue}>
-            {data?.frequencia_geral || 0}%
-          </Text>
-
-          <View style={styles.frequencyBar}>
-            <View
-              style={[
-                styles.frequencyFill,
-                { width: `${data?.frequencia_geral || 0}%` },
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* Espaço extra para não ficar atrás do menu */}
-        <View style={{ height: 90 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* MENU RÁPIDO INFERIOR */}
-      <View style={styles.bottomMenu}>
-        <Ionicons name="home" size={24} color="#5B3EFF" />
-        <Ionicons name="stats-chart-outline" size={24} color="#aaa" />
-        <Ionicons name="calendar-outline" size={24} color="#aaa" />
-        <Ionicons name="person-outline" size={24} color="#aaa" />
-      </View>
-    </View>
+      <FloatingMenu items={menuItems} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F2F2F2",
+  container: { flex: 1, backgroundColor: Colors.brand.background },
+  center: { justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 10 },
+  faceCard: {
+    borderRadius: 24, padding: 24, marginBottom: 24,
+    elevation: 8, shadowColor: Colors.brand.primary,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
   },
-  header: {
-    paddingTop: 60,
-    paddingBottom: 28,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  faceCardContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  faceCardTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  faceCardStatus: { color: "rgba(255,255,255,0.8)", fontSize: 14, marginTop: 4 },
+  statsRow: { flexDirection: "row", gap: 16, marginBottom: 32 },
+  statCard: {
+    flex: 1, backgroundColor: Colors.brand.card, borderRadius: 20,
+    padding: 16, alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "700",
+  iconCircle: { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center", marginBottom: 12 },
+  statValue: { color: Colors.brand.text, fontSize: 20, fontWeight: "800" },
+  statLabel: { color: Colors.brand.textSecondary, fontSize: 12, marginTop: 2 },
+  sectionContainer: { marginBottom: 24 },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  sectionTitle: { color: Colors.brand.text, fontSize: 18, fontWeight: "700" },
+  seeAllText: { color: Colors.brand.primary, fontSize: 14, fontWeight: "600" },
+  classCard: {
+    backgroundColor: Colors.brand.card, borderRadius: 20, padding: 16,
+    flexDirection: "row", alignItems: "center", marginBottom: 12,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-  bellContainer: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    justifyContent: "center",
-    alignItems: "center",
+  classTimeContainer: { alignItems: "center", width: 60, borderRightWidth: 1, borderRightColor: "rgba(255,255,255,0.1)", paddingRight: 12 },
+  classTimeText: { color: Colors.brand.text, fontSize: 13, fontWeight: "700" },
+  classTimeTextEnd: { color: Colors.brand.textSecondary, fontSize: 11 },
+  timeDivider: { height: 10, width: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 2 },
+  classInfo: { flex: 1, paddingLeft: 16 },
+  className: { color: Colors.brand.text, fontSize: 15, fontWeight: "700" },
+  classRoomRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 4 },
+  classRoomText: { color: Colors.brand.textSecondary, fontSize: 12 },
+  liveBadge: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(29, 185, 84, 0.15)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 4 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#1DB954" },
+  liveText: { color: "#1DB954", fontSize: 10, fontWeight: "800", textTransform: "uppercase" },
+  emptyContainer: {
+    alignItems: "center", paddingVertical: 40, backgroundColor: Colors.brand.card,
+    borderRadius: 24, borderStyle: "dashed", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  bigCard: {
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 22,
-  },
-  bigCardTitle: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "700",
-    marginTop: 10,
-  },
-  bigCardSubtitle: {
-    color: "#E0E0E0",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 22,
-  },
-  smallCard: {
-    width: "48%",
-    backgroundColor: "#111",
-    borderRadius: 16,
-    padding: 16,
-  },
-  smallCardTitle: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-    marginTop: 10,
-  },
-  smallCardText: {
-    color: "#aaa",
-    fontSize: 11,
-    marginTop: 4,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#D9D9D9",
-    marginBottom: 22,
-  },
-  todayCard: {
-    backgroundColor: "#111",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-  },
-  todayHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  todayTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  seeAll: {
-    color: "#5B3EFF",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  classItem: {
-    marginBottom: 12,
-  },
-  classTitle: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  classTime: {
-    color: "#aaa",
-    fontSize: 11,
-    marginTop: 2,
-  },
-  currentClassCard: {
-    backgroundColor: "#111",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-  },
-  liveIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  liveDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#1DB954",
-    marginRight: 8,
-  },
-  liveText: {
-    color: "#1DB954",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  currentSubject: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  currentTime: {
-    color: "#aaa",
-    fontSize: 12,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  frequencyLabel: {
-    color: "#aaa",
-    fontSize: 12,
-  },
-  frequencyValue: {
-    color: "#1DB954",
-    fontSize: 22,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  frequencyBar: {
-    height: 6,
-    backgroundColor: "#333",
-    borderRadius: 4,
-    marginTop: 8,
-  },
-  frequencyFill: {
-    height: 6,
-    backgroundColor: "#1DB954",
-    borderRadius: 4,
-  },
-  bottomMenu: {
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    height: 70,
-    backgroundColor: "#111",
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#222",
-  },
+  emptyText: { color: Colors.brand.textSecondary, marginTop: 12, fontSize: 14 },
 });
