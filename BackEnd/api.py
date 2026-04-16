@@ -220,14 +220,15 @@ async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...),
                     if not nome or not email or not ra:
                         continue
 
-                    # 1. Cria Usuário (Senha padrão '123' para primeiro acesso)
+                    # 1. Cria Usuário (Senha padrão '123' segura com Bcrypt)
                     user_uuid = str(uuid.uuid4())
+                    senha_padrao_hash = get_password_hash("123")
                     cur.execute("""
                         INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario)
-                        VALUES (%s, %s, %s, '123', 'Aluno')
+                        VALUES (%s, %s, %s, %s, 'Aluno')
                         ON CONFLICT (email) DO NOTHING
                         RETURNING usuario_id
-                    """, (user_uuid, nome, email))
+                    """, (user_uuid, nome, email, senha_padrao_hash))
                     
                     res_user = cur.fetchone()
                     usuario_id = res_user['usuario_id'] if res_user else None
