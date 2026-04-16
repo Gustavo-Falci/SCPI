@@ -93,7 +93,7 @@ export default function HomeProfessor() {
       >
         <TouchableOpacity 
           activeOpacity={0.9}
-          onPress={() => router.push("/professor/turmas")}
+          onPress={() => router.push("/professor/iniciar-chamada")}
         >
           <LinearGradient
             colors={[Colors.brand.primary, Colors.brand.secondary]}

@@ -6,14 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
-import { apiGet, apiPost } from "../../services/api";
+import { apiGet } from "../../services/api";
 import { storage } from "../../services/storage";
 import { Colors } from "../../constants/theme";
 import { Input } from "../../components/ui/input";
@@ -49,20 +48,6 @@ export default function Turmas() {
     loadTurmas();
   }, []);
 
-  const abrirChamada = async (turmaId: string, nomeTurma: string) => {
-    try {
-      await apiPost("/chamadas/abrir", { turma_id: turmaId });
-      Alert.alert("Sucesso!", `Chamada aberta para a turma: ${nomeTurma}`);
-      
-      router.push({
-        pathname: "/professor/lista-presencas",
-        params: { turma_id: turmaId, turma_nome: nomeTurma },
-      });
-    } catch (err: any) {
-      Alert.alert("Erro", err.message || "Falha ao abrir a chamada.");
-    }
-  };
-
   const menuItems: any[] = [
     { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
     { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas' },
@@ -74,7 +59,6 @@ export default function Turmas() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" />
       
-      {/* HEADER PERSONALIZADO */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -87,9 +71,8 @@ export default function Turmas() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* BUSCA */}
         <Input
-          placeholder="Buscar disciplina ou código..."
+          placeholder="Buscar disciplina..."
           value={search}
           onChangeText={setSearch}
           icon="search-outline"
@@ -97,7 +80,7 @@ export default function Turmas() {
         />
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Turmas ativas</Text>
+          <Text style={styles.sectionTitle}>Turmas Cadastradas</Text>
           <Text style={styles.countText}>{turmasFiltradas.length} turmas</Text>
         </View>
 
@@ -110,7 +93,14 @@ export default function Turmas() {
           </View>
         ) : (
           turmasFiltradas.map((t: any) => (
-            <View style={styles.card} key={t.turma_id}>
+            <TouchableOpacity 
+              key={t.turma_id}
+              style={styles.card} 
+              onPress={() => router.push({
+                pathname: "/professor/detalhes-turma",
+                params: { turma_id: t.turma_id, turma_nome: t.nome_disciplina }
+              })}
+            >
               <View style={styles.cardInfo}>
                 <Text style={styles.className}>{t.nome_disciplina}</Text>
                 <View style={styles.codeRow}>
@@ -118,29 +108,12 @@ export default function Turmas() {
                    <Text style={styles.codeText}>{t.codigo_turma}</Text>
                 </View>
               </View>
-
-              <View style={styles.actionRow}>
-                <TouchableOpacity
-                  style={styles.primaryAction}
-                  onPress={() => abrirChamada(t.turma_id, t.nome_disciplina)}
-                >
-                  <Ionicons name="camera-outline" size={18} color="#fff" />
-                  <Text style={styles.primaryActionText}>Abrir Chamada</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.secondaryAction}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/professor/lista-presencas",
-                      params: { turma_id: t.turma_id, turma_nome: t.nome_disciplina },
-                    })
-                  }
-                >
-                  <Ionicons name="list-outline" size={18} color={Colors.brand.primary} />
-                </TouchableOpacity>
+              
+              <View style={styles.viewDetailsRow}>
+                <Text style={styles.viewDetailsText}>Ver alunos matriculados</Text>
+                <Ionicons name="chevron-forward" size={16} color={Colors.brand.primary} />
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
 
@@ -153,116 +126,25 @@ export default function Turmas() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.brand.background,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    height: 60,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#fff",
-  },
-  backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.brand.card,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 10,
-  },
-  searchContainer: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: 16,
-    paddingHorizontal: 4,
-  },
-  sectionTitle: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  countText: {
-    color: Colors.brand.textSecondary,
-    fontSize: 14,
-    marginBottom: 4,
-  },
+  container: { flex: 1, backgroundColor: Colors.brand.background },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: 60 },
+  headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.brand.card, justifyContent: "center", alignItems: "center" },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 10 },
+  searchContainer: { marginBottom: 24 },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 },
+  sectionTitle: { color: "#fff", fontSize: 22, fontWeight: "800" },
+  countText: { color: Colors.brand.textSecondary, fontSize: 14, marginBottom: 4 },
   card: {
-    backgroundColor: Colors.brand.card,
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    backgroundColor: Colors.brand.card, borderRadius: 24, padding: 20, marginBottom: 16,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-  cardInfo: {
-    marginBottom: 16,
-  },
-  className: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  codeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    gap: 6,
-  },
-  codeText: {
-    color: Colors.brand.textSecondary,
-    fontSize: 14,
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  primaryAction: {
-    flex: 1,
-    backgroundColor: Colors.brand.primary,
-    height: 48,
-    borderRadius: 14,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-  },
-  primaryActionText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  secondaryAction: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "rgba(75, 57, 239, 0.1)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(75, 57, 239, 0.2)",
-  },
-  emptyContainer: {
-    alignItems: "center",
-    paddingVertical: 60,
-  },
-  emptyText: {
-    color: Colors.brand.textSecondary,
-    fontSize: 16,
-    marginTop: 16,
-  },
+  cardInfo: { marginBottom: 16 },
+  className: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  codeRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 6 },
+  codeText: { color: Colors.brand.textSecondary, fontSize: 14 },
+  viewDetailsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', paddingTop: 12 },
+  viewDetailsText: { color: Colors.brand.primary, fontSize: 13, fontWeight: '600' },
+  emptyContainer: { alignItems: "center", paddingVertical: 60 },
+  emptyText: { color: Colors.brand.textSecondary, fontSize: 16, marginTop: 16 },
 });

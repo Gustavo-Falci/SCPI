@@ -3,8 +3,8 @@ import sys
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
-# Adiciona o diretÃ³rio 'BackEnd' ao sys.path para resolver problemas de importaÃ§Ã£o
-# em ambientes onde o diretÃ³rio de trabalho nÃ£o Ã© a raiz do projeto.
+# Adiciona o diretório 'BackEnd' ao sys.path para resolver problemas de importação
+# em ambientes onde o diretório de trabalho não é a raiz do projeto.
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, status
@@ -35,7 +35,7 @@ processo_camera = None
 def encerrar_camera_no_exit():
     global processo_camera
     if processo_camera:
-        print("Encerrando processo da cÃ¢mera...")
+        print("Encerrando processo da câmera...")
         processo_camera.terminate()
 
 atexit.register(encerrar_camera_no_exit)
@@ -47,12 +47,12 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token invÃ¡lido ou expirado",
+            detail="Token inválido ou expirado",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return payload
 
-# ConfiguraÃ§Ã£o de CORS (Para o React Native conseguir acessar)
+# Configuração de CORS (Para o React Native conseguir acessar)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -85,24 +85,206 @@ class ChamadaAbrir(BaseModel):
 def teste_reload():
     return {"status": "reloaded"}
 
+# --- ENDPOINTS ADMINISTRATIVOS ---
+
+@app.get("/admin/professores")
+def admin_listar_professores(current_user: dict = Depends(get_current_user)):
+    # Em um sistema real, verificaríamos se current_user['role'] == 'Admin'
+    try:
+        with get_db_cursor() as cur:
+            cur.execute("""
+                SELECT p.professor_id, u.nome, u.email, p.departamento 
+                FROM Professores p
+                JOIN Usuarios u ON p.usuario_id = u.usuario_id
+                ORDER BY u.nome ASC
+            """)
+            return cur.fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/turmas-completas")
+def admin_listar_turmas(current_user: dict = Depends(get_current_user)):
+    try:
+        with get_db_cursor() as cur:
+            cur.execute("""
+                SELECT t.turma_id, t.nome_disciplina, t.codigo_turma, u.nome as professor_nome,
+                (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = t.turma_id) as total_alunos
+                FROM Turmas t
+                JOIN Professores p ON t.professor_id = p.professor_id
+                JOIN Usuarios u ON p.usuario_id = u.usuario_id
+                ORDER BY t.nome_disciplina ASC
+            """)
+            return cur.fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class TurmaCreate(BaseModel):
+    professor_id: str
+    codigo_turma: str
+    nome_disciplina: str
+    periodo_letivo: str
+    sala_padrao: str
+
+@app.post("/admin/turmas")
+def admin_criar_turma(turma: TurmaCreate, current_user: dict = Depends(get_current_user)):
+    try:
+        import uuid
+        turma_id = str(uuid.uuid4())
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("""
+                INSERT INTO Turmas (turma_id, professor_id, codigo_turma, nome_disciplina, periodo_letivo, sala_padrao)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING turma_id
+            """, (turma_id, turma.professor_id, turma.codigo_turma, turma.nome_disciplina, turma.periodo_letivo, turma.sala_padrao))
+            return {"mensagem": "Turma criada com sucesso!", "turma_id": turma_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class HorarioCreate(BaseModel):
+    turma_id: str
+    dia_semana: int # 0-6
+    horario_inicio: str # "HH:MM"
+    horario_fim: str # "HH:MM"
+    sala: str
+
+@app.post("/admin/horarios")
+def admin_adicionar_horario(h: HorarioCreate, current_user: dict = Depends(get_current_user)):
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("""
+                INSERT INTO horarios_aulas (turma_id, dia_semana, horario_inicio, horario_fim, sala)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (h.turma_id, h.dia_semana, h.horario_inicio, h.horario_fim, h.sala))
+            return {"mensagem": "Horário adicionado com sucesso!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/admin/turmas/{turma_id}")
+def admin_excluir_turma(turma_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        with get_db_cursor(commit=True) as cur:
+            # Exclui horários primeiro por causa da constraint
+            cur.execute("DELETE FROM horarios_aulas WHERE turma_id = %s", (turma_id,))
+            cur.execute("DELETE FROM Turma_Alunos WHERE turma_id = %s", (turma_id,))
+            cur.execute("DELETE FROM Turmas WHERE turma_id = %s", (turma_id,))
+            return {"mensagem": "Turma e dependências excluídas com sucesso!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/horarios-todos")
+def admin_listar_todos_horarios(current_user: dict = Depends(get_current_user)):
+    try:
+        with get_db_cursor() as cur:
+            cur.execute("""
+                SELECT h.horario_id, h.turma_id, h.dia_semana, 
+                       to_char(h.horario_inicio, 'HH24:MI') as inicio, 
+                       to_char(h.horario_fim, 'HH24:MI') as fim, 
+                       h.sala, t.nome_disciplina
+                FROM horarios_aulas h
+                JOIN Turmas t ON h.turma_id = t.turma_id
+            """)
+            return cur.fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/admin/horarios/{horario_id}")
+def admin_excluir_horario(horario_id: int, current_user: dict = Depends(get_current_user)):
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("DELETE FROM horarios_aulas WHERE horario_id = %s", (horario_id,))
+            return {"mensagem": "Horário removido!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/turmas/{turma_id}/importar-alunos")
+async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    try:
+        import csv
+        import io
+        import uuid
+        
+        content = await file.read()
+        decoded = content.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(decoded))
+        
+        importados = 0
+        erros = []
+
+        with get_db_cursor(commit=True) as cur:
+            for row in csv_reader:
+                try:
+                    nome = row.get('nome')
+                    email = row.get('email')
+                    ra = row.get('ra')
+
+                    if not nome or not email or not ra:
+                        continue
+
+                    # 1. Cria Usuário (Senha padrão '123' para primeiro acesso)
+                    user_uuid = str(uuid.uuid4())
+                    cur.execute("""
+                        INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario)
+                        VALUES (%s, %s, %s, '123', 'Aluno')
+                        ON CONFLICT (email) DO NOTHING
+                        RETURNING usuario_id
+                    """, (user_uuid, nome, email))
+                    
+                    res_user = cur.fetchone()
+                    usuario_id = res_user['usuario_id'] if res_user else None
+                    
+                    if not usuario_id: # Usuário já existe, busca o ID
+                        cur.execute("SELECT usuario_id FROM Usuarios WHERE email = %s", (email,))
+                        usuario_id = cur.fetchone()['usuario_id']
+
+                    # 2. Cria Aluno
+                    aluno_uuid = str(uuid.uuid4())
+                    cur.execute("""
+                        INSERT INTO Alunos (aluno_id, usuario_id, ra)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (ra) DO NOTHING
+                        RETURNING aluno_id
+                    """, (aluno_uuid, usuario_id, ra))
+                    
+                    res_aluno = cur.fetchone()
+                    aluno_id = res_aluno['aluno_id'] if res_aluno else None
+
+                    if not aluno_id:
+                        cur.execute("SELECT aluno_id FROM Alunos WHERE ra = %s", (ra,))
+                        aluno_id = cur.fetchone()['aluno_id']
+
+                    # 3. Matricula na Turma
+                    cur.execute("""
+                        INSERT INTO Turma_Alunos (turma_id, aluno_id)
+                        VALUES (%s, %s)
+                        ON CONFLICT (turma_id, aluno_id) DO NOTHING
+                    """, (turma_id, aluno_id))
+                    
+                    importados += 1
+                except Exception as e:
+                    erros.append(f"Erro na linha {row}: {str(e)}")
+
+        return {"mensagem": f"Importação concluída: {importados} alunos matriculados.", "erros": erros}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 def home():
-    return {"mensagem": "API SCPI estÃ¡ rodando!"}
+    return {"mensagem": "API SCPI está rodando!"}
 
-# --- ENDPOINTS DE AUTENTICAÃÃO ---
+# --- ENDPOINTS DE AUTENTICAÇÃO ---
 
 @app.post("/auth/register")
 def register(usuario: UsuarioRegistro):
-    # 1. Verificar se usuÃ¡rio jÃ¡ existe
+    # 1. Verificar se usuário já existe
     user_existente = buscar_usuario_por_email(usuario.email.strip())
     if user_existente:
-        raise HTTPException(status_code=400, detail="Email jÃ¡ cadastrado.")
+        raise HTTPException(status_code=400, detail="Email já cadastrado.")
 
-    # 2. Validar dados especÃ­ficos
+    # 2. Validar dados específicos
     dados_perfil = {}
     if usuario.tipo_usuario == 'Aluno':
         if not usuario.ra:
-            raise HTTPException(status_code=400, detail="RA Ã© obrigatÃ³rio para alunos.")
+            raise HTTPException(status_code=400, detail="RA é obrigatório para alunos.")
         dados_perfil['ra'] = usuario.ra
     elif usuario.tipo_usuario == 'Professor':
         dados_perfil['departamento'] = usuario.departamento
@@ -120,9 +302,9 @@ def register(usuario: UsuarioRegistro):
     
     sucesso = criar_usuario_completo(dados_usuario, dados_perfil)
     if not sucesso:
-        raise HTTPException(status_code=500, detail="B.O no servidor ao criar usuÃ¡rio. Tente novamente.")
+        raise HTTPException(status_code=500, detail="B.O no servidor ao criar usuário. Tente novamente.")
     
-    return {"mensagem": "UsuÃ¡rio criado com sucesso!"}
+    return {"mensagem": "Usuário criado com sucesso!"}
 
 @app.post("/auth/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -164,12 +346,12 @@ def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_curren
             aluno = cur.fetchone()
 
             if not aluno:
-                raise HTTPException(status_code=404, detail="Aluno nÃ£o encontrado")
+                raise HTTPException(status_code=404, detail="Aluno não encontrado")
 
             aluno_id = aluno['aluno_id']
 
-            # 3. Calcula FrequÃªncia Geral
-            # (Total de presenÃ§as / Total de chamadas das turmas que ele participa)
+            # 3. Calcula Frequência Geral
+            # (Total de presenças / Total de chamadas das turmas que ele participa)
             cur.execute("""
                 SELECT
                     (SELECT COUNT(*) FROM Presencas WHERE aluno_id = %s) as total_presencas,
@@ -202,6 +384,64 @@ def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_curren
                 "nome": nome,
                 "frequencia_geral": frequencia,
                 "aulas_hoje": aulas_hoje
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/aluno/frequencias/{usuario_id}")
+def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        with get_db_cursor() as cur:
+            # 1. Busca Aluno ID
+            cur.execute("SELECT aluno_id FROM Alunos WHERE usuario_id = %s", (usuario_id,))
+            aluno = cur.fetchone()
+            if not aluno:
+                raise HTTPException(status_code=404, detail="Aluno não encontrado")
+            
+            aluno_id = aluno['aluno_id']
+
+            # 2. Busca estatísticas por disciplina
+            # Pega todas as turmas que o aluno participa e conta as chamadas totais e presenças dele
+            cur.execute("""
+                SELECT 
+                    t.nome_disciplina as nome,
+                    (SELECT COUNT(*) FROM Chamadas ch WHERE ch.turma_id = t.turma_id AND ch.status = 'Fechada') as total_aulas,
+                    (SELECT COUNT(*) FROM Presencas p 
+                     JOIN Chamadas ch ON p.chamada_id = ch.chamada_id
+                     WHERE p.aluno_id = %s AND ch.turma_id = t.turma_id) as presencas
+                FROM Turma_Alunos ta
+                JOIN Turmas t ON ta.turma_id = t.turma_id
+                WHERE ta.aluno_id = %s
+            """, (aluno_id, aluno_id))
+            
+            rows = cur.fetchall()
+            
+            frequencias = []
+            total_presencas_global = 0
+            total_chamadas_global = 0
+
+            for row in rows:
+                presencas = row['presencas']
+                total = row['total_aulas']
+                percentual = round((presencas / total * 100)) if total > 0 else 0
+                
+                frequencias.append({
+                    "nome": row['nome'],
+                    "presenca": percentual,
+                    "total": total,
+                    "presencas_count": presencas,
+                    "faltas_count": total - presencas
+                })
+                
+                total_presencas_global += presencas
+                total_chamadas_global += total
+
+            media_geral = round((total_presencas_global / total_chamadas_global * 100)) if total_chamadas_global > 0 else 0
+
+            return {
+                "media_geral": media_geral,
+                "frequencias": frequencias
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -265,11 +505,78 @@ def get_dashboard(usuario_id: str, current_user: dict = Depends(get_current_user
 
 @app.get("/turmas/{usuario_id}")
 def get_turmas(usuario_id: str):
-    """Retorna as turmas de um professor usando sua funÃ§Ã£o existente."""
-    turmas = listar_turmas_professor(usuario_id)
-    if not turmas:
-        return {"turmas": []}
-    return {"turmas": turmas}
+    """Retorna as turmas de um professor com flag indicando se está no horário de aula."""
+    try:
+        import datetime
+        agora = datetime.datetime.now()
+        dia_semana = agora.weekday() # 0-6 (Seg-Dom)
+        hora_atual = agora.time()
+
+        with get_db_cursor() as cur:
+            # Busca turmas e seus horários
+            cur.execute("""
+                SELECT 
+                    t.turma_id, 
+                    t.nome_disciplina, 
+                    t.codigo_turma,
+                    h.dia_semana,
+                    h.horario_inicio,
+                    h.horario_fim
+                FROM Turmas t
+                LEFT JOIN horarios_aulas h ON t.turma_id = h.turma_id
+                WHERE t.professor_id = (SELECT professor_id FROM Professores WHERE usuario_id = %s)
+            """, (usuario_id,))
+            
+            rows = cur.fetchall()
+            turmas_dict = {}
+
+            for row in rows:
+                t_id = row['turma_id']
+                if t_id not in turmas_dict:
+                    turmas_dict[t_id] = {
+                        "turma_id": t_id,
+                        "nome_disciplina": row['nome_disciplina'],
+                        "codigo_turma": row['codigo_turma'],
+                        "pode_iniciar": False,
+                        "proximo_horario": "Sem horário definido"
+                    }
+                
+                # Valida se esta aula está acontecendo AGORA
+                if row['dia_semana'] == dia_semana:
+                    if row['horario_inicio'] <= hora_atual <= row['horario_fim']:
+                        turmas_dict[t_id]["pode_iniciar"] = True
+                    
+                    # Formata o horário para exibição
+                    turmas_dict[t_id]["proximo_horario"] = f"Hoje: {row['horario_inicio'].strftime('%H:%M')} - {row['horario_fim'].strftime('%H:%M')}"
+                elif turmas_dict[t_id]["proximo_horario"] == "Sem horário definido" and row['dia_semana'] is not None:
+                     dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+                     turmas_dict[t_id]["proximo_horario"] = f"{dias[row['dia_semana']]}: {row['horario_inicio'].strftime('%H:%M')}"
+
+            return {"turmas": list(turmas_dict.values())}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/turmas/{turma_id}/alunos")
+def get_alunos_turma(turma_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        with get_db_cursor() as cur:
+            cur.execute("""
+                SELECT 
+                    a.aluno_id as id,
+                    u.nome,
+                    u.email,
+                    a.ra
+                FROM Turma_Alunos ta
+                JOIN Alunos a ON ta.aluno_id = a.aluno_id
+                JOIN Usuarios u ON a.usuario_id = u.usuario_id
+                WHERE ta.turma_id = %s
+                ORDER BY u.nome ASC
+            """, (turma_id,))
+            alunos = cur.fetchall()
+            return {"alunos": alunos}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/alunos/cadastrar")
 async def cadastrar_aluno_api(
@@ -283,7 +590,7 @@ async def cadastrar_aluno_api(
     Recebe dados e foto do App, salva no S3, indexa no Rekognition e salva no Banco.
     """
     try:
-        # 1. Preparar ID Ãºnico 
+        # 1. Preparar ID único 
         external_id = formatar_nome_para_external_id(nome)
         filename = f"alunos/{external_id}_{foto.filename}"
 
@@ -327,7 +634,7 @@ def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(get_current_
     professor_id = obter_professor_id(usuario_id)
     
     if not professor_id:
-        raise HTTPException(status_code=404, detail="Professor nÃ£o encontrado no banco.")
+        raise HTTPException(status_code=404, detail="Professor não encontrado no banco.")
 
     try:
         with get_db_cursor(commit=True) as cur:
@@ -459,10 +766,10 @@ async def registrar_rosto_aluno(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Recebe foto tirada pelo Aluno, envia pra AWS e se der match, tenta registrar presenÃ§a.
+    Recebe foto tirada pelo Aluno, envia pra AWS e se der match, tenta registrar presença.
     """
     if current_user.get("role") != "Aluno":
-        raise HTTPException(status_code=403, detail="Apenas alunos podem registrar presenÃ§a via rosto.")
+        raise HTTPException(status_code=403, detail="Apenas alunos podem registrar presença via rosto.")
 
     try:
         # Salva arquivo temp
@@ -489,18 +796,18 @@ async def registrar_rosto_aluno(
         os.remove(temp_file)
 
         if not response.get('FaceMatches'):
-            raise HTTPException(status_code=404, detail="Rosto nÃ£o reconhecido no sistema.")
+            raise HTTPException(status_code=404, detail="Rosto não reconhecido no sistema.")
             
         match = response['FaceMatches'][0]
         external_image_id = match['Face']['ExternalImageId']
         
-        # Registra PresenÃ§a
+        # Registra Presença
         sucesso = registrar_presenca_por_face(external_image_id)
         
         if sucesso:
-            return {"mensagem": "PresenÃ§a confirmada com sucesso!", "aluno": external_image_id}
+            return {"mensagem": "Presença confirmada com sucesso!", "aluno": external_image_id}
         else:
-            raise HTTPException(status_code=400, detail="NÃ£o foi possÃ­vel registrar a presenÃ§a. Verifique se hÃ¡ uma chamada aberta para sua turma.")
+            raise HTTPException(status_code=400, detail="Não foi possível registrar a presença. Verifique se há uma chamada aberta para sua turma.")
 
     except Exception as e:
         if os.path.exists(f"temp_checkin_{foto.filename}"):

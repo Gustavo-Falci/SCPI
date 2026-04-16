@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -6,24 +6,49 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 
+import { storage } from "../../services/storage";
+import { apiGet } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 
 export default function AulasDoDia() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [aulas, setAulas] = useState<any[]>([]);
 
-  const aulas = [
-    { id: 1, nome: "ADS 2° Período", horario: "09:00 - 10:30", sala: "Lab 03", status: "agora" },
-    { id: 2, nome: "COMEX 1° Período", horario: "10:30 - 11:25", sala: "Lab 07", status: "proxima" },
-    { id: 3, nome: "GPI 1° Período", horario: "11:25 - 12:30", sala: "Sala 9", status: "proxima" },
-    { id: 4, nome: "ADS 4° Período", horario: "12:30 - 13:10", sala: "Lab 05", status: "proxima" },
-    { id: 5, nome: "COMEX 2° Período", horario: "16:00 - 17:30", sala: "Sala 15", status: "proxima" },
-  ];
+  const loadHorarios = async () => {
+    try {
+      const userId = await storage.getItem("user_id");
+      if (!userId) {
+        router.replace("/auth/login");
+        return;
+      }
+      const resp = await apiGet(`/professor/dashboard/${userId}`);
+      setAulas(resp.aulas_hoje || []);
+    } catch (err) {
+      console.error("Erro ao carregar horários professor:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHorarios();
+    }, [])
+  );
+
+  const getTodayDateFormatted = () => {
+    const options: any = { weekday: 'long', day: 'numeric', month: 'long' };
+    const date = new Date().toLocaleDateString('pt-BR', options);
+    return date.charAt(0).toUpperCase() + date.slice(1);
+  };
 
   const menuItems: any[] = [
     { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
@@ -31,6 +56,14 @@ export default function AulasDoDia() {
     { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas' },
     { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil' },
   ];
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={Colors.brand.primary} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -51,7 +84,7 @@ export default function AulasDoDia() {
         <View style={styles.todayCard}>
           <View>
             <Text style={styles.todayTitle}>Aulas de Hoje</Text>
-            <Text style={styles.todayDate}>Segunda, 15 de Abril</Text>
+            <Text style={styles.todayDate}>{getTodayDateFormatted()}</Text>
           </View>
           <View style={styles.countBadge}>
             <Text style={styles.countText}>{aulas.length}</Text>
@@ -59,47 +92,59 @@ export default function AulasDoDia() {
         </View>
 
         <View style={styles.timeline}>
-          {aulas.map((aula, index) => (
-            <View key={aula.id} style={styles.timelineItem}>
-              <View style={styles.timeColumn}>
-                <Text style={styles.timeText}>{aula.horario.split(' - ')[0]}</Text>
-                <View style={[styles.timelineLine, index === aulas.length - 1 && { backgroundColor: 'transparent' }]} />
-              </View>
+          {aulas.length > 0 ? (
+            aulas.map((aula, index) => {
+              // Lógica simples para detectar se a aula é "Agora" baseada no horário atual seria ideal aqui no futuro
+              const isNow = index === 0; // Temporário para demonstração visual
+              
+              return (
+                <View key={aula.id} style={styles.timelineItem}>
+                  <View style={styles.timeColumn}>
+                    <Text style={styles.timeText}>{aula.horario.split(' - ')[0]}</Text>
+                    <View style={[styles.timelineLine, index === aulas.length - 1 && { backgroundColor: 'transparent' }]} />
+                  </View>
 
-              <TouchableOpacity 
-                style={[styles.classCard, aula.status === 'agora' && styles.activeCard]}
-                onPress={() => router.push("/professor/turmas")}
-              >
-                <View style={styles.cardHeader}>
-                  <Text style={styles.className}>{aula.nome}</Text>
-                  {aula.status === 'agora' && (
-                    <View style={styles.liveBadge}>
-                      <View style={styles.liveDot} />
-                      <Text style={styles.liveText}>AO VIVO</Text>
+                  <TouchableOpacity 
+                    style={[styles.classCard, isNow && styles.activeCard]}
+                    onPress={() => router.push("/professor/turmas")}
+                  >
+                    <View style={styles.cardHeader}>
+                      <Text style={styles.className}>{aula.nome}</Text>
+                      {isNow && (
+                        <View style={styles.liveBadge}>
+                          <View style={styles.liveDot} />
+                          <Text style={styles.liveText}>AO VIVO</Text>
+                        </View>
+                      )}
                     </View>
-                  )}
-                </View>
-                
-                <View style={styles.cardFooter}>
-                  <View style={styles.infoRow}>
-                    <Ionicons name="location-outline" size={14} color={Colors.brand.textSecondary} />
-                    <Text style={styles.infoText}>{aula.sala}</Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <Ionicons name="time-outline" size={14} color={Colors.brand.textSecondary} />
-                    <Text style={styles.infoText}>{aula.horario}</Text>
-                  </View>
-                </View>
+                    
+                    <View style={styles.cardFooter}>
+                      <View style={styles.infoRow}>
+                        <Ionicons name="location-outline" size={14} color={Colors.brand.textSecondary} />
+                        <Text style={styles.infoText}>{aula.sala}</Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <Ionicons name="time-outline" size={14} color={Colors.brand.textSecondary} />
+                        <Text style={styles.infoText}>{aula.horario}</Text>
+                      </View>
+                    </View>
 
-                {aula.status === 'agora' && (
-                  <TouchableOpacity style={styles.callButton} onPress={() => router.push("/professor/turmas")}>
-                    <Text style={styles.callButtonText}>Iniciar Chamada</Text>
-                    <Ionicons name="arrow-forward" size={16} color="#fff" />
+                    {isNow && (
+                      <View style={styles.callButton}>
+                        <Text style={styles.callButtonText}>Ir para Chamada</Text>
+                        <Ionicons name="arrow-forward" size={16} color="#fff" />
+                      </View>
+                    )}
                   </TouchableOpacity>
-                )}
-              </TouchableOpacity>
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="calendar-outline" size={50} color={Colors.brand.textSecondary} />
+              <Text style={styles.emptyText}>Sem aulas agendadas para hoje.</Text>
             </View>
-          ))}
+          )}
         </View>
 
         <View style={{ height: 120 }} />
@@ -112,6 +157,7 @@ export default function AulasDoDia() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.brand.background },
+  center: { justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: 60 },
   headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
   backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.brand.card, justifyContent: "center", alignItems: "center" },
@@ -148,4 +194,6 @@ const styles = StyleSheet.create({
     borderRadius: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 
   },
   callButtonText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  emptyContainer: { alignItems: "center", marginTop: 40 },
+  emptyText: { color: Colors.brand.textSecondary, fontSize: 16, marginTop: 12 },
 });

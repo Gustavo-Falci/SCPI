@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -6,16 +6,43 @@ import {
   View,
   TouchableOpacity,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 
+import { storage } from "../../services/storage";
+import { apiGet } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 
 export default function Frequencia() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any>(null);
+
+  const loadFrequencias = async () => {
+    try {
+      const userId = await storage.getItem("user_id");
+      if (!userId) {
+        router.replace("/auth/login");
+        return;
+      }
+      const resp = await apiGet(`/aluno/frequencias/${userId}`);
+      setData(resp);
+    } catch (err) {
+      console.error("Erro ao carregar frequencias aluno:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadFrequencias();
+    }, [])
+  );
 
   const menuItems: any[] = [
     { icon: 'home-outline', activeIcon: 'home', route: '/aluno/home' },
@@ -24,13 +51,13 @@ export default function Frequencia() {
     { icon: 'person-outline', activeIcon: 'person', route: '/aluno/perfil' },
   ];
 
-  const frequencias = [
-    { nome: "Cálculo I", presenca: 85, total: 120 },
-    { nome: "Inglês Instrumental", presenca: 71, total: 97 },
-    { nome: "Estrutura de Dados", presenca: 90, total: 115 },
-    { nome: "Engenharia de Software", presenca: 65, total: 120 },
-    { nome: "Programação WEB", presenca: 85, total: 120 },
-  ];
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={Colors.brand.primary} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -51,7 +78,7 @@ export default function Frequencia() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryInfo}>
             <Text style={styles.summaryLabel}>Média Geral</Text>
-            <Text style={styles.summaryValue}>79.2%</Text>
+            <Text style={styles.summaryValue}>{data?.media_geral || 0}%</Text>
           </View>
           <View style={styles.iconCircle}>
             <Ionicons name="trending-up" size={32} color={Colors.brand.primary} />
@@ -60,46 +87,53 @@ export default function Frequencia() {
 
         <Text style={styles.sectionTitle}>Disciplinas</Text>
 
-        {frequencias.map((item, index) => {
-          const isLow = item.presenca < 75;
-          return (
-            <View style={styles.card} key={index}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.subjectName}>{item.nome}</Text>
-                <Text style={[styles.percentageText, isLow && { color: Colors.brand.error }]}>
-                  {item.presenca}%
-                </Text>
-              </View>
-
-              <View style={styles.progressBarBg}>
-                <View 
-                  style={[
-                    styles.progressBarFill, 
-                    { width: `${item.presenca}%` },
-                    isLow && { backgroundColor: Colors.brand.error }
-                  ]} 
-                />
-              </View>
-
-              <View style={styles.cardFooter}>
-                <View style={styles.footerItem}>
-                  <Text style={styles.footerLabel}>Aulas Totais</Text>
-                  <Text style={styles.footerValue}>{item.total}</Text>
-                </View>
-                <View style={styles.footerItem}>
-                  <Text style={styles.footerLabel}>Presenças</Text>
-                  <Text style={styles.footerValue}>{Math.round((item.total * item.presenca) / 100)}</Text>
-                </View>
-                <View style={styles.footerItem}>
-                  <Text style={styles.footerLabel}>Faltas</Text>
-                  <Text style={[styles.footerValue, isLow && { color: Colors.brand.error }]}>
-                    {item.total - Math.round((item.total * item.presenca) / 100)}
+        {data?.frequencias && data.frequencias.length > 0 ? (
+          data.frequencias.map((item: any, index: number) => {
+            const isLow = item.presenca < 75;
+            return (
+              <View style={styles.card} key={index}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.subjectName}>{item.nome}</Text>
+                  <Text style={[styles.percentageText, isLow && { color: Colors.brand.error }]}>
+                    {item.presenca}%
                   </Text>
                 </View>
+
+                <View style={styles.progressBarBg}>
+                  <View 
+                    style={[
+                      styles.progressBarFill, 
+                      { width: `${item.presenca}%` },
+                      isLow && { backgroundColor: Colors.brand.error }
+                    ]} 
+                  />
+                </View>
+
+                <View style={styles.cardFooter}>
+                  <View style={styles.footerItem}>
+                    <Text style={styles.footerLabel}>Aulas Totais</Text>
+                    <Text style={styles.footerValue}>{item.total}</Text>
+                  </View>
+                  <View style={styles.footerItem}>
+                    <Text style={styles.footerLabel}>Presenças</Text>
+                    <Text style={styles.footerValue}>{item.presencas_count}</Text>
+                  </View>
+                  <View style={styles.footerItem}>
+                    <Text style={styles.footerLabel}>Faltas</Text>
+                    <Text style={[styles.footerValue, isLow && { color: Colors.brand.error }]}>
+                      {item.faltas_count}
+                    </Text>
+                  </View>
+                </View>
               </View>
-            </View>
-          );
-        })}
+            );
+          })
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="stats-chart-outline" size={50} color={Colors.brand.textSecondary} />
+            <Text style={styles.emptyText}>Você ainda não possui frequências registradas.</Text>
+          </View>
+        )}
 
         <View style={{ height: 120 }} />
       </ScrollView>
@@ -111,6 +145,7 @@ export default function Frequencia() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.brand.background },
+  center: { justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: 60 },
   headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
   backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.brand.card, justifyContent: "center", alignItems: "center" },
@@ -138,4 +173,15 @@ const styles = StyleSheet.create({
   footerItem: { alignItems: "center" },
   footerLabel: { color: Colors.brand.textSecondary, fontSize: 10, fontWeight: "600", textTransform: "uppercase", marginBottom: 4 },
   footerValue: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  emptyContainer: {
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  emptyText: {
+    color: Colors.brand.textSecondary,
+    fontSize: 16,
+    marginTop: 16,
+    textAlign: 'center',
+    paddingHorizontal: 20
+  },
 });
