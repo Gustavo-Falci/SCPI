@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://192.168.5.108:8000';
+
 
 export default function AdminPortal() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -45,15 +46,23 @@ function LoginScreen({ onLogin }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('username', email);
-      formData.append('password', password);
+      // Usando URLSearchParams para garantir o formato x-www-form-urlencoded exigido pelo FastAPI
+      const params = new URLSearchParams();
+      params.append('username', email.trim());
+      params.append('password', password);
       
-      const res = await axios.post(`${API_URL}/auth/login`, formData);
-      // Simples validação: em um sistema real o backend diria se é Admin
+      const res = await axios.post(`${API_URL}/auth/login`, params.toString(), {
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json'
+        }
+      });
       onLogin(res.data);
     } catch (err) {
-      alert("Falha no login. Verifique suas credenciais.");
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail : (detail ? JSON.stringify(detail) : "Erro de conexão ou credenciais");
+      alert(`Falha no login: ${msg}`);
+      console.error("Erro detalhado:", err.response || err);
     } finally {
       setLoading(false);
     }

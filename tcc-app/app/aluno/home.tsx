@@ -105,7 +105,7 @@ export default function HomeAluno() {
               <View>
                 <Text style={styles.faceCardTitle}>Biometria Facial</Text>
                 <Text style={styles.faceCardStatus}>
-                  {data?.face_registrada ? "Face cadastrada com sucesso" : "Cadastre sua face agora"}
+                  {data?.face_registrada ? "Face cadastrada com sucesso" : "Atualize sua face agora"}
                 </Text>
               </View>
               <MaterialCommunityIcons name="face-recognition" size={40} color="#fff" />

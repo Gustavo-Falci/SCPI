@@ -1,5 +1,5 @@
 // Altere o IP abaixo para o IP do seu notebook na rede local
-const BASE_IP = "192.168.5.188";
+const BASE_IP = "192.168.5.108";
 const API_URL = `http://${BASE_IP}:8000`;
 
 import { storage } from "./storage";
@@ -86,7 +86,17 @@ export async function apiPostFormData(endpoint, formData) {
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || `Erro HTTP ${response.status}`);
+        if (!response.ok) {
+            let errorMsg = `Erro HTTP ${response.status}`;
+            if (data.detail) {
+                if (Array.isArray(data.detail)) {
+                    errorMsg = data.detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('\n');
+                } else {
+                    errorMsg = data.detail;
+                }
+            }
+            throw new Error(errorMsg);
+        }
         return data;
     } catch (error) {
         throw error;

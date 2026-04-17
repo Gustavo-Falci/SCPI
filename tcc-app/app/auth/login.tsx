@@ -41,6 +41,8 @@ export default function Login() {
       await storage.setItem("user_role", resp.user_role);
       await storage.setItem("user_id", resp.user_id);
       await storage.setItem("user_name", resp.user_name);
+      await storage.setItem("user_email", resp.user_email);
+      if (resp.user_ra) await storage.setItem("user_ra", resp.user_ra);
 
       if (resp.user_role === "Professor") {
         router.replace("/professor/home");

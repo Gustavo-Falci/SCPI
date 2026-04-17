@@ -77,6 +77,8 @@ class Token(BaseModel):
     user_role: str
     user_id: str
     user_name: str
+    user_email: str
+    user_ra: Optional[str] = None
 
 class ChamadaAbrir(BaseModel):
     turma_id: str
@@ -309,27 +311,46 @@ def register(usuario: UsuarioRegistro):
 
 @app.post("/auth/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = buscar_usuario_por_email(form_data.username)
+    # Remove espaços em branco do email para evitar erros de digitação
+    email_limpo = form_data.username.strip()
+
+    # Busca usuário de forma insensível a maiúsculas/minúsculas
+    with get_db_cursor() as cur:
+        cur.execute("SELECT usuario_id, nome, email, senha, tipo_usuario FROM Usuarios WHERE LOWER(email) = LOWER(%s)", (email_limpo,))
+        user = cur.fetchone()
+
     if not user:
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
-    # Para testes gerados pelo setup_teste.py, a senha está em texto limpo '123'
-    if user['senha'] == '123':
-        if form_data.password != '123':
-            raise HTTPException(status_code=401, detail="Email ou senha incorretos")
-    else:
-        if not verify_password(form_data.password, user['senha']):
-             raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+    # Tenta verificar como Bcrypt ou PBKDF2
+    try:
+        senha_valida = verify_password(form_data.password, user['senha'])
+    except Exception:
+        senha_valida = (form_data.password == user['senha'])
+
+    if not senha_valida:
+         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
     # Gerar Token
     access_token = create_access_token(data={"sub": str(user['usuario_id']), "email": user['email'], "role": user['tipo_usuario']})
+
+    # Busca RA se for aluno
+    ra = None
+    if user['tipo_usuario'] == 'Aluno':
+        with get_db_cursor() as cur:
+            cur.execute("SELECT ra FROM Alunos WHERE usuario_id = %s", (user['usuario_id'],))
+            aluno_data = cur.fetchone()
+            if aluno_data:
+                ra = aluno_data['ra']
 
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user_role": user['tipo_usuario'],
         "user_id": str(user['usuario_id']),
-        "user_name": user['nome']
+        "user_name": user['nome'],
+        "user_email": user['email'],
+        "user_ra": ra
     }
 
 
@@ -579,28 +600,41 @@ def get_alunos_turma(turma_id: str, current_user: dict = Depends(get_current_use
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/alunos/cadastrar")
+@app.post("/alunos/cadastrar-face")
 async def cadastrar_aluno_api(
+    user_id: Optional[str] = Form(None),
     nome: str = Form(...),
     email: str = Form(...),
     ra: str = Form(...),
-    turma_id: str = Form(...),
     foto: UploadFile = File(...)
 ):
     """
     Recebe dados e foto do App, salva no S3, indexa no Rekognition e salva no Banco.
     """
     try:
-        # 1. Preparar ID único 
+        # 1. Localizar o Aluno (por ID ou por Email/RA)
+        with get_db_cursor() as cur:
+            if user_id:
+                cur.execute("SELECT u.usuario_id FROM Usuarios u WHERE u.usuario_id = %s", (user_id,))
+            else:
+                cur.execute("SELECT u.usuario_id FROM Usuarios u WHERE u.email = %s", (email,))
+            
+            user = cur.fetchone()
+            if not user:
+                raise HTTPException(status_code=404, detail="Usuário não localizado para vincular face.")
+            
+            target_user_id = user['usuario_id']
+
+        # 2. Preparar ID único 
         external_id = formatar_nome_para_external_id(nome)
         filename = f"alunos/{external_id}_{foto.filename}"
 
-        # 2. Salvar arquivo temporariamente para envio
+        # 3. Salvar arquivo temporariamente para envio
         temp_file = f"temp_{foto.filename}"
         with open(temp_file, "wb") as buffer:
             shutil.copyfileobj(foto.file, buffer)
 
-        # 3. Upload para o S3 
+        # 4. Upload para o S3 
         s3_client.upload_file(temp_file, BUCKET_NAME, filename)
         
         resultado_rekognition = indexar_rosto_da_imagem_s3(filename, external_id, detection_attributes="ALL")
@@ -611,19 +645,44 @@ async def cadastrar_aluno_api(
 
         face_id = resultado_rekognition["FaceRecords"][0]["Face"]["FaceId"]
 
-        sucesso = cadastrar_novo_aluno(nome, email, ra, turma_id, external_id, face_id, filename)
-        
-        os.remove(temp_file)
+        # 4. Atualizar ou Inserir registro na Coleção de Rostos
+        with get_db_cursor(commit=True) as cur:
+            # Primeiro, pegamos o aluno_id usando o target_user_id
+            cur.execute("SELECT aluno_id FROM Alunos WHERE usuario_id = %s", (target_user_id,))
+            aluno = cur.fetchone()
+            if not aluno:
+                raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado para este usuário.")
 
-        if sucesso:
+            aluno_id = aluno['aluno_id']
+
+            # 4. Verificar se já existe biometria para este aluno
+            cur.execute("SELECT 1 FROM Colecao_Rostos WHERE aluno_id = %s", (aluno_id,))
+            exists = cur.fetchone()
+
+            if exists:
+                # Se existe, atualiza
+                cur.execute("""
+                    UPDATE Colecao_Rostos 
+                    SET external_image_id = %s,
+                        face_id_rekognition = %s,
+                        s3_path_cadastro = %s
+                    WHERE aluno_id = %s
+                """, (external_id, face_id, filename, aluno_id))
+            else:
+                # Se não existe, insere novo
+                cur.execute("""
+                    INSERT INTO Colecao_Rostos (aluno_id, external_image_id, face_id_rekognition, s3_path_cadastro)
+                    VALUES (%s, %s, %s, %s)
+                """, (aluno_id, external_id, face_id, filename))
+
+            os.remove(temp_file)
             return {"status": "sucesso", "face_id": face_id, "external_id": external_id}
-        else:
-            raise HTTPException(status_code=500, detail="Erro ao salvar no banco de dados.")
 
     except Exception as e:
         if os.path.exists(f"temp_{foto.filename}"):
             os.remove(f"temp_{foto.filename}")
         raise HTTPException(status_code=500, detail=str(e))
+
 # --- ENDPOINTS DE CHAMADAS ---
 
 @app.post("/chamadas/abrir")
