@@ -19,7 +19,7 @@ import atexit
 from typing import List, Optional
 
 from db_operacoes import listar_turmas_professor, cadastrar_novo_aluno, buscar_usuario_por_email, criar_usuario_completo, obter_professor_id
-from rekognition_aws import indexar_rosto_da_imagem_s3, reconhecer_aluno_por_bytes
+from rekognition_aws import indexar_rosto_da_imagem_s3, reconhecer_aluno_por_bytes, deletar_rosto
 from database import get_db_cursor
 from db_operacoes import registrar_presenca_por_face
 from aws_clientes import s3_client
@@ -109,12 +109,12 @@ def admin_listar_turmas(current_user: dict = Depends(get_current_user)):
     try:
         with get_db_cursor() as cur:
             cur.execute("""
-                SELECT t.turma_id, t.nome_disciplina, t.codigo_turma, u.nome as professor_nome,
+                SELECT t.turma_id, t.nome_disciplina, t.codigo_turma, t.turno, t.semestre, u.nome as professor_nome,
                 (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = t.turma_id) as total_alunos
                 FROM Turmas t
                 JOIN Professores p ON t.professor_id = p.professor_id
                 JOIN Usuarios u ON p.usuario_id = u.usuario_id
-                ORDER BY t.nome_disciplina ASC
+                ORDER BY t.semestre ASC, t.nome_disciplina ASC
             """)
             return cur.fetchall()
     except Exception as e:
@@ -126,6 +126,8 @@ class TurmaCreate(BaseModel):
     nome_disciplina: str
     periodo_letivo: str
     sala_padrao: str
+    turno: str
+    semestre: str
 
 @app.post("/admin/turmas")
 def admin_criar_turma(turma: TurmaCreate, current_user: dict = Depends(get_current_user)):
@@ -134,10 +136,10 @@ def admin_criar_turma(turma: TurmaCreate, current_user: dict = Depends(get_curre
         turma_id = str(uuid.uuid4())
         with get_db_cursor(commit=True) as cur:
             cur.execute("""
-                INSERT INTO Turmas (turma_id, professor_id, codigo_turma, nome_disciplina, periodo_letivo, sala_padrao)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO Turmas (turma_id, professor_id, codigo_turma, nome_disciplina, periodo_letivo, sala_padrao, turno, semestre)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING turma_id
-            """, (turma_id, turma.professor_id, turma.codigo_turma, turma.nome_disciplina, turma.periodo_letivo, turma.sala_padrao))
+            """, (turma_id, turma.professor_id, turma.codigo_turma, turma.nome_disciplina, turma.periodo_letivo, turma.sala_padrao, turma.turno, turma.semestre))
             return {"mensagem": "Turma criada com sucesso!", "turma_id": turma_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -181,7 +183,7 @@ def admin_listar_todos_horarios(current_user: dict = Depends(get_current_user)):
                 SELECT h.horario_id, h.turma_id, h.dia_semana, 
                        to_char(h.horario_inicio, 'HH24:MI') as inicio, 
                        to_char(h.horario_fim, 'HH24:MI') as fim, 
-                       h.sala, t.nome_disciplina
+                       h.sala, t.nome_disciplina, t.turno, t.semestre
                 FROM horarios_aulas h
                 JOIN Turmas t ON h.turma_id = t.turma_id
             """)
@@ -197,6 +199,66 @@ def admin_excluir_horario(horario_id: int, current_user: dict = Depends(get_curr
             return {"mensagem": "Horário removido!"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+class MatricularAlunos(BaseModel):
+    aluno_ids: List[str]
+
+
+@app.get("/admin/alunos")
+def admin_listar_alunos(turma_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """
+    Lista todos os alunos cadastrados. Se `turma_id` for informado, também
+    marca cada aluno com `ja_matriculado=True/False` para a turma em questão.
+    """
+    try:
+        with get_db_cursor() as cur:
+            if turma_id:
+                cur.execute("""
+                    SELECT
+                        a.aluno_id, a.ra, u.nome, u.email,
+                        EXISTS(
+                            SELECT 1 FROM Turma_Alunos ta
+                            WHERE ta.aluno_id = a.aluno_id AND ta.turma_id = %s
+                        ) as ja_matriculado
+                    FROM Alunos a
+                    JOIN Usuarios u ON a.usuario_id = u.usuario_id
+                    ORDER BY u.nome
+                """, (turma_id,))
+            else:
+                cur.execute("""
+                    SELECT a.aluno_id, a.ra, u.nome, u.email, FALSE as ja_matriculado
+                    FROM Alunos a
+                    JOIN Usuarios u ON a.usuario_id = u.usuario_id
+                    ORDER BY u.nome
+                """)
+            return cur.fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/admin/turmas/{turma_id}/matricular-alunos")
+def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos, current_user: dict = Depends(get_current_user)):
+    """
+    Matricula um ou mais alunos já cadastrados em uma turma.
+    Idempotente: alunos já matriculados são ignorados silenciosamente.
+    """
+    if not dados.aluno_ids:
+        raise HTTPException(status_code=400, detail="Nenhum aluno selecionado.")
+    try:
+        matriculados = 0
+        with get_db_cursor(commit=True) as cur:
+            for aluno_id in dados.aluno_ids:
+                cur.execute("""
+                    INSERT INTO Turma_Alunos (turma_id, aluno_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT (turma_id, aluno_id) DO NOTHING
+                """, (turma_id, aluno_id))
+                if cur.rowcount and cur.rowcount > 0:
+                    matriculados += 1
+        return {"mensagem": f"{matriculados} aluno(s) matriculado(s) com sucesso.", "total_enviados": len(dados.aluno_ids)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/admin/turmas/{turma_id}/importar-alunos")
 async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
@@ -306,8 +368,95 @@ def register(usuario: UsuarioRegistro):
     sucesso = criar_usuario_completo(dados_usuario, dados_perfil)
     if not sucesso:
         raise HTTPException(status_code=500, detail="B.O no servidor ao criar usuário. Tente novamente.")
-    
+
     return {"mensagem": "Usuário criado com sucesso!"}
+
+
+@app.post("/auth/register-aluno-com-face")
+async def register_aluno_com_face(
+    nome: str = Form(...),
+    email: str = Form(...),
+    senha: str = Form(...),
+    ra: str = Form(...),
+    foto: UploadFile = File(...)
+):
+    """
+    Cadastro atômico de Aluno: a face é validada no Rekognition ANTES
+    de qualquer gravação no banco. Se a face falhar, nenhum registro é criado.
+    """
+    import uuid as _uuid
+
+    email_limpo = email.strip()
+    if not ra:
+        raise HTTPException(status_code=400, detail="RA é obrigatório para alunos.")
+    if buscar_usuario_por_email(email_limpo):
+        raise HTTPException(status_code=400, detail="Email já cadastrado.")
+
+    external_id = formatar_nome_para_external_id(nome)
+    s3_filename = f"alunos/{external_id}_{foto.filename}"
+    temp_file = f"temp_{foto.filename}"
+    face_id_indexado = None
+
+    try:
+        # 1. Salvar arquivo temporário e enviar ao S3
+        with open(temp_file, "wb") as buffer:
+            shutil.copyfileobj(foto.file, buffer)
+        s3_client.upload_file(temp_file, BUCKET_NAME, s3_filename)
+
+        # 2. Validar face no Rekognition ANTES de tocar no banco
+        resultado = indexar_rosto_da_imagem_s3(s3_filename, external_id, detection_attributes="ALL")
+        if not resultado or not resultado.get("FaceRecords"):
+            raise HTTPException(
+                status_code=400,
+                detail="Nenhum rosto detectado na imagem. Nada foi salvo — tente novamente."
+            )
+        face_id_indexado = resultado["FaceRecords"][0]["Face"]["FaceId"]
+
+        # 3. Só agora gravamos no banco, em uma única transação
+        senha_hash = get_password_hash(senha)
+        usuario_uuid = str(_uuid.uuid4())
+        aluno_uuid = str(_uuid.uuid4())
+
+        try:
+            with get_db_cursor(commit=True) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario)
+                    VALUES (%s, %s, %s, %s, 'Aluno')
+                    """,
+                    (usuario_uuid, nome, email_limpo, senha_hash),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO Alunos (aluno_id, usuario_id, ra)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (aluno_uuid, usuario_uuid, ra),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO Colecao_Rostos (aluno_id, external_image_id, face_id_rekognition, s3_path_cadastro)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (aluno_uuid, external_id, face_id_indexado, s3_filename),
+                )
+        except Exception as db_err:
+            # Rollback do rosto na AWS para não deixar lixo órfão
+            deletar_rosto(face_id_indexado)
+            raise HTTPException(status_code=500, detail=f"Erro ao gravar no banco: {db_err}")
+
+        return {"status": "sucesso", "mensagem": "Conta criada com biometria facial!"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        if face_id_indexado:
+            deletar_rosto(face_id_indexado)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+
 
 @app.post("/auth/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends()):

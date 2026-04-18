@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite *)",
+      "Bash(python -c ' *)",
+      "Bash(python importar_grade.py)"
+    ]
+  }
+}

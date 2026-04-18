@@ -130,6 +130,22 @@ def indexar_rosto_da_imagem_s3(
         return None
 
 
+def deletar_rosto(face_id: str) -> bool:
+    """
+    Remove um rosto da coleção do Rekognition pelo FaceId.
+    Usado como rollback quando o INSERT no banco falha após a indexação.
+    """
+    if not rekognition_client or not face_id:
+        return False
+    try:
+        rekognition_client.delete_faces(CollectionId=COLLECTION_ID, FaceIds=[face_id])
+        logger.info(f"🗑️ FaceId '{face_id}' removido da coleção '{COLLECTION_ID}'.")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Falha ao remover FaceId '{face_id}': {e}")
+        return False
+
+
 def reconhecer_aluno_por_bytes(image_bytes: bytes, face_match_threshold: int = 80) -> str | None:
     """
     Reconhece um aluno a partir dos bytes de uma imagem.
