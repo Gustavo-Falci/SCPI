@@ -25,12 +25,34 @@ logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 
+def _build_database_url() -> str:
+    """Monta a URL do PostgreSQL a partir de variáveis de ambiente.
+
+    Falha imediatamente se qualquer variável obrigatória estiver ausente —
+    nunca deve haver credenciais hardcoded no código-fonte.
+    """
+    from urllib.parse import quote_plus
+
+    required = ["DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"]
+    missing = [var for var in required if not os.getenv(var)]
+    if missing:
+        raise RuntimeError(
+            f"Variáveis de ambiente obrigatórias não configuradas: {', '.join(missing)}. "
+            "Configure-as no arquivo BackEnd/.env antes de iniciar a aplicação."
+        )
+
+    host = os.getenv("DB_HOST")
+    port = os.getenv("DB_PORT")
+    name = os.getenv("DB_NAME")
+    user = quote_plus(os.getenv("DB_USER"))
+    password = quote_plus(os.getenv("DB_PASSWORD"))
+    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+
+
 def get_db_connection():
     """Cria uma conexão crua com o banco."""
-    # Hardcoded para desenvolvimento, idealmente viria de um .env funcional
-    DATABASE_URL = "postgresql://postgres:adminpostgres%40@168.138.134.208:5432/scpi_db"
     try:
-        conn = psycopg2.connect(DATABASE_URL)
+        conn = psycopg2.connect(_build_database_url())
 
         # Se for pg8000 (psycopg2 fake), não suporta cursor_factory no connect
         # Mas vamos lidar com Dicts manualmente se precisar ou usar wrapper

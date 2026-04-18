@@ -7,16 +7,49 @@ load_dotenv(override=True)
 # em ambientes onde o diretório de trabalho não é a raiz do projeto.
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+import logging
 import shutil
 import os
 import subprocess
 import signal
 import atexit
 from typing import List, Optional
+
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("scpi.api")
+audit_logger = logging.getLogger("scpi.audit")
+
+# ---- Upload policy ----
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
+ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/jpg", "image/png"}
+
+
+async def validate_image_upload(foto: UploadFile) -> bytes:
+    """Valida content-type e tamanho da imagem, retornando os bytes já lidos.
+
+    Deve ser chamada antes de qualquer gravação em disco/S3.
+    """
+    if foto.content_type not in ALLOWED_IMAGE_MIMES:
+        raise HTTPException(status_code=400, detail="Apenas imagens JPEG ou PNG são permitidas.")
+    content = await foto.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Imagem muito grande (limite: 5 MB).")
+    if not content:
+        raise HTTPException(status_code=400, detail="Arquivo de imagem vazio.")
+    return content
+
+
+def internal_error(exc: Exception, context: str = "unknown") -> HTTPException:
+    """Loga internamente a exceção e devolve 500 genérico ao cliente (sem vazar stack)."""
+    logger.exception("Erro interno em %s: %s", context, exc)
+    return HTTPException(status_code=500, detail="Erro interno do servidor.")
 
 from db_operacoes import listar_turmas_professor, cadastrar_novo_aluno, buscar_usuario_por_email, criar_usuario_completo, obter_professor_id
 from rekognition_aws import indexar_rosto_da_imagem_s3, reconhecer_aluno_por_bytes, deletar_rosto
@@ -25,9 +58,80 @@ from db_operacoes import registrar_presenca_por_face
 from aws_clientes import s3_client
 from config import BUCKET_NAME
 from utils import formatar_nome_para_external_id
-from auth_utils import verify_password, get_password_hash, create_access_token, decode_access_token
+from auth_utils import (
+    verify_password,
+    get_password_hash,
+    create_access_token,
+    decode_access_token,
+    create_refresh_token,
+    hash_refresh_token,
+    REFRESH_TOKEN_EXPIRE_DAYS,
+)
 
 app = FastAPI()
+
+
+def _ensure_lgpd_columns():
+    """Adiciona colunas de consentimento/revogação de biometria (idempotente)."""
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                ALTER TABLE Colecao_Rostos
+                ADD COLUMN IF NOT EXISTS consentimento_biometrico BOOLEAN NOT NULL DEFAULT FALSE
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE Colecao_Rostos
+                ADD COLUMN IF NOT EXISTS consentimento_data TIMESTAMP NULL
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE Colecao_Rostos
+                ADD COLUMN IF NOT EXISTS revogado_em TIMESTAMP NULL
+                """
+            )
+    except Exception as e:
+        logger.error("Falha ao aplicar colunas LGPD: %s", e)
+
+
+def _ensure_refresh_tokens_table():
+    """Cria a tabela RefreshTokens se ainda não existir.
+
+    Guarda apenas o hash SHA-256 do token opaco — o plain nunca é persistido.
+    """
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS RefreshTokens (
+                    token_hash VARCHAR(128) PRIMARY KEY,
+                    usuario_id VARCHAR(64) NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    revoked_at TIMESTAMP NULL
+                )
+                """
+            )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_refresh_usuario ON RefreshTokens (usuario_id)"
+            )
+    except Exception as e:
+        logger.error("Falha ao criar tabela RefreshTokens: %s", e)
+
+
+@app.on_event("startup")
+def _on_startup():
+    _ensure_refresh_tokens_table()
+    _ensure_lgpd_columns()
+
+
+# ---- Rate limiting (por IP) ----
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # --- GERENCIAMENTO DE PROCESSO DE RECONHECIMENTO ---
 processo_camera = None
@@ -52,33 +156,64 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         )
     return payload
 
-# Configuração de CORS (Para o React Native conseguir acessar)
+
+def require_role(*roles: str):
+    """Dependency factory: exige que o usuário autenticado tenha uma das roles informadas."""
+    def _checker(current_user: dict = Depends(get_current_user)):
+        if current_user.get("role") not in roles:
+            raise HTTPException(status_code=403, detail="Acesso negado para este perfil.")
+        return current_user
+    return _checker
+
+
+def require_self_or_admin(usuario_id: str, current_user: dict) -> None:
+    """Garante que o usuário autenticado é o dono do recurso ou um Admin."""
+    if current_user.get("sub") != usuario_id and current_user.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Acesso negado a este recurso.")
+
+
+# Configuração de CORS — origens vêm de ALLOWED_ORIGINS (separadas por vírgula)
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
+if _raw_origins:
+    _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+else:
+    # Fallback apenas para desenvolvimento local (não inclui wildcard)
+    _allowed_origins = [
+        "http://localhost:8081",
+        "http://localhost:19006",
+        "http://localhost:3000",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
 class UsuarioRegistro(BaseModel):
-    nome: str
-    email: str
-    senha: str
-    tipo_usuario: str # 'Professor' ou 'Aluno'
-    # Campos opcionais dependendo do tipo
-    ra: Optional[str] = None
-    departamento: Optional[str] = None
+    nome: str = Field(..., min_length=3, max_length=100)
+    email: EmailStr
+    senha: str = Field(..., min_length=8, max_length=128)
+    tipo_usuario: str = Field(..., pattern=r"^(Professor|Aluno|Admin)$")
+    ra: Optional[str] = Field(None, pattern=r"^[A-Za-z0-9]{4,20}$")
+    departamento: Optional[str] = Field(None, max_length=100)
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
     user_role: str
     user_id: str
     user_name: str
     user_email: str
     user_ra: Optional[str] = None
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=16, max_length=256)
 
 class ChamadaAbrir(BaseModel):
     turma_id: str
@@ -90,8 +225,7 @@ def teste_reload():
 # --- ENDPOINTS ADMINISTRATIVOS ---
 
 @app.get("/admin/professores")
-def admin_listar_professores(current_user: dict = Depends(get_current_user)):
-    # Em um sistema real, verificaríamos se current_user['role'] == 'Admin'
+def admin_listar_professores(current_user: dict = Depends(require_role("Admin"))):
     try:
         with get_db_cursor() as cur:
             cur.execute("""
@@ -102,10 +236,10 @@ def admin_listar_professores(current_user: dict = Depends(get_current_user)):
             """)
             return cur.fetchall()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 @app.get("/admin/turmas-completas")
-def admin_listar_turmas(current_user: dict = Depends(get_current_user)):
+def admin_listar_turmas(current_user: dict = Depends(require_role("Admin"))):
     try:
         with get_db_cursor() as cur:
             cur.execute("""
@@ -118,19 +252,19 @@ def admin_listar_turmas(current_user: dict = Depends(get_current_user)):
             """)
             return cur.fetchall()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 class TurmaCreate(BaseModel):
-    professor_id: str
-    codigo_turma: str
-    nome_disciplina: str
-    periodo_letivo: str
-    sala_padrao: str
-    turno: str
-    semestre: str
+    professor_id: str = Field(..., min_length=1, max_length=64)
+    codigo_turma: str = Field(..., min_length=1, max_length=30)
+    nome_disciplina: str = Field(..., min_length=2, max_length=120)
+    periodo_letivo: str = Field(..., min_length=1, max_length=20)
+    sala_padrao: str = Field(..., min_length=1, max_length=30)
+    turno: str = Field(..., pattern=r"^(Matutino|Vespertino|Noturno|Integral)$")
+    semestre: str = Field(..., min_length=1, max_length=10)
 
 @app.post("/admin/turmas")
-def admin_criar_turma(turma: TurmaCreate, current_user: dict = Depends(get_current_user)):
+def admin_criar_turma(turma: TurmaCreate, current_user: dict = Depends(require_role("Admin"))):
     try:
         import uuid
         turma_id = str(uuid.uuid4())
@@ -142,17 +276,17 @@ def admin_criar_turma(turma: TurmaCreate, current_user: dict = Depends(get_curre
             """, (turma_id, turma.professor_id, turma.codigo_turma, turma.nome_disciplina, turma.periodo_letivo, turma.sala_padrao, turma.turno, turma.semestre))
             return {"mensagem": "Turma criada com sucesso!", "turma_id": turma_id}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 class HorarioCreate(BaseModel):
-    turma_id: str
-    dia_semana: int # 0-6
-    horario_inicio: str # "HH:MM"
-    horario_fim: str # "HH:MM"
-    sala: str
+    turma_id: str = Field(..., min_length=1, max_length=64)
+    dia_semana: int = Field(..., ge=0, le=6)
+    horario_inicio: str = Field(..., pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    horario_fim: str = Field(..., pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    sala: str = Field(..., min_length=1, max_length=30)
 
 @app.post("/admin/horarios")
-def admin_adicionar_horario(h: HorarioCreate, current_user: dict = Depends(get_current_user)):
+def admin_adicionar_horario(h: HorarioCreate, current_user: dict = Depends(require_role("Admin"))):
     try:
         with get_db_cursor(commit=True) as cur:
             cur.execute("""
@@ -161,10 +295,10 @@ def admin_adicionar_horario(h: HorarioCreate, current_user: dict = Depends(get_c
             """, (h.turma_id, h.dia_semana, h.horario_inicio, h.horario_fim, h.sala))
             return {"mensagem": "Horário adicionado com sucesso!"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 @app.delete("/admin/turmas/{turma_id}")
-def admin_excluir_turma(turma_id: str, current_user: dict = Depends(get_current_user)):
+def admin_excluir_turma(turma_id: str, current_user: dict = Depends(require_role("Admin"))):
     try:
         with get_db_cursor(commit=True) as cur:
             # Exclui horários primeiro por causa da constraint
@@ -173,10 +307,10 @@ def admin_excluir_turma(turma_id: str, current_user: dict = Depends(get_current_
             cur.execute("DELETE FROM Turmas WHERE turma_id = %s", (turma_id,))
             return {"mensagem": "Turma e dependências excluídas com sucesso!"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 @app.get("/admin/horarios-todos")
-def admin_listar_todos_horarios(current_user: dict = Depends(get_current_user)):
+def admin_listar_todos_horarios(current_user: dict = Depends(require_role("Admin"))):
     try:
         with get_db_cursor() as cur:
             cur.execute("""
@@ -189,23 +323,23 @@ def admin_listar_todos_horarios(current_user: dict = Depends(get_current_user)):
             """)
             return cur.fetchall()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 @app.delete("/admin/horarios/{horario_id}")
-def admin_excluir_horario(horario_id: int, current_user: dict = Depends(get_current_user)):
+def admin_excluir_horario(horario_id: int, current_user: dict = Depends(require_role("Admin"))):
     try:
         with get_db_cursor(commit=True) as cur:
             cur.execute("DELETE FROM horarios_aulas WHERE horario_id = %s", (horario_id,))
             return {"mensagem": "Horário removido!"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 class MatricularAlunos(BaseModel):
     aluno_ids: List[str]
 
 
 @app.get("/admin/alunos")
-def admin_listar_alunos(turma_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+def admin_listar_alunos(turma_id: Optional[str] = None, current_user: dict = Depends(require_role("Admin"))):
     """
     Lista todos os alunos cadastrados. Se `turma_id` for informado, também
     marca cada aluno com `ja_matriculado=True/False` para a turma em questão.
@@ -233,11 +367,11 @@ def admin_listar_alunos(turma_id: Optional[str] = None, current_user: dict = Dep
                 """)
             return cur.fetchall()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 
 @app.post("/admin/turmas/{turma_id}/matricular-alunos")
-def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos, current_user: dict = Depends(get_current_user)):
+def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos, current_user: dict = Depends(require_role("Admin"))):
     """
     Matricula um ou mais alunos já cadastrados em uma turma.
     Idempotente: alunos já matriculados são ignorados silenciosamente.
@@ -257,11 +391,11 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos, current_user
                     matriculados += 1
         return {"mensagem": f"{matriculados} aluno(s) matriculado(s) com sucesso.", "total_enviados": len(dados.aluno_ids)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 
 @app.post("/admin/turmas/{turma_id}/importar-alunos")
-async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...), current_user: dict = Depends(require_role("Admin"))):
     try:
         import csv
         import io
@@ -330,7 +464,7 @@ async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...),
 
         return {"mensagem": f"Importação concluída: {importados} alunos matriculados.", "erros": erros}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 @app.get("/")
 def home():
@@ -339,7 +473,8 @@ def home():
 # --- ENDPOINTS DE AUTENTICAÇÃO ---
 
 @app.post("/auth/register")
-def register(usuario: UsuarioRegistro):
+@limiter.limit("5/minute")
+def register(request: Request, usuario: UsuarioRegistro):
     # 1. Verificar se usuário já existe
     user_existente = buscar_usuario_por_email(usuario.email.strip())
     if user_existente:
@@ -373,12 +508,15 @@ def register(usuario: UsuarioRegistro):
 
 
 @app.post("/auth/register-aluno-com-face")
+@limiter.limit("5/minute")
 async def register_aluno_com_face(
-    nome: str = Form(...),
-    email: str = Form(...),
-    senha: str = Form(...),
-    ra: str = Form(...),
-    foto: UploadFile = File(...)
+    request: Request,
+    nome: str = Form(..., min_length=3, max_length=100),
+    email: EmailStr = Form(...),
+    senha: str = Form(..., min_length=8, max_length=128),
+    ra: str = Form(..., pattern=r"^[A-Za-z0-9]{4,20}$"),
+    foto: UploadFile = File(...),
+    consentimento_biometrico: bool = Form(...),
 ):
     """
     Cadastro atômico de Aluno: a face é validada no Rekognition ANTES
@@ -386,21 +524,33 @@ async def register_aluno_com_face(
     """
     import uuid as _uuid
 
+    if not consentimento_biometrico:
+        raise HTTPException(
+            status_code=400,
+            detail="É necessário consentimento explícito para processar dados biométricos (LGPD art. 11).",
+        )
+
     email_limpo = email.strip()
     if not ra:
         raise HTTPException(status_code=400, detail="RA é obrigatório para alunos.")
     if buscar_usuario_por_email(email_limpo):
         raise HTTPException(status_code=400, detail="Email já cadastrado.")
 
+    # Valida tipo e tamanho ANTES de gravar em disco
+    image_bytes = await validate_image_upload(foto)
+
+    import uuid as _uuid_fname
+    ext = ".jpg" if foto.content_type in {"image/jpeg", "image/jpg"} else ".png"
+    safe_basename = f"{_uuid_fname.uuid4().hex}{ext}"
     external_id = formatar_nome_para_external_id(nome)
-    s3_filename = f"alunos/{external_id}_{foto.filename}"
-    temp_file = f"temp_{foto.filename}"
+    s3_filename = f"alunos/{external_id}_{safe_basename}"
+    temp_file = f"temp_{safe_basename}"
     face_id_indexado = None
 
     try:
         # 1. Salvar arquivo temporário e enviar ao S3
         with open(temp_file, "wb") as buffer:
-            shutil.copyfileobj(foto.file, buffer)
+            buffer.write(image_bytes)
         s3_client.upload_file(temp_file, BUCKET_NAME, s3_filename)
 
         # 2. Validar face no Rekognition ANTES de tocar no banco
@@ -435,15 +585,18 @@ async def register_aluno_com_face(
                 )
                 cur.execute(
                     """
-                    INSERT INTO Colecao_Rostos (aluno_id, external_image_id, face_id_rekognition, s3_path_cadastro)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO Colecao_Rostos (
+                        aluno_id, external_image_id, face_id_rekognition, s3_path_cadastro,
+                        consentimento_biometrico, consentimento_data
+                    )
+                    VALUES (%s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
                     """,
                     (aluno_uuid, external_id, face_id_indexado, s3_filename),
                 )
         except Exception as db_err:
             # Rollback do rosto na AWS para não deixar lixo órfão
             deletar_rosto(face_id_indexado)
-            raise HTTPException(status_code=500, detail=f"Erro ao gravar no banco: {db_err}")
+            raise internal_error(db_err, "register_aluno_com_face.db_insert")
 
         return {"status": "sucesso", "mensagem": "Conta criada com biometria facial!"}
 
@@ -452,14 +605,15 @@ async def register_aluno_com_face(
     except Exception as e:
         if face_id_indexado:
             deletar_rosto(face_id_indexado)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
     finally:
         if os.path.exists(temp_file):
             os.remove(temp_file)
 
 
 @app.post("/auth/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
+@limiter.limit("10/minute")
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     # Remove espaços em branco do email para evitar erros de digitação
     email_limpo = form_data.username.strip()
 
@@ -469,19 +623,36 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
         user = cur.fetchone()
 
     if not user:
+        audit_logger.warning("Login falhou (usuário inexistente) email=%s ip=%s", email_limpo, request.client.host)
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
     # Tenta verificar como Bcrypt ou PBKDF2
     try:
         senha_valida = verify_password(form_data.password, user['senha'])
     except Exception:
-        senha_valida = (form_data.password == user['senha'])
+        senha_valida = False
 
     if not senha_valida:
-         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+        audit_logger.warning("Login falhou (senha incorreta) email=%s ip=%s", email_limpo, request.client.host)
+        raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
-    # Gerar Token
+    audit_logger.info("Login ok email=%s role=%s ip=%s", email_limpo, user['tipo_usuario'], request.client.host)
+
+    # Gerar Token de acesso (curta duração) e refresh token (longa duração, opaco)
     access_token = create_access_token(data={"sub": str(user['usuario_id']), "email": user['email'], "role": user['tipo_usuario']})
+    refresh_plain, refresh_hash, refresh_exp = create_refresh_token()
+
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                INSERT INTO RefreshTokens (token_hash, usuario_id, expires_at)
+                VALUES (%s, %s, %s)
+                """,
+                (refresh_hash, str(user['usuario_id']), refresh_exp),
+            )
+    except Exception as e:
+        raise internal_error(e, "login.persist_refresh_token")
 
     # Busca RA se for aluno
     ra = None
@@ -494,6 +665,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
     return {
         "access_token": access_token,
+        "refresh_token": refresh_plain,
         "token_type": "bearer",
         "user_role": user['tipo_usuario'],
         "user_id": str(user['usuario_id']),
@@ -503,8 +675,81 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
     }
 
 
+@app.post("/auth/refresh")
+@limiter.limit("30/minute")
+def refresh_access_token(request: Request, body: RefreshRequest):
+    """Troca um refresh token válido por um novo access token (rotação)."""
+    token_hash = hash_refresh_token(body.refresh_token)
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                SELECT rt.usuario_id, rt.expires_at, rt.revoked_at,
+                       u.email, u.tipo_usuario
+                FROM RefreshTokens rt
+                JOIN Usuarios u ON u.usuario_id::text = rt.usuario_id
+                WHERE rt.token_hash = %s
+                """,
+                (token_hash,),
+            )
+            row = cur.fetchone()
+
+            if not row or row.get("revoked_at") is not None:
+                raise HTTPException(status_code=401, detail="Refresh token inválido.")
+
+            import datetime as _dt
+            if row["expires_at"] < _dt.datetime.utcnow():
+                raise HTTPException(status_code=401, detail="Refresh token expirado.")
+
+            # Rotação: revoga o atual e emite um novo
+            cur.execute(
+                "UPDATE RefreshTokens SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = %s",
+                (token_hash,),
+            )
+            new_plain, new_hash, new_exp = create_refresh_token()
+            cur.execute(
+                "INSERT INTO RefreshTokens (token_hash, usuario_id, expires_at) VALUES (%s, %s, %s)",
+                (new_hash, row["usuario_id"], new_exp),
+            )
+
+            access_token = create_access_token(
+                data={"sub": row["usuario_id"], "email": row["email"], "role": row["tipo_usuario"]}
+            )
+
+            return {
+                "access_token": access_token,
+                "refresh_token": new_plain,
+                "token_type": "bearer",
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "refresh_access_token")
+
+
+@app.post("/auth/logout")
+def logout(body: RefreshRequest, current_user: dict = Depends(get_current_user)):
+    """Revoga o refresh token informado. Access token continua válido até expirar naturalmente."""
+    token_hash = hash_refresh_token(body.refresh_token)
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                UPDATE RefreshTokens
+                SET revoked_at = CURRENT_TIMESTAMP
+                WHERE token_hash = %s AND usuario_id = %s AND revoked_at IS NULL
+                """,
+                (token_hash, current_user.get("sub")),
+            )
+        audit_logger.info("Logout usuario=%s", current_user.get("sub"))
+        return {"mensagem": "Sessão encerrada."}
+    except Exception as e:
+        raise internal_error(e, "logout")
+
+
 @app.get("/aluno/dashboard/{usuario_id}")
 def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    require_self_or_admin(usuario_id, current_user)
     try:
         with get_db_cursor() as cur:
             # 1. Nome do aluno
@@ -557,11 +802,12 @@ def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_curren
                 "aulas_hoje": aulas_hoje
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 
 @app.get("/aluno/frequencias/{usuario_id}")
 def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    require_self_or_admin(usuario_id, current_user)
     try:
         with get_db_cursor() as cur:
             # 1. Busca Aluno ID
@@ -615,11 +861,12 @@ def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get
                 "frequencias": frequencias
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 
 @app.get("/professor/dashboard/{usuario_id}")
 def get_dashboard(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    require_self_or_admin(usuario_id, current_user)
     try:
         with get_db_cursor() as cur:
             # 1. Nome do professor
@@ -671,12 +918,13 @@ def get_dashboard(usuario_id: str, current_user: dict = Depends(get_current_user
                 "aulas_hoje": aulas_hoje
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 
 @app.get("/turmas/{usuario_id}")
-def get_turmas(usuario_id: str):
+def get_turmas(usuario_id: str, current_user: dict = Depends(get_current_user)):
     """Retorna as turmas de um professor com flag indicando se está no horário de aula."""
+    require_self_or_admin(usuario_id, current_user)
     try:
         import datetime
         agora = datetime.datetime.now()
@@ -725,14 +973,42 @@ def get_turmas(usuario_id: str):
 
             return {"turmas": list(turmas_dict.values())}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 @app.get("/turmas/{turma_id}/alunos")
 def get_alunos_turma(turma_id: str, current_user: dict = Depends(get_current_user)):
     try:
         with get_db_cursor() as cur:
+            # Autorização: Admin sempre; Professor precisa ser dono da turma;
+            # Aluno precisa estar matriculado na turma.
+            role = current_user.get("role")
+            if role == "Professor":
+                cur.execute(
+                    """
+                    SELECT 1 FROM Turmas t
+                    JOIN Professores p ON t.professor_id = p.professor_id
+                    WHERE t.turma_id = %s AND p.usuario_id = %s
+                    """,
+                    (turma_id, current_user.get("sub")),
+                )
+                if not cur.fetchone():
+                    raise HTTPException(status_code=403, detail="Professor não é responsável por esta turma.")
+            elif role == "Aluno":
+                cur.execute(
+                    """
+                    SELECT 1 FROM Turma_Alunos ta
+                    JOIN Alunos a ON ta.aluno_id = a.aluno_id
+                    WHERE ta.turma_id = %s AND a.usuario_id = %s
+                    """,
+                    (turma_id, current_user.get("sub")),
+                )
+                if not cur.fetchone():
+                    raise HTTPException(status_code=403, detail="Aluno não matriculado nesta turma.")
+            elif role != "Admin":
+                raise HTTPException(status_code=403, detail="Acesso negado.")
+
             cur.execute("""
-                SELECT 
+                SELECT
                     a.aluno_id as id,
                     u.nome,
                     u.email,
@@ -745,21 +1021,41 @@ def get_alunos_turma(turma_id: str, current_user: dict = Depends(get_current_use
             """, (turma_id,))
             alunos = cur.fetchall()
             return {"alunos": alunos}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e)
 
 
 @app.post("/alunos/cadastrar-face")
+@limiter.limit("10/minute")
 async def cadastrar_aluno_api(
+    request: Request,
     user_id: Optional[str] = Form(None),
-    nome: str = Form(...),
-    email: str = Form(...),
-    ra: str = Form(...),
-    foto: UploadFile = File(...)
+    nome: str = Form(..., min_length=3, max_length=100),
+    email: EmailStr = Form(...),
+    ra: str = Form(..., pattern=r"^[A-Za-z0-9]{4,20}$"),
+    foto: UploadFile = File(...),
+    consentimento_biometrico: bool = Form(...),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Recebe dados e foto do App, salva no S3, indexa no Rekognition e salva no Banco.
     """
+    if not consentimento_biometrico:
+        raise HTTPException(
+            status_code=400,
+            detail="É necessário consentimento explícito para processar dados biométricos (LGPD art. 11).",
+        )
+
+    # Valida tipo e tamanho da imagem primeiro
+    image_bytes = await validate_image_upload(foto)
+
+    import uuid as _uuid_fname
+    ext = ".jpg" if foto.content_type in {"image/jpeg", "image/jpg"} else ".png"
+    safe_basename = f"{_uuid_fname.uuid4().hex}{ext}"
+    temp_file = f"temp_{safe_basename}"
+
     try:
         # 1. Localizar o Aluno (por ID ou por Email/RA)
         with get_db_cursor() as cur:
@@ -767,23 +1063,28 @@ async def cadastrar_aluno_api(
                 cur.execute("SELECT u.usuario_id FROM Usuarios u WHERE u.usuario_id = %s", (user_id,))
             else:
                 cur.execute("SELECT u.usuario_id FROM Usuarios u WHERE u.email = %s", (email,))
-            
+
             user = cur.fetchone()
             if not user:
                 raise HTTPException(status_code=404, detail="Usuário não localizado para vincular face.")
-            
+
             target_user_id = user['usuario_id']
 
-        # 2. Preparar ID único 
+        # Autorização: Aluno só pode cadastrar a própria face; Admin libera geral.
+        if current_user.get("role") == "Aluno" and str(target_user_id) != current_user.get("sub"):
+            raise HTTPException(status_code=403, detail="Aluno só pode cadastrar a própria face.")
+        if current_user.get("role") not in {"Aluno", "Admin"}:
+            raise HTTPException(status_code=403, detail="Acesso negado.")
+
+        # 2. Preparar ID único
         external_id = formatar_nome_para_external_id(nome)
-        filename = f"alunos/{external_id}_{foto.filename}"
+        filename = f"alunos/{external_id}_{safe_basename}"
 
         # 3. Salvar arquivo temporariamente para envio
-        temp_file = f"temp_{foto.filename}"
         with open(temp_file, "wb") as buffer:
-            shutil.copyfileobj(foto.file, buffer)
+            buffer.write(image_bytes)
 
-        # 4. Upload para o S3 
+        # 4. Upload para o S3
         s3_client.upload_file(temp_file, BUCKET_NAME, filename)
         
         resultado_rekognition = indexar_rosto_da_imagem_s3(filename, external_id, detection_attributes="ALL")
@@ -809,60 +1110,197 @@ async def cadastrar_aluno_api(
             exists = cur.fetchone()
 
             if exists:
-                # Se existe, atualiza
+                # Se existe, atualiza — renova consentimento e limpa revogação anterior
                 cur.execute("""
-                    UPDATE Colecao_Rostos 
+                    UPDATE Colecao_Rostos
                     SET external_image_id = %s,
                         face_id_rekognition = %s,
-                        s3_path_cadastro = %s
+                        s3_path_cadastro = %s,
+                        consentimento_biometrico = TRUE,
+                        consentimento_data = CURRENT_TIMESTAMP,
+                        revogado_em = NULL
                     WHERE aluno_id = %s
                 """, (external_id, face_id, filename, aluno_id))
             else:
-                # Se não existe, insere novo
                 cur.execute("""
-                    INSERT INTO Colecao_Rostos (aluno_id, external_image_id, face_id_rekognition, s3_path_cadastro)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO Colecao_Rostos (
+                        aluno_id, external_image_id, face_id_rekognition, s3_path_cadastro,
+                        consentimento_biometrico, consentimento_data
+                    )
+                    VALUES (%s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
                 """, (aluno_id, external_id, face_id, filename))
 
             os.remove(temp_file)
             return {"status": "sucesso", "face_id": face_id, "external_id": external_id}
 
+    except HTTPException:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        raise
     except Exception as e:
-        if os.path.exists(f"temp_{foto.filename}"):
-            os.remove(f"temp_{foto.filename}")
-        raise HTTPException(status_code=500, detail=str(e))
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        raise internal_error(e, "cadastrar_aluno_api")
+
+def _gerar_url_presigned(s3_key: str, expira_segundos: int = 300) -> Optional[str]:
+    """Gera URL temporária para acessar objeto no S3 privado (padrão: 5 min)."""
+    if not s3_key:
+        return None
+    try:
+        return s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": BUCKET_NAME, "Key": s3_key},
+            ExpiresIn=expira_segundos,
+        )
+    except Exception as e:
+        logger.error("Erro ao gerar URL presigned: %s", e)
+        return None
+
+
+@app.get("/aluno/biometria-foto/{usuario_id}")
+def obter_foto_biometria(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    """Retorna URL temporária (presigned) da foto cadastrada — só dono ou Admin."""
+    require_self_or_admin(usuario_id, current_user)
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT cr.s3_path_cadastro
+                FROM Colecao_Rostos cr
+                JOIN Alunos a ON cr.aluno_id = a.aluno_id
+                WHERE a.usuario_id = %s AND cr.revogado_em IS NULL
+                """,
+                (usuario_id,),
+            )
+            row = cur.fetchone()
+            if not row or not row.get("s3_path_cadastro"):
+                raise HTTPException(status_code=404, detail="Biometria não encontrada.")
+            url = _gerar_url_presigned(row["s3_path_cadastro"])
+            if not url:
+                raise HTTPException(status_code=500, detail="Falha ao gerar URL temporária.")
+            return {"url": url, "expira_em_segundos": 300}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "obter_foto_biometria")
+
+
+# --- LGPD: REVOGAÇÃO DE BIOMETRIA ---
+
+@app.delete("/aluno/biometria/{usuario_id}")
+def revogar_biometria(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    Permite ao aluno (ou Admin) revogar o consentimento e apagar a biometria cadastrada.
+    Remove a face no Rekognition, marca o registro como revogado e limpa o S3.
+    """
+    require_self_or_admin(usuario_id, current_user)
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("SELECT aluno_id FROM Alunos WHERE usuario_id = %s", (usuario_id,))
+            aluno = cur.fetchone()
+            if not aluno:
+                raise HTTPException(status_code=404, detail="Aluno não encontrado.")
+
+            cur.execute(
+                """
+                SELECT face_id_rekognition, s3_path_cadastro
+                FROM Colecao_Rostos
+                WHERE aluno_id = %s AND revogado_em IS NULL
+                """,
+                (aluno["aluno_id"],),
+            )
+            rosto = cur.fetchone()
+            if not rosto:
+                raise HTTPException(status_code=404, detail="Nenhuma biometria ativa para este aluno.")
+
+            try:
+                deletar_rosto(rosto["face_id_rekognition"])
+            except Exception as e:
+                logger.warning("Falha ao deletar face no Rekognition: %s", e)
+
+            try:
+                if rosto.get("s3_path_cadastro"):
+                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=rosto["s3_path_cadastro"])
+            except Exception as e:
+                logger.warning("Falha ao deletar objeto no S3: %s", e)
+
+            cur.execute(
+                """
+                UPDATE Colecao_Rostos
+                SET revogado_em = CURRENT_TIMESTAMP,
+                    consentimento_biometrico = FALSE,
+                    face_id_rekognition = NULL,
+                    s3_path_cadastro = NULL
+                WHERE aluno_id = %s
+                """,
+                (aluno["aluno_id"],),
+            )
+
+        audit_logger.info("Biometria revogada usuario=%s por=%s", usuario_id, current_user.get("sub"))
+        return {"mensagem": "Biometria revogada e removida com sucesso."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "revogar_biometria")
+
 
 # --- ENDPOINTS DE CHAMADAS ---
 
 @app.post("/chamadas/abrir")
-def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") != "Professor":
-        raise HTTPException(status_code=403, detail="Apenas professores podem abrir chamadas.")
-    
+def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role("Professor"))):
+    import datetime
+
     usuario_id = current_user.get("sub")
     professor_id = obter_professor_id(usuario_id)
-    
+
     if not professor_id:
         raise HTTPException(status_code=404, detail="Professor não encontrado no banco.")
 
     try:
         with get_db_cursor(commit=True) as cur:
             if not cur: raise Exception("Erro ao conectar no banco")
-            
-            # Fecha qualquer chamada aberta desta turma
+
+            # 1. Professor precisa ser dono da turma
+            cur.execute(
+                "SELECT 1 FROM Turmas WHERE turma_id = %s AND professor_id = %s",
+                (dados.turma_id, professor_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=403, detail="Você não é o professor responsável por esta turma.")
+
+            # 2. Precisa existir um horário de aula ativo AGORA para essa turma
+            agora = datetime.datetime.now()
+            cur.execute(
+                """
+                SELECT 1 FROM horarios_aulas
+                WHERE turma_id = %s
+                  AND dia_semana = %s
+                  AND horario_inicio <= %s
+                  AND horario_fim   >= %s
+                """,
+                (dados.turma_id, agora.weekday(), agora.time(), agora.time()),
+            )
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=403,
+                    detail="Fora do horário de aula. A chamada só pode ser aberta durante o período letivo desta turma.",
+                )
+
+            # 3. Fecha qualquer chamada aberta desta turma
             cur.execute("""
-                UPDATE Chamadas SET status='Fechada', horario_fim=CURRENT_TIME 
+                UPDATE Chamadas SET status='Fechada', horario_fim=CURRENT_TIME
                 WHERE turma_id=%s AND status='Aberta'
             """, (dados.turma_id,))
-            
-            # Abre nova chamada
+
+            # 4. Abre nova chamada
             cur.execute("""
                 INSERT INTO Chamadas (turma_id, professor_id, data_chamada, horario_inicio, status)
                 VALUES (%s, %s, CURRENT_DATE, CURRENT_TIME, 'Aberta')
                 RETURNING chamada_id
             """, (dados.turma_id, professor_id))
-            
+
             nova_chamada = cur.fetchone()
+            audit_logger.info("Chamada aberta turma=%s professor=%s", dados.turma_id, professor_id)
 
             # Iniciar reconhecimento facial automaticamente (Headless)
             global processo_camera
@@ -872,15 +1310,14 @@ def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(get_current_
                 print(f"Processo de reconhecimento iniciado (PID: {processo_camera.pid})")
 
             return {"mensagem": "Chamada aberta com sucesso!", "chamada_id": nova_chamada['chamada_id']}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao abrir chamada: {str(e)}")
+        raise internal_error(e, "abrir_chamada")
 
 
 @app.post("/chamadas/fechar/{turma_id}")
-def fechar_chamada(turma_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") != "Professor":
-        raise HTTPException(status_code=403, detail="Apenas professores podem fechar chamadas.")
-
+def fechar_chamada(turma_id: str, current_user: dict = Depends(require_role("Professor"))):
     try:
         with get_db_cursor(commit=True) as cur:
             if not cur: raise Exception("Erro ao conectar no banco")
@@ -899,7 +1336,7 @@ def fechar_chamada(turma_id: str, current_user: dict = Depends(get_current_user)
 
             return {"mensagem": "Chamada encerrada com sucesso!"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao fechar chamada: {str(e)}")
+        raise internal_error(e, "fechar_chamada")
 
 
 @app.get("/chamadas/status/{turma_id}")
@@ -939,7 +1376,7 @@ def status_chamada(turma_id: str, current_user: dict = Depends(get_current_user)
                 "ausentes": ausentes
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar status: {str(e)}")
+        raise internal_error(e, "status_chamada")
 
 
 @app.get("/chamadas/{chamada_id}/alunos")
@@ -965,60 +1402,47 @@ def listar_alunos_chamada(chamada_id: str, current_user: dict = Depends(get_curr
             alunos = cur.fetchall()
             return {"alunos": alunos}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar alunos: {str(e)}")
+        raise internal_error(e, "listar_alunos_chamada")
 
 
 
 @app.post("/chamadas/registrar_rosto")
+@limiter.limit("10/minute")
 async def registrar_rosto_aluno(
+    request: Request,
     foto: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(require_role("Aluno")),
 ):
     """
     Recebe foto tirada pelo Aluno, envia pra AWS e se der match, tenta registrar presença.
     """
-    if current_user.get("role") != "Aluno":
-        raise HTTPException(status_code=403, detail="Apenas alunos podem registrar presença via rosto.")
+    image_bytes = await validate_image_upload(foto)
 
     try:
-        # Salva arquivo temp
-        temp_file = f"temp_checkin_{foto.filename}"
-        with open(temp_file, "wb") as buffer:
-            shutil.copyfileobj(foto.file, buffer)
-            
-        with open(temp_file, "rb") as image_file:
-            image_bytes = image_file.read()
-
-        # Chama a AWS
-        # A funcao buscar_faces_rekognition precisa ser ajustada para aceitar bytes no rekognition_aws.py
-        # Vamos importar a s3_client e rekognition_client
         from config import COLLECTION_ID
         from aws_clientes import rekognition_client
-        
+
         response = rekognition_client.search_faces_by_image(
             CollectionId=COLLECTION_ID,
             Image={'Bytes': image_bytes},
             MaxFaces=1,
-            FaceMatchThreshold=90
+            FaceMatchThreshold=90,
         )
-        
-        os.remove(temp_file)
 
         if not response.get('FaceMatches'):
             raise HTTPException(status_code=404, detail="Rosto não reconhecido no sistema.")
-            
+
         match = response['FaceMatches'][0]
         external_image_id = match['Face']['ExternalImageId']
-        
-        # Registra Presença
+
         sucesso = registrar_presenca_por_face(external_image_id)
-        
-        if sucesso:
-            return {"mensagem": "Presença confirmada com sucesso!", "aluno": external_image_id}
-        else:
+        if not sucesso:
             raise HTTPException(status_code=400, detail="Não foi possível registrar a presença. Verifique se há uma chamada aberta para sua turma.")
 
+        audit_logger.info("Presença registrada aluno=%s ip=%s", external_image_id, request.client.host)
+        return {"mensagem": "Presença confirmada com sucesso!", "aluno": external_image_id}
+
+    except HTTPException:
+        raise
     except Exception as e:
-        if os.path.exists(f"temp_checkin_{foto.filename}"):
-            os.remove(f"temp_checkin_{foto.filename}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "registrar_rosto_aluno")

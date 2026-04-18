@@ -22,7 +22,12 @@
       "Bash(npx obsidian-cli *)",
       "Bash(\"/c/Users/gufal/AppData/Local/Programs/Obsidian/obsidian.exe\" help *)",
       "Bash(export PATH=\"/c/Users/gufal/AppData/Local/Programs/Obsidian:$PATH\")",
-      "Bash(obsidian vault *)"
+      "Bash(obsidian vault *)",
+      "Bash(grep -i \"\\\\.env$\")",
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f\\).read\\(\\)\\) for f in ['api.py','database.py','auth_utils.py']] and print\\('Sintaxe OK'\\)\")",
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f\\).read\\(\\)\\) for f in ['api.py','database.py','auth_utils.py','config.py']] and print\\('Sintaxe OK'\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 python -X utf8 -c \"import ast; [ast.parse\\(open\\(f, encoding='utf-8'\\).read\\(\\)\\) for f in ['api.py','database.py','auth_utils.py','config.py']]; print\\('Sintaxe OK'\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 python -X utf8 -c \"import ast; [ast.parse\\(open\\(f, encoding='utf-8'\\).read\\(\\)\\) for f in ['api.py','auth_utils.py','database.py']]; print\\('OK'\\)\")"
     ]
   }
 }
