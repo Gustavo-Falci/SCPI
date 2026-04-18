@@ -1,9 +1,28 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx vite *)",
-      "Bash(python -c ' *)",
-      "Bash(python importar_grade.py)"
+      "Bash(obsidian help *)",
+      "Bash(where obsidian *)",
+      "Read(//c/Users/gufal/**)",
+      "Bash(npm list *)",
+      "Bash(npx obsidian *)",
+      "Bash(git *)",
+      "Bash(npx --yes obsidian@latest help)",
+      "Bash(npm search *)",
+      "Bash(OBSIDIAN_API_KEY=\"19agosto05\" obsidian help)",
+      "Bash(OBSIDIAN_API_KEY=\"19agosto05\" OBSIDIAN_API_SECRET=\"19agosto05\" obsidian help)",
+      "Bash(OBSIDIAN_API_KEY=\"claude\" OBSIDIAN_API_SECRET=\"19agosto05\" obsidian help)",
+      "Bash(OBSIDIAN_API_KEY=\"claude\" OBSIDIAN_API_SECRET=\"19agosto05\" obsidian)",
+      "Bash(OBSIDIAN_API_KEY=\"claude\" OBSIDIAN_API_SECRET=\"19agosto05\" obsidian *)",
+      "Bash(npm info *)",
+      "WebSearch",
+      "Bash(powershell.exe *)",
+      "Bash(xargs ls *)",
+      "Bash(obsidian-cli --help)",
+      "Bash(npx obsidian-cli *)",
+      "Bash(\"/c/Users/gufal/AppData/Local/Programs/Obsidian/obsidian.exe\" help *)",
+      "Bash(export PATH=\"/c/Users/gufal/AppData/Local/Programs/Obsidian:$PATH\")",
+      "Bash(obsidian vault *)"
     ]
   }
 }
