@@ -91,7 +91,7 @@ export default function Login() {
 
             <Input
               label="Senha"
-              placeholder="Sua senha secreta"
+              placeholder="Sua senha"
               value={senha}
               onChangeText={setSenha}
               secureTextEntry={!showPassword}

@@ -45,6 +45,7 @@ export default function Register() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [consentimento, setConsentimento] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -116,6 +117,7 @@ export default function Register() {
         name: filename,
         type: type,
       } as any);
+      formData.append("consentimento_biometrico", "true");
 
       await apiPostFormData("/auth/register-aluno-com-face", formData);
 
@@ -208,48 +210,82 @@ export default function Register() {
               <View style={{ width: 44 }} />
             </View>
 
-            <View style={styles.content}>
-              <View style={styles.previewCard}>
-                <MaterialCommunityIcons name="face-recognition" size={100} color={Colors.brand.primary} />
-                <Text style={styles.previewTitle}>Último Passo</Text>
-                <Text style={styles.previewSubtitle}>Sua face será indexada na AWS para garantir maior precisão no reconhecimento.</Text>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.heroSection}>
+                <View style={styles.heroIconBadge}>
+                  <MaterialCommunityIcons name="face-recognition" size={52} color={Colors.brand.primary} />
+                </View>
+                <Text style={styles.heroTitle}>Último Passo</Text>
+                <Text style={styles.heroSubtitle}>Sua face será indexada na AWS para garantir maior precisão no reconhecimento.</Text>
               </View>
 
+              <Text style={styles.faceSectionLabel}>Antes de começar</Text>
               <View style={styles.instructionsContainer}>
                 <View style={styles.instructionItem}>
                   <View style={styles.iconCircle}>
-                    <Ionicons name="sunny-outline" size={20} color={Colors.brand.primary} />
+                    <Ionicons name="sunny-outline" size={18} color={Colors.brand.primary} />
                   </View>
                   <Text style={styles.instructionText}>Procure um ambiente bem iluminado</Text>
                 </View>
 
                 <View style={styles.instructionItem}>
                   <View style={styles.iconCircle}>
-                    <Ionicons name="glasses-outline" size={20} color={Colors.brand.primary} />
+                    <Ionicons name="glasses-outline" size={18} color={Colors.brand.primary} />
                   </View>
                   <Text style={styles.instructionText}>Remova óculos escuros e máscara</Text>
                 </View>
 
                 <View style={styles.instructionItem}>
                   <View style={styles.iconCircle}>
-                    <Ionicons name="person-outline" size={20} color={Colors.brand.primary} />
+                    <Ionicons name="person-outline" size={18} color={Colors.brand.primary} />
                   </View>
                   <Text style={styles.instructionText}>Mantenha uma expressão neutra</Text>
                 </View>
               </View>
 
+              <Text style={styles.faceSectionLabel}>Privacidade</Text>
+              <View style={[styles.consentCard, consentimento && styles.consentCardActive]}>
+                <View style={styles.consentHeader}>
+                  <Ionicons name="shield-checkmark-outline" size={22} color={Colors.brand.primary} />
+                  <Text style={styles.consentTitle}>Consentimento LGPD</Text>
+                </View>
+                <Text style={styles.consentBody}>
+                  Autorizo o SCPI a coletar e processar minha imagem facial para <Text style={styles.consentBodyStrong}>controle de presença nas aulas</Text>. Os dados são armazenados de forma segura (AWS Rekognition + S3) e posso revogar este consentimento a qualquer momento pelo meu perfil. (LGPD art. 11)
+                </Text>
+                <TouchableOpacity
+                  style={styles.consentRow}
+                  onPress={() => setConsentimento((v) => !v)}
+                  activeOpacity={0.8}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <View style={[styles.checkbox, consentimento && styles.checkboxActive]}>
+                    {consentimento && <Ionicons name="checkmark" size={16} color="#fff" />}
+                  </View>
+                  <Text style={styles.consentCheckLabel}>Li e concordo com o tratamento dos meus dados biométricos.</Text>
+                </TouchableOpacity>
+              </View>
+
               <TouchableOpacity
-                style={styles.mainButton}
-                onPress={() => setCameraOpen(true)}
+                style={[styles.mainButton, !consentimento && styles.mainButtonDisabled]}
+                onPress={() => consentimento && setCameraOpen(true)}
+                disabled={!consentimento}
+                activeOpacity={0.85}
               >
                 <Ionicons name="camera" size={22} color="#fff" />
                 <Text style={styles.mainButtonText}>Cadastrar Face</Text>
               </TouchableOpacity>
+              {!consentimento && (
+                <Text style={styles.hintText}>Marque o consentimento acima para continuar</Text>
+              )}
 
-              <TouchableOpacity onPress={() => router.replace("/auth/login")} style={{ marginTop: 20, alignItems: "center" }}>
-                <Text style={{ color: '#fff', opacity: 0.7 }}>Pular por enquanto</Text>
+              <TouchableOpacity onPress={() => router.replace("/auth/login")} style={styles.skipLink}>
+                <Text style={styles.skipLinkText}>Pular por enquanto</Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </SafeAreaView>
         )}
       </View>
@@ -331,16 +367,32 @@ const styles = StyleSheet.create({
   faceHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: 60 },
   headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
   faceBackBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.brand.card, justifyContent: "center", alignItems: "center" },
-  content: { flex: 1, paddingHorizontal: 24, justifyContent: "center" },
-  previewCard: { backgroundColor: Colors.brand.card, borderRadius: 32, padding: 40, alignItems: "center", marginBottom: 40, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" },
-  previewTitle: { color: "#fff", fontSize: 22, fontWeight: "800", marginTop: 20 },
-  previewSubtitle: { color: Colors.brand.textSecondary, fontSize: 14, textAlign: "center", marginTop: 8 },
-  instructionsContainer: { gap: 16, marginBottom: 40 },
-  instructionItem: { flexDirection: "row", alignItems: "center", gap: 16 },
-  iconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(75, 57, 239, 0.1)", justifyContent: "center", alignItems: "center" },
-  instructionText: { color: Colors.brand.textSecondary, fontSize: 15, fontWeight: "500" },
-  mainButton: { backgroundColor: Colors.brand.primary, height: 60, borderRadius: 18, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 12 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 40 },
+  heroSection: { alignItems: "center", marginBottom: 28, marginTop: 8 },
+  heroIconBadge: { width: 96, height: 96, borderRadius: 48, backgroundColor: "rgba(75, 57, 239, 0.12)", justifyContent: "center", alignItems: "center", marginBottom: 16, borderWidth: 1, borderColor: "rgba(75, 57, 239, 0.25)" },
+  heroTitle: { color: "#fff", fontSize: 24, fontWeight: "800", textAlign: "center" },
+  heroSubtitle: { color: Colors.brand.textSecondary, fontSize: 14, textAlign: "center", marginTop: 6, paddingHorizontal: 16, lineHeight: 20 },
+  faceSectionLabel: { color: Colors.brand.textSecondary, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 12, marginLeft: 4 },
+  instructionsContainer: { gap: 10, marginBottom: 24 },
+  instructionItem: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "rgba(255,255,255,0.03)", paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14 },
+  iconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(75, 57, 239, 0.12)", justifyContent: "center", alignItems: "center" },
+  instructionText: { flex: 1, color: Colors.brand.text, fontSize: 14, fontWeight: "500" },
+  mainButton: { backgroundColor: Colors.brand.primary, height: 56, borderRadius: 16, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 8, shadowColor: Colors.brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  mainButtonDisabled: { opacity: 0.35, shadowOpacity: 0 },
   mainButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  hintText: { color: Colors.brand.textSecondary, fontSize: 12, textAlign: "center", marginTop: 12, fontStyle: "italic" },
+  skipLink: { marginTop: 20, alignItems: "center", paddingVertical: 8 },
+  skipLinkText: { color: "#fff", opacity: 0.6, fontSize: 14, fontWeight: "500" },
+  consentCard: { backgroundColor: Colors.brand.card, borderRadius: 18, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  consentCardActive: { borderColor: Colors.brand.primary, backgroundColor: "rgba(75, 57, 239, 0.06)" },
+  consentHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  consentTitle: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  consentBody: { color: Colors.brand.textSecondary, fontSize: 13, lineHeight: 20, marginBottom: 16 },
+  consentBodyStrong: { color: Colors.brand.text, fontWeight: "700" },
+  consentRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.06)" },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: Colors.brand.textSecondary, justifyContent: "center", alignItems: "center", marginTop: 1 },
+  checkboxActive: { backgroundColor: Colors.brand.primary, borderColor: Colors.brand.primary },
+  consentCheckLabel: { flex: 1, color: Colors.brand.text, fontSize: 13, fontWeight: "500", lineHeight: 18 },
   cameraWrapper: { flex: 1, backgroundColor: "#000" },
   scannerContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   faceFrameContainer: { width: 280, height: 420, justifyContent: "center", alignItems: "center" },

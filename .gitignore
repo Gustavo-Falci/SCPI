@@ -1,4 +1,4 @@
-vscode/
+.vscode/
 .env
 logs/
 __pycache__/
@@ -6,4 +6,5 @@ __pycache__/
 venv_new/
 .venv/
 venv/
-.openclaude-profile.json
+.openclaude/
+.claude/
