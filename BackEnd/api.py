@@ -7,7 +7,7 @@ load_dotenv(override=True)
 # em ambientes onde o diretório de trabalho não é a raiz do projeto.
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
@@ -122,10 +122,28 @@ def _ensure_refresh_tokens_table():
         logger.error("Falha ao criar tabela RefreshTokens: %s", e)
 
 
+def _ensure_push_tokens_table():
+    """Cria a tabela PushTokens para armazenar tokens Expo de notificação push."""
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS PushTokens (
+                    usuario_id VARCHAR(64) PRIMARY KEY,
+                    expo_token TEXT NOT NULL,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+    except Exception as e:
+        logger.error("Falha ao criar tabela PushTokens: %s", e)
+
+
 @app.on_event("startup")
 def _on_startup():
     _ensure_refresh_tokens_table()
     _ensure_lgpd_columns()
+    _ensure_push_tokens_table()
 
 
 # ---- Rate limiting (por IP) ----
@@ -745,6 +763,54 @@ def logout(body: RefreshRequest, current_user: dict = Depends(get_current_user))
         return {"mensagem": "Sessão encerrada."}
     except Exception as e:
         raise internal_error(e, "logout")
+
+
+class RegisterTokenBody(BaseModel):
+    expo_token: str = Field(..., min_length=10, max_length=256)
+
+
+@app.post("/notificacoes/registrar-token")
+def registrar_push_token(body: RegisterTokenBody, current_user: dict = Depends(get_current_user)):
+    """Salva ou atualiza o Expo push token do usuário autenticado."""
+    usuario_id = current_user.get("sub")
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                INSERT INTO PushTokens (usuario_id, expo_token, updated_at)
+                VALUES (%s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (usuario_id) DO UPDATE
+                    SET expo_token = EXCLUDED.expo_token,
+                        updated_at = CURRENT_TIMESTAMP
+                """,
+                (usuario_id, body.expo_token),
+            )
+        logger.info("Push token registrado para usuario=%s", usuario_id)
+        return {"mensagem": "Token registrado com sucesso."}
+    except Exception as e:
+        raise internal_error(e, "registrar_push_token")
+
+
+def _enviar_notificacoes_presenca(usuario_id: str, aluno_nome: str, aluno_email: str, turma_nome: str) -> None:
+    """Tarefa de background: dispara push + email após confirmação de presença."""
+    from notificacoes import send_expo_push, send_email_resend
+    import datetime
+
+    hora = datetime.datetime.now().strftime("%H:%M")
+
+    if usuario_id:
+        try:
+            with get_db_cursor() as cur:
+                cur.execute("SELECT expo_token FROM PushTokens WHERE usuario_id = %s", (usuario_id,))
+                row = cur.fetchone()
+                if row:
+                    send_expo_push([row["expo_token"]], "Presença Confirmada ✓",
+                                   f"Sua presença em {turma_nome} foi registrada às {hora}.")
+        except Exception as e:
+            logger.error("Erro ao enviar push: %s", e)
+
+    if aluno_email:
+        send_email_resend(aluno_email, aluno_nome, turma_nome, hora)
 
 
 @app.get("/aluno/dashboard/{usuario_id}")
@@ -1410,11 +1476,13 @@ def listar_alunos_chamada(chamada_id: str, current_user: dict = Depends(get_curr
 @limiter.limit("10/minute")
 async def registrar_rosto_aluno(
     request: Request,
+    background_tasks: BackgroundTasks,
     foto: UploadFile = File(...),
     current_user: dict = Depends(require_role("Aluno")),
 ):
     """
-    Recebe foto tirada pelo Aluno, envia pra AWS e se der match, tenta registrar presença.
+    Recebe foto tirada pelo Aluno, envia pra AWS e se der match, registra presença
+    e dispara notificações (push + email) em background.
     """
     image_bytes = await validate_image_upload(foto)
 
@@ -1435,11 +1503,20 @@ async def registrar_rosto_aluno(
         match = response['FaceMatches'][0]
         external_image_id = match['Face']['ExternalImageId']
 
-        sucesso = registrar_presenca_por_face(external_image_id)
-        if not sucesso:
+        result = registrar_presenca_por_face(external_image_id)
+        if not result:
             raise HTTPException(status_code=400, detail="Não foi possível registrar a presença. Verifique se há uma chamada aberta para sua turma.")
 
         audit_logger.info("Presença registrada aluno=%s ip=%s", external_image_id, request.client.host)
+
+        background_tasks.add_task(
+            _enviar_notificacoes_presenca,
+            result.get("usuario_id"),
+            result.get("aluno_nome", external_image_id),
+            result.get("aluno_email"),
+            result.get("turma_nome", "sua turma"),
+        )
+
         return {"mensagem": "Presença confirmada com sucesso!", "aluno": external_image_id}
 
     except HTTPException:

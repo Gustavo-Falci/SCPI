@@ -32,7 +32,14 @@
       "Bash(OBSIDIAN_API_KEY=5a660875efa754e7c1fbada74dd68a863d62e96b6365ab2bf32b90ad7fbb72ab OBSIDIAN_API_SECRET=5a660875efa754e7c1fbada74dd68a863d62e96b6365ab2bf32b90ad7fbb72ab obsidian vault=CLAUDE *)",
       "Bash(OBSIDIAN_API_KEY=5a660875efa754e7c1fbada74dd68a863d62e96b6365ab2bf32b90ad7fbb72ab obsidian help)",
       "Bash(curl -s -k -H \"Authorization: Bearer 5a660875efa754e7c1fbada74dd68a863d62e96b6365ab2bf32b90ad7fbb72ab\" \"https://localhost:27123/vault/\")",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(pip show *)",
+      "Bash(pip list *)",
+      "Bash(npx expo *)",
+      "Bash(python -c ' *)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('expo-notifications:', p.dependencies['expo-notifications'] || 'NAO ENCONTRADO'\\); console.log\\('expo-device:', p.dependencies['expo-device'] || 'NAO ENCONTRADO'\\);\")",
+      "Bash(npx tsc *)",
+      "Bash(node -e ' *)"
     ]
   }
 }

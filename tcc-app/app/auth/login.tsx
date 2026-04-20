@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { storage } from "../../services/storage";
 import { loginRequest } from "../../services/api";
+import { registerForPushNotificationsAsync } from "../../services/notifications";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Colors } from "../../constants/theme";
@@ -43,6 +44,9 @@ export default function Login() {
       await storage.setItem("user_name", resp.user_name);
       await storage.setItem("user_email", resp.user_email);
       if (resp.user_ra) await storage.setItem("user_ra", resp.user_ra);
+
+      // Registra push token em background (sem bloquear navegação)
+      registerForPushNotificationsAsync();
 
       if (resp.user_role === "Professor") {
         router.replace("/professor/home");

@@ -39,11 +39,27 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#4B39EF",
+          "defaultChannel": "presencas",
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b6415c01-8ee3-49d7-81af-c021ee71d96b"
+      }
+    },
+    "owner": "gustavo_falci"
   }
 }

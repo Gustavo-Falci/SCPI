@@ -53,41 +53,42 @@ def criar_usuario_completo(dados_usuario, dados_perfil):
 # --- OPERAÇÕES DE RECONHECIMENTO ---
 
 def registrar_presenca_por_face(external_image_id):
-    """Registra presença se houver chamada aberta."""
-    # commit=True pois vamos fazer INSERT
-    with get_db_cursor(commit=True) as cur:
-        if not cur: return False
+    """Registra presença se houver chamada aberta.
 
+    Retorna um dict com dados do aluno/turma quando bem-sucedido, ou None em caso de falha.
+    """
+    with get_db_cursor(commit=True) as cur:
+        if not cur: return None
 
         # 1. Busca Aluno
         cur.execute("SELECT aluno_id FROM Colecao_Rostos WHERE external_image_id = %s", (external_image_id,))
         aluno = cur.fetchone()
-        
+
         if not aluno:
             logger.warning(f"Aluno não encontrado para ID: {external_image_id}")
-            return False
-        
+            return None
+
         aluno_uuid = aluno['aluno_id']
 
         # 2. Busca Chamada Aberta
         cur.execute("""
-            SELECT chamada_id, turma_id FROM Chamadas 
+            SELECT chamada_id, turma_id FROM Chamadas
             WHERE status = 'Aberta' ORDER BY data_criacao DESC LIMIT 1
         """)
         chamada = cur.fetchone()
 
         if not chamada:
             logger.warning("Nenhuma chamada aberta no momento.")
-            return False
+            return None
 
         # 3. Verifica Matrícula
         cur.execute("""
             SELECT 1 FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = %s
         """, (chamada['turma_id'], aluno_uuid))
-        
+
         if not cur.fetchone():
             logger.warning(f"Aluno {external_image_id} não pertence a esta turma.")
-            return False
+            return None
 
         # 4. Registra Presença
         cur.execute("""
@@ -95,11 +96,32 @@ def registrar_presenca_por_face(external_image_id):
             VALUES (%s, %s, 'Reconhecimento')
             ON CONFLICT (chamada_id, aluno_id) DO NOTHING
         """, (chamada['chamada_id'], aluno_uuid))
-        
-        if cur.rowcount > 0:
-            logger.info(f"✅ Presença confirmada: {external_image_id}")
-            return True
-        return False
+
+        if cur.rowcount == 0:
+            return None
+
+        logger.info(f"✅ Presença confirmada: {external_image_id}")
+
+        # 5. Busca dados para notificação
+        try:
+            cur.execute("""
+                SELECT u.nome, u.email, u.usuario_id, t.nome_disciplina
+                FROM Alunos a
+                JOIN Usuarios u ON a.usuario_id = u.usuario_id
+                JOIN Turmas t ON t.turma_id = %s
+                WHERE a.aluno_id = %s
+            """, (chamada['turma_id'], aluno_uuid))
+            info = cur.fetchone()
+        except Exception as e:
+            logger.warning("Não foi possível buscar dados de notificação: %s", e)
+            info = None
+
+        return {
+            "usuario_id": info["usuario_id"] if info else None,
+            "aluno_nome": info["nome"] if info else external_image_id,
+            "aluno_email": info["email"] if info else None,
+            "turma_nome": info["nome_disciplina"] if info else "Turma",
+        }
 
 
 def listar_turmas_professor(usuario_id_professor):
