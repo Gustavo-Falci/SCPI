@@ -63,10 +63,10 @@ export default function HomeAluno() {
   };
 
   const menuItems: any[] = [
-    { icon: 'home-outline', activeIcon: 'home', route: '/aluno/home' },
-    { icon: 'stats-chart-outline', activeIcon: 'stats-chart', route: '/aluno/frequencia' },
-    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/aluno/horarios' },
-    { icon: 'person-outline', activeIcon: 'person', route: '/aluno/perfil' },
+    { icon: 'home-outline', activeIcon: 'home', route: '/aluno/home', label: 'Início' },
+    { icon: 'stats-chart-outline', activeIcon: 'stats-chart', route: '/aluno/frequencia', label: 'Frequência' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/aluno/horarios', label: 'Horários' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/aluno/perfil', label: 'Perfil' },
   ];
 
   if (loading) {
@@ -105,7 +105,7 @@ export default function HomeAluno() {
               <View>
                 <Text style={styles.faceCardTitle}>Biometria Facial</Text>
                 <Text style={styles.faceCardStatus}>
-                  {data?.face_registrada ? "Face cadastrada com sucesso" : "Atualize sua face agora"}
+                  {data?.face_registrada ? "Atualize sua face quando quiser" : "Cadastre sua face agora"}
                 </Text>
               </View>
               <MaterialCommunityIcons name="face-recognition" size={40} color="#fff" />
@@ -114,7 +114,7 @@ export default function HomeAluno() {
         </TouchableOpacity>
 
         <View style={styles.statsRow}>
-          <TouchableOpacity style={styles.statCard} onPress={() => router.push("/aluno/frequencia")}>
+          <TouchableOpacity style={styles.statCard} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Ver minha frequência" onPress={() => router.push("/aluno/frequencia")}>
             <View style={[styles.iconCircle, { backgroundColor: 'rgba(75, 57, 239, 0.1)' }]}>
               <Ionicons name="stats-chart" size={20} color={Colors.brand.primary} />
             </View>
@@ -122,7 +122,7 @@ export default function HomeAluno() {
             <Text style={styles.statLabel}>Frequência</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.statCard} onPress={() => router.push("/aluno/horarios")}>
+          <TouchableOpacity style={styles.statCard} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Ver meus horários" onPress={() => router.push("/aluno/horarios")}>
             <View style={[styles.iconCircle, { backgroundColor: 'rgba(29, 185, 84, 0.1)' }]}>
               <Ionicons name="calendar" size={20} color="#1DB954" />
             </View>
@@ -134,7 +134,7 @@ export default function HomeAluno() {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Aulas de Hoje</Text>
-            <TouchableOpacity onPress={() => router.push("/aluno/horarios")}>
+            <TouchableOpacity onPress={() => router.push("/aluno/horarios")} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Ver todas as aulas">
               <Text style={styles.seeAllText}>Ver todas</Text>
             </TouchableOpacity>
           </View>

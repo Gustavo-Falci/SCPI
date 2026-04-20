@@ -11,7 +11,7 @@ const tintColorDark = '#fff';
 export const Colors = {
   brand: {
     background: '#0C0C12',
-    card: '#3A262F',
+    card: '#1A1A2E',
     primary: '#4B39EF',
     secondary: '#5E47FF',
     text: '#FFFFFF',

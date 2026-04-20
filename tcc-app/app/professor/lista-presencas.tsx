@@ -24,6 +24,7 @@ export default function ListaPresenca() {
   const [loading, setLoading] = useState(true);
   const [statusChamada, setStatusChamada] = useState<any>(null);
   const [alunos, setAlunos] = useState<any[]>([]);
+  const [closing, setClosing] = useState(false);
 
   const carregarStatus = async () => {
     try {
@@ -51,20 +52,24 @@ export default function ListaPresenca() {
   }, [turma_id]);
 
   const fecharChamada = async () => {
+    if (closing) return;
     try {
+        setClosing(true);
         await apiPost(`/chamadas/fechar/${turma_id}`, {});
         Alert.alert("Sucesso", "Chamada encerrada e salva no histórico!");
         router.back();
     } catch(err: any) {
         Alert.alert("Erro", err.message || "Erro ao fechar chamada");
+    } finally {
+        setClosing(false);
     }
   }
 
   const menuItems: any[] = [
-    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
-    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas' },
-    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas' },
-    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil' },
+    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home', label: 'Início' },
+    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas', label: 'Turmas' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas', label: 'Agenda' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil', label: 'Perfil' },
   ];
 
   return (
@@ -72,7 +77,13 @@ export default function ListaPresenca() {
       <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+        >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Chamada em Tempo Real</Text>
@@ -112,8 +123,20 @@ export default function ListaPresenca() {
           </View>
 
           {statusChamada?.status === "Aberta" && (
-            <TouchableOpacity style={styles.closeCallBtn} onPress={fecharChamada}>
-              <Text style={styles.closeCallText}>Encerrar e Salvar Chamada</Text>
+            <TouchableOpacity
+              style={[styles.closeCallBtn, closing && { opacity: 0.75 }]}
+              onPress={fecharChamada}
+              activeOpacity={0.8}
+              disabled={closing}
+              accessibilityRole="button"
+              accessibilityLabel="Encerrar e salvar chamada"
+              accessibilityState={{ disabled: closing, busy: closing }}
+            >
+              {closing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.closeCallText}>Encerrar e Salvar Chamada</Text>
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -178,7 +201,7 @@ const styles = StyleSheet.create({
   statBox: { alignItems: "center", flex: 1 },
   statValue: { color: "#fff", fontSize: 24, fontWeight: "800" },
   statLabel: { color: Colors.brand.textSecondary, fontSize: 12, marginTop: 4 },
-  closeCallBtn: { backgroundColor: Colors.brand.error, height: 50, borderRadius: 14, justifyContent: "center", alignItems: "center" },
+  closeCallBtn: { backgroundColor: Colors.brand.error, height: 56, borderRadius: 14, justifyContent: "center", alignItems: "center" },
   closeCallText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 16, marginLeft: 4 },
   studentCard: {

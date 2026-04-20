@@ -1,9 +1,10 @@
 import React from 'react';
-import { 
-  View, 
-  TouchableOpacity, 
-  StyleSheet, 
-  Dimensions 
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
@@ -16,6 +17,7 @@ interface MenuItem {
   icon: keyof typeof Ionicons.glyphMap;
   activeIcon: keyof typeof Ionicons.glyphMap;
   route: string;
+  label: string;
 }
 
 interface FloatingMenuProps {
@@ -32,17 +34,31 @@ export const FloatingMenu = ({ items }: FloatingMenuProps) => {
       <View style={styles.menu}>
         {items.map((item, index) => {
           const isActive = pathname === item.route;
+          const color = isActive ? Colors.brand.primary : Colors.brand.textSecondary;
           return (
-            <TouchableOpacity 
-              key={index} 
+            <TouchableOpacity
+              key={index}
               style={styles.menuItem}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              accessibilityState={{ selected: isActive }}
               onPress={() => router.push(item.route as any)}
             >
-              <Ionicons 
-                name={isActive ? item.activeIcon : item.icon} 
-                size={24} 
-                color={isActive ? Colors.brand.primary : Colors.brand.textSecondary} 
+              <Ionicons
+                name={isActive ? item.activeIcon : item.icon}
+                size={22}
+                color={color}
               />
+              <Text
+                style={[
+                  styles.label,
+                  { color, fontWeight: isActive ? '700' : '600' }
+                ]}
+                numberOfLines={1}
+              >
+                {item.label}
+              </Text>
             </TouchableOpacity>
           );
         })}
@@ -60,8 +76,8 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   menu: {
-    width: width * 0.85,
-    height: 65,
+    width: width * 0.9,
+    height: 72,
     backgroundColor: Colors.brand.card,
     borderRadius: 32,
     flexDirection: 'row',
@@ -74,11 +90,18 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: 8,
   },
   menuItem: {
-    width: 50,
-    height: 50,
+    minWidth: 56,
+    height: 56,
+    paddingHorizontal: 4,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 4,
+  },
+  label: {
+    fontSize: 11,
+    letterSpacing: 0.2,
   },
 });

@@ -51,10 +51,10 @@ export default function AulasDoDia() {
   };
 
   const menuItems: any[] = [
-    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
-    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas' },
-    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas' },
-    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil' },
+    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home', label: 'Início' },
+    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas', label: 'Turmas' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas', label: 'Agenda' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil', label: 'Perfil' },
   ];
 
   if (loading) {
@@ -70,7 +70,13 @@ export default function AulasDoDia() {
       <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+        >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Minha Agenda</Text>
@@ -104,8 +110,11 @@ export default function AulasDoDia() {
                     <View style={[styles.timelineLine, index === aulas.length - 1 && { backgroundColor: 'transparent' }]} />
                   </View>
 
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.classCard, isNow && styles.activeCard]}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Aula de ${aula.nome}${isNow ? ', ao vivo' : ''}`}
                     onPress={() => router.push("/professor/turmas")}
                   >
                     <View style={styles.cardHeader}>
@@ -194,6 +203,10 @@ const styles = StyleSheet.create({
     borderRadius: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 
   },
   callButtonText: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  emptyContainer: { alignItems: "center", marginTop: 40 },
-  emptyText: { color: Colors.brand.textSecondary, fontSize: 16, marginTop: 12 },
+  emptyContainer: {
+    alignItems: "center", paddingVertical: 48,
+    backgroundColor: Colors.brand.card, borderRadius: 24,
+    borderStyle: "dashed", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
+  },
+  emptyText: { color: Colors.brand.textSecondary, fontSize: 14, marginTop: 12, textAlign: 'center', paddingHorizontal: 24 },
 });

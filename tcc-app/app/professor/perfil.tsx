@@ -37,10 +37,10 @@ export default function Perfil() {
   };
 
   const menuItems: any[] = [
-    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
-    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas' },
-    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas' },
-    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil' },
+    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home', label: 'Início' },
+    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas', label: 'Turmas' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas', label: 'Agenda' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil', label: 'Perfil' },
   ];
 
   return (
@@ -48,7 +48,13 @@ export default function Perfil() {
       <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+        >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Meu Perfil</Text>
@@ -138,7 +144,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", backgroundColor: Colors.brand.card,
     padding: 16, borderRadius: 20, marginBottom: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-  iconBox: { width: 44, height: 44, borderRadius: 14, backgroundColor: "rgba(75, 57, 239, 0.05)", justifyContent: "center", alignItems: "center" },
+  iconBox: { width: 44, height: 44, borderRadius: 14, backgroundColor: "rgba(75, 57, 239, 0.15)", justifyContent: "center", alignItems: "center" },
   infoTexts: { marginLeft: 16 },
   infoLabel: { color: Colors.brand.textSecondary, fontSize: 12 },
   infoValue: { color: "#fff", fontSize: 15, fontWeight: "600", marginTop: 2 },

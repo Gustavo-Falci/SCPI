@@ -40,10 +40,10 @@ export default function PerfilAluno() {
   };
 
   const menuItems: any[] = [
-    { icon: 'home-outline', activeIcon: 'home', route: '/aluno/home' },
-    { icon: 'stats-chart-outline', activeIcon: 'stats-chart', route: '/aluno/frequencia' },
-    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/aluno/horarios' },
-    { icon: 'person-outline', activeIcon: 'person', route: '/aluno/perfil' },
+    { icon: 'home-outline', activeIcon: 'home', route: '/aluno/home', label: 'Início' },
+    { icon: 'stats-chart-outline', activeIcon: 'stats-chart', route: '/aluno/frequencia', label: 'Frequência' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/aluno/horarios', label: 'Horários' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/aluno/perfil', label: 'Perfil' },
   ];
 
   return (
@@ -51,7 +51,13 @@ export default function PerfilAluno() {
       <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+        >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Meu Perfil</Text>
@@ -141,7 +147,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", backgroundColor: Colors.brand.card,
     padding: 16, borderRadius: 20, marginBottom: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
   },
-  iconBox: { width: 44, height: 44, borderRadius: 14, backgroundColor: "rgba(75, 57, 239, 0.05)", justifyContent: "center", alignItems: "center" },
+  iconBox: { width: 44, height: 44, borderRadius: 14, backgroundColor: "rgba(75, 57, 239, 0.15)", justifyContent: "center", alignItems: "center" },
   infoTexts: { marginLeft: 16 },
   infoLabel: { color: Colors.brand.textSecondary, fontSize: 12 },
   infoValue: { color: "#fff", fontSize: 15, fontWeight: "600", marginTop: 2 },

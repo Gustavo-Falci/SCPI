@@ -52,10 +52,10 @@ export default function Horarios() {
   };
 
   const menuItems: any[] = [
-    { icon: 'home-outline', activeIcon: 'home', route: '/aluno/home' },
-    { icon: 'stats-chart-outline', activeIcon: 'stats-chart', route: '/aluno/frequencia' },
-    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/aluno/horarios' },
-    { icon: 'person-outline', activeIcon: 'person', route: '/aluno/perfil' },
+    { icon: 'home-outline', activeIcon: 'home', route: '/aluno/home', label: 'Início' },
+    { icon: 'stats-chart-outline', activeIcon: 'stats-chart', route: '/aluno/frequencia', label: 'Frequência' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/aluno/horarios', label: 'Horários' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/aluno/perfil', label: 'Perfil' },
   ];
 
   if (loading) {
@@ -71,7 +71,13 @@ export default function Horarios() {
       <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+        >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Horários de Aula</Text>
@@ -161,6 +167,10 @@ const styles = StyleSheet.create({
   cardFooter: { flexDirection: "row", gap: 16 },
   infoRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   infoText: { color: Colors.brand.textSecondary, fontSize: 12 },
-  emptyContainer: { alignItems: "center", marginTop: 40 },
-  emptyText: { color: Colors.brand.textSecondary, fontSize: 16, marginTop: 12 },
+  emptyContainer: {
+    alignItems: "center", paddingVertical: 48,
+    backgroundColor: Colors.brand.card, borderRadius: 24,
+    borderStyle: "dashed", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
+  },
+  emptyText: { color: Colors.brand.textSecondary, fontSize: 14, marginTop: 12, textAlign: 'center', paddingHorizontal: 24 },
 });

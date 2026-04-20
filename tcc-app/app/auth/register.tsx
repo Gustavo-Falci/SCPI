@@ -144,7 +144,13 @@ export default function Register() {
           <View style={styles.center}>
             <Ionicons name="camera-outline" size={80} color={Colors.brand.textSecondary} />
             <Text style={styles.permissionText}>Precisamos de acesso à sua câmera para realizar o cadastro facial.</Text>
-            <TouchableOpacity style={styles.primaryButton} onPress={requestPermission}>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={requestPermission}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Permitir acesso à câmera"
+            >
               <Text style={styles.buttonText}>Permitir Câmera</Text>
             </TouchableOpacity>
           </View>
@@ -162,6 +168,9 @@ export default function Register() {
               style={[styles.closeBtnTop, { top: insets.top + 20 }]}
               onPress={() => setCameraOpen(false)}
               disabled={isLoading}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Fechar câmera"
             >
               <Ionicons name="close" size={30} color="#fff" />
             </TouchableOpacity>
@@ -188,6 +197,9 @@ export default function Register() {
                 style={styles.captureBtn}
                 onPress={tirarFotoERegistrar}
                 disabled={isLoading}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Tirar foto e cadastrar face"
               >
                 <View style={styles.captureBtnInner} />
               </TouchableOpacity>
@@ -297,7 +309,13 @@ export default function Register() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
           <View style={styles.header}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => router.back()}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Voltar"
+            >
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -334,7 +352,13 @@ export default function Register() {
 
             <Button title={tipoUsuario === "Aluno" ? "PRÓXIMO: CADASTRAR FACE" : "CADASTRAR"} onPress={handleRegisterData} loading={isLoading} style={{ marginTop: 10 }} />
 
-            <TouchableOpacity onPress={() => router.replace("/auth/login")} style={styles.footer}>
+            <TouchableOpacity
+              onPress={() => router.replace("/auth/login")}
+              style={styles.footer}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Ir para login"
+            >
               <Text style={styles.footerText}>Já tem uma conta? <Text style={styles.link}>Faça Login</Text></Text>
             </TouchableOpacity>
           </View>

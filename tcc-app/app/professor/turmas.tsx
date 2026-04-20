@@ -49,10 +49,10 @@ export default function Turmas() {
   }, []);
 
   const menuItems: any[] = [
-    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
-    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas' },
-    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas' },
-    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil' },
+    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home', label: 'Início' },
+    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas', label: 'Turmas' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas', label: 'Agenda' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil', label: 'Perfil' },
   ];
 
   return (
@@ -60,7 +60,13 @@ export default function Turmas() {
       <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+        >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Minhas Turmas</Text>
@@ -93,9 +99,12 @@ export default function Turmas() {
           </View>
         ) : (
           turmasFiltradas.map((t: any) => (
-            <TouchableOpacity 
+            <TouchableOpacity
               key={t.turma_id}
-              style={styles.card} 
+              style={styles.card}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Ver detalhes da turma ${t.nome_disciplina}`}
               onPress={() => router.push({
                 pathname: "/professor/detalhes-turma",
                 params: { turma_id: t.turma_id, turma_nome: t.nome_disciplina }

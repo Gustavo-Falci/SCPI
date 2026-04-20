@@ -32,9 +32,13 @@ export const Button = ({
 
   if (variant === 'outline') {
     return (
-      <TouchableOpacity 
-        onPress={onPress} 
+      <TouchableOpacity
+        onPress={onPress}
         disabled={isDisabled}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
         style={[styles.base, styles.outline, style, isDisabled && styles.disabled]}
       >
         {loading ? (
@@ -47,13 +51,17 @@ export const Button = ({
   }
 
   return (
-    <TouchableOpacity 
-      onPress={onPress} 
+    <TouchableOpacity
+      onPress={onPress}
       disabled={isDisabled}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
       style={[styles.base, style]}
     >
       <LinearGradient
-        colors={isDisabled ? ['#444', '#333'] : ['#4B39EF', '#5E47FF']}
+        colors={isDisabled ? ['#2A2A3A', '#1F1F2E'] : ['#4B39EF', '#5E47FF']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={[styles.gradient, isDisabled && styles.disabled]}
@@ -97,6 +105,6 @@ const styles = StyleSheet.create({
     color: '#4B39EF',
   },
   disabled: {
-    opacity: 0.6,
+    opacity: 0.75,
   },
 });

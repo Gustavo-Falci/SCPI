@@ -110,10 +110,13 @@ export default function CadastroFacial() {
         <View style={styles.cameraWrapper}>
           
           {/* BOTÃO FECHAR (TOPO ESQUERDO) */}
-          <TouchableOpacity 
-            style={[styles.closeBtnTop, { top: insets.top + 20 }]} 
+          <TouchableOpacity
+            style={[styles.closeBtnTop, { top: insets.top + 20 }]}
             onPress={() => setCameraOpen(false)}
             disabled={loading}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Fechar câmera"
           >
             <Ionicons name="close" size={30} color="#fff" />
           </TouchableOpacity>
@@ -139,10 +142,13 @@ export default function CadastroFacial() {
 
           {/* BOTÕES DE CAPTURA (BASE) */}
           <View style={styles.cameraControls}>
-            <TouchableOpacity 
-              style={styles.captureBtn} 
+            <TouchableOpacity
+              style={styles.captureBtn}
               onPress={tirarFoto}
               disabled={loading}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Tirar foto e atualizar face"
             >
               <View style={styles.captureBtnInner} />
             </TouchableOpacity>
@@ -158,7 +164,13 @@ export default function CadastroFacial() {
       ) : (
         <SafeAreaView style={{ flex: 1 }}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.backBtn}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Voltar"
+            >
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Biometria Facial</Text>

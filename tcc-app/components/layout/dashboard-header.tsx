@@ -21,7 +21,13 @@ export const DashboardHeader = ({ greeting, userName, onLogout }: DashboardHeade
         <Text style={styles.greetingText}>{greeting}</Text>
         <Text style={styles.userName}>{userName}</Text>
       </View>
-      <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
+      <TouchableOpacity
+        style={styles.logoutBtn}
+        onPress={onLogout}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Sair"
+      >
         <Feather name="log-out" size={20} color="#fff" />
       </TouchableOpacity>
     </View>

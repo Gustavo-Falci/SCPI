@@ -21,6 +21,7 @@ export default function IniciarChamada() {
   const router = useRouter();
   const [turmas, setTurmas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openingTurmaId, setOpeningTurmaId] = useState<string | null>(null);
 
   const loadTurmas = async () => {
     try {
@@ -46,13 +47,14 @@ export default function IniciarChamada() {
       Alert.alert("Acesso Negado", "Você só pode iniciar a chamada durante o horário oficial da aula.");
       return;
     }
+    if (openingTurmaId) return;
 
     try {
-      setLoading(true);
+      setOpeningTurmaId(turmaId);
       await apiPost("/chamadas/abrir", { turma_id: turmaId });
-      
+
       Alert.alert("Sucesso!", `Chamada biométrica iniciada para: ${nomeTurma}`);
-      
+
       router.replace({
         pathname: "/professor/lista-presencas",
         params: { turma_id: turmaId, turma_nome: nomeTurma },
@@ -60,7 +62,7 @@ export default function IniciarChamada() {
     } catch (err: any) {
       Alert.alert("Erro", err.message || "Falha ao abrir a chamada.");
     } finally {
-      setLoading(false);
+      setOpeningTurmaId(null);
     }
   };
 
@@ -69,7 +71,13 @@ export default function IniciarChamada() {
       <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+        >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Iniciar Frequência</Text>
@@ -85,38 +93,55 @@ export default function IniciarChamada() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {loading && turmas.length === 0 ? (
+        {loading ? (
           <ActivityIndicator size="large" color={Colors.brand.primary} style={{ marginTop: 40 }} />
+        ) : turmas.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="clipboard-outline" size={50} color={Colors.brand.textSecondary} />
+            <Text style={styles.emptyTitle}>Nenhuma turma disponível</Text>
+            <Text style={styles.emptyText}>Você ainda não possui turmas cadastradas para iniciar chamadas.</Text>
+          </View>
         ) : (
-          turmas.map((t: any) => (
-            <TouchableOpacity 
-              key={t.turma_id}
-              style={[styles.card, !t.pode_iniciar && styles.cardDisabled]} 
-              onPress={() => handleAbrirChamada(t.turma_id, t.nome_disciplina, t.pode_iniciar)}
-              activeOpacity={t.pode_iniciar ? 0.7 : 1}
-            >
-              <View style={[styles.iconCircle, !t.pode_iniciar && styles.iconCircleDisabled]}>
-                <MaterialCommunityIcons 
-                  name={t.pode_iniciar ? "face-recognition" : "lock-outline"} 
-                  size={24} 
-                  color={t.pode_iniciar ? Colors.brand.primary : Colors.brand.textSecondary} 
-                />
-              </View>
-              
-              <View style={styles.cardContent}>
-                <Text style={[styles.className, !t.pode_iniciar && styles.textDisabled]}>{t.nome_disciplina}</Text>
-                <Text style={styles.classTime}>{t.proximo_horario}</Text>
-              </View>
-
-              {t.pode_iniciar ? (
-                <Ionicons name="play-circle" size={32} color={Colors.brand.primary} />
-              ) : (
-                <View style={styles.lockedBadge}>
-                  <Text style={styles.lockedText}>Bloqueado</Text>
+          turmas.map((t: any) => {
+            const isOpening = openingTurmaId === t.turma_id;
+            const anyOpening = openingTurmaId !== null;
+            const disabled = !t.pode_iniciar || anyOpening;
+            return (
+              <TouchableOpacity
+                key={t.turma_id}
+                style={[styles.card, !t.pode_iniciar && styles.cardDisabled, anyOpening && !isOpening && { opacity: 0.5 }]}
+                onPress={() => handleAbrirChamada(t.turma_id, t.nome_disciplina, t.pode_iniciar)}
+                activeOpacity={t.pode_iniciar ? 0.7 : 1}
+                disabled={disabled}
+                accessibilityRole="button"
+                accessibilityLabel={`${t.pode_iniciar ? 'Iniciar' : 'Bloqueada'} chamada de ${t.nome_disciplina}`}
+                accessibilityState={{ disabled, busy: isOpening }}
+              >
+                <View style={[styles.iconCircle, !t.pode_iniciar && styles.iconCircleDisabled]}>
+                  <MaterialCommunityIcons
+                    name={t.pode_iniciar ? "face-recognition" : "lock-outline"}
+                    size={24}
+                    color={t.pode_iniciar ? Colors.brand.primary : Colors.brand.textSecondary}
+                  />
                 </View>
-              )}
-            </TouchableOpacity>
-          ))
+
+                <View style={styles.cardContent}>
+                  <Text style={[styles.className, !t.pode_iniciar && styles.textDisabled]}>{t.nome_disciplina}</Text>
+                  <Text style={styles.classTime}>{t.proximo_horario}</Text>
+                </View>
+
+                {isOpening ? (
+                  <ActivityIndicator size="small" color={Colors.brand.primary} />
+                ) : t.pode_iniciar ? (
+                  <Ionicons name="play-circle" size={32} color={Colors.brand.primary} />
+                ) : (
+                  <View style={styles.lockedBadge}>
+                    <Text style={styles.lockedText}>Bloqueado</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })
         )}
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -157,5 +182,22 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
-  }
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  emptyTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 16,
+  },
+  emptyText: {
+    color: Colors.brand.textSecondary,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
 });

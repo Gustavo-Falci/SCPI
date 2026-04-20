@@ -107,9 +107,12 @@ export default function Login() {
               style={{ marginTop: 10 }}
             />
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => router.push("/auth/register")}
               style={styles.registerContainer}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Criar nova conta"
             >
               <Text style={styles.registerText}>
                 Ainda não tem uma conta? <Text style={styles.link}>Cadastre-se</Text>

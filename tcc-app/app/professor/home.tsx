@@ -63,10 +63,10 @@ export default function HomeProfessor() {
   };
 
   const menuItems: any[] = [
-    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home' },
-    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas' },
-    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas' },
-    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil' },
+    { icon: 'home-outline', activeIcon: 'home', route: '/professor/home', label: 'Início' },
+    { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas', label: 'Turmas' },
+    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas', label: 'Agenda' },
+    { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil', label: 'Perfil' },
   ];
 
   if (loading) {
@@ -116,7 +116,7 @@ export default function HomeProfessor() {
         </TouchableOpacity>
 
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Resumo da Última Chamada</Text>
+          <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>Resumo da Última Chamada</Text>
           <View style={styles.statsRow}>
              <View style={styles.statItem}>
                 <Text style={styles.statValue}>{data?.estatisticas?.total || 0}</Text>
@@ -136,16 +136,19 @@ export default function HomeProfessor() {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Aulas de Hoje</Text>
-            <TouchableOpacity onPress={() => router.push("/professor/horarios-turmas")}>
+            <TouchableOpacity onPress={() => router.push("/professor/horarios-turmas")} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Ver todas as aulas">
               <Text style={styles.seeAllText}>Ver todas</Text>
             </TouchableOpacity>
           </View>
 
           {data?.aulas_hoje && data.aulas_hoje.length > 0 ? (
             data.aulas_hoje.map((aula: any, index: number) => (
-              <TouchableOpacity 
-                key={index} 
+              <TouchableOpacity
+                key={index}
                 style={styles.classCard}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`Ver turma ${aula.nome}`}
                 onPress={() => router.push("/professor/turmas")}
               >
                 <View style={styles.classInfo}>
@@ -168,8 +171,11 @@ export default function HomeProfessor() {
           )}
         </View>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.secondaryCard}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Minhas turmas"
           onPress={() => router.push("/professor/turmas")}
         >
           <View style={[styles.iconCircle, { backgroundColor: 'rgba(75, 57, 239, 0.1)' }]}>
@@ -205,7 +211,7 @@ const styles = StyleSheet.create({
   actionIconContainer: { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
   sectionContainer: { marginBottom: 32 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  sectionTitle: { color: Colors.brand.text, fontSize: 18, fontWeight: "700", marginBottom: 16 },
+  sectionTitle: { color: Colors.brand.text, fontSize: 18, fontWeight: "700" },
   seeAllText: { color: Colors.brand.primary, fontSize: 14, fontWeight: "600" },
   statsRow: { flexDirection: "row", gap: 12 },
   statItem: { flex: 1, backgroundColor: Colors.brand.card, borderRadius: 20, padding: 16, alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" },
