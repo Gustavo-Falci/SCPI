@@ -105,6 +105,7 @@ def send_email_resend(to_email: str, aluno_nome: str, turma_nome: str, hora: str
         headers={
             "Authorization": f"Bearer {RESEND_API_KEY}",
             "Content-Type": "application/json",
+            "User-Agent": "SCPI/1.0",
         },
         method="POST",
     )

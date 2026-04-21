@@ -813,6 +813,49 @@ def _enviar_notificacoes_presenca(usuario_id: str, aluno_nome: str, aluno_email:
         send_email_resend(aluno_email, aluno_nome, turma_nome, hora)
 
 
+def _notificar_alunos_presentes(chamada_id: str, turma_nome: str) -> None:
+    """Tarefa de background: ao fechar chamada, notifica via push + email todos os alunos presentes."""
+    from notificacoes import send_expo_push, send_email_resend
+    import datetime
+
+    hora = datetime.datetime.now().strftime("%H:%M")
+
+    try:
+        with get_db_cursor() as cur:
+            cur.execute("""
+                SELECT u.usuario_id, u.nome, u.email
+                FROM Presencas p
+                JOIN Alunos a ON a.aluno_id = p.aluno_id
+                JOIN Usuarios u ON u.usuario_id = a.usuario_id
+                WHERE p.chamada_id = %s
+            """, (chamada_id,))
+            alunos = cur.fetchall()
+    except Exception as e:
+        logger.error("Erro ao buscar alunos presentes para notificação: %s", e)
+        return
+
+    for aluno in alunos:
+        usuario_id = aluno["usuario_id"]
+        nome = aluno["nome"]
+        email = aluno["email"]
+
+        try:
+            with get_db_cursor() as cur:
+                cur.execute("SELECT expo_token FROM PushTokens WHERE usuario_id = %s", (usuario_id,))
+                row = cur.fetchone()
+                if row:
+                    send_expo_push(
+                        [row["expo_token"]],
+                        "Presença Confirmada ✓",
+                        f"Sua presença em {turma_nome} foi registrada às {hora}.",
+                    )
+        except Exception as e:
+            logger.error("Erro ao enviar push para %s: %s", usuario_id, e)
+
+        if email:
+            send_email_resend(email, nome, turma_nome, hora)
+
+
 @app.get("/aluno/dashboard/{usuario_id}")
 def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_current_user)):
     require_self_or_admin(usuario_id, current_user)
@@ -1383,11 +1426,21 @@ def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role
 
 
 @app.post("/chamadas/fechar/{turma_id}")
-def fechar_chamada(turma_id: str, current_user: dict = Depends(require_role("Professor"))):
+def fechar_chamada(turma_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Professor"))):
     try:
         with get_db_cursor(commit=True) as cur:
             if not cur: raise Exception("Erro ao conectar no banco")
-            
+
+            # Busca chamada aberta e nome da turma antes de fechar
+            cur.execute("""
+                SELECT c.chamada_id, t.nome_disciplina
+                FROM Chamadas c
+                JOIN Turmas t ON t.turma_id = c.turma_id
+                WHERE c.turma_id = %s AND c.status = 'Aberta'
+                LIMIT 1
+            """, (turma_id,))
+            chamada = cur.fetchone()
+
             cur.execute("""
                 UPDATE Chamadas SET status='Fechada', horario_fim=CURRENT_TIME
                 WHERE turma_id=%s AND status='Aberta'
@@ -1400,7 +1453,14 @@ def fechar_chamada(turma_id: str, current_user: dict = Depends(require_role("Pro
                 print(f"Processo de reconhecimento (PID: {processo_camera.pid}) encerrado.")
                 processo_camera = None
 
-            return {"mensagem": "Chamada encerrada com sucesso!"}
+        if chamada:
+            background_tasks.add_task(
+                _notificar_alunos_presentes,
+                chamada["chamada_id"],
+                chamada["nome_disciplina"],
+            )
+
+        return {"mensagem": "Chamada encerrada com sucesso!"}
     except Exception as e:
         raise internal_error(e, "fechar_chamada")
 
