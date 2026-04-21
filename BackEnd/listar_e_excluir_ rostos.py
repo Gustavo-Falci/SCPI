@@ -45,12 +45,34 @@ def excluir_todos_os_rostos():
 
     print("✅ Todos os rostos foram removidos da coleção.")
 
-if __name__ == "__main__": # Adiciona proteção para execução direta
+def excluir_rosto_por_id(external_image_id: str):
+    """Exclui o(s) rosto(s) com ExternalImageId igual ao valor informado."""
+    if not rekognition_client:
+        logger.error("Cliente Rekognition não inicializado.")
+        return
+
+    response = rekognition_client.list_faces(CollectionId=COLLECTION_ID)
+    faces = response.get("Faces", [])
+
+    ids_para_excluir = [
+        f["FaceId"] for f in faces if f.get("ExternalImageId") == external_image_id
+    ]
+
+    if not ids_para_excluir:
+        print(f"Nenhum rosto encontrado com ExternalImageId='{external_image_id}'.")
+        return
+
+    rekognition_client.delete_faces(CollectionId=COLLECTION_ID, FaceIds=ids_para_excluir)
+    print(f"✅ {len(ids_para_excluir)} rosto(s) com ExternalImageId='{external_image_id}' removido(s).")
+
+
+if __name__ == "__main__":
 
     if rekognition_client:
         listar_rostos()
-        excluir_todos_os_rostos() # Comente ou adicione uma confirmação
-        
+        excluir_rosto_por_id("Aluno_Teste")  # Exclui todos os rostos do Aluno_Teste
+        # excluir_todos_os_rostos()             # Descomente para excluir TODOS
+
     else:
         logger.error("Cliente Rekognition não disponível para listar/excluir rostos.")
 

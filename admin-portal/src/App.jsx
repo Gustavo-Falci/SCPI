@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://192.168.15.35:8000';
+const API_URL = 'http://192.168.15.115:8000';
 
 // Slots oficiais da grade ADS Fatec
 const SLOTS_MATUTINO = [
