@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Users, BookOpen, Calendar, Plus, Trash2, ChevronRight, LogOut,
   LayoutDashboard, Clock, MapPin, Upload, FileText, CheckCircle2, Lock,
-  Filter, Sun, Moon, GraduationCap, Search, UserPlus, X
+  Filter, Sun, Moon, GraduationCap, Search, UserPlus, X, UserCog
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://192.168.15.115:8000';
+const API_URL = 'http://192.168.5.152:8000';
 
 // Slots oficiais da grade ADS Fatec
 const SLOTS_MATUTINO = [
@@ -144,12 +144,37 @@ function AdminDashboard({ admin, onLogout }) {
   const [horarioModal, setHorarioModal] = useState(null); // { dia_semana } ou null
   const [horarioForm, setHorarioForm] = useState({ turma_id: '', slot_inicio: 1, slot_fim: 1, sala: '' });
 
+  // Modal de atribuição de professor a uma turma
+  const [professorModal, setProfessorModal] = useState(null); // turma ou null
+  const [selectedProfessorId, setSelectedProfessorId] = useState('');
+
   // Modal de matrícula individual de aluno em uma turma
   const [matriculaModal, setMatriculaModal] = useState(null); // turma ou null
   const [alunosDisponiveis, setAlunosDisponiveis] = useState([]);
   const [selectedAlunoIds, setSelectedAlunoIds] = useState(new Set());
   const [searchAluno, setSearchAluno] = useState('');
   const [loadingAlunos, setLoadingAlunos] = useState(false);
+
+  const openProfessorModal = (turma) => {
+    setProfessorModal(turma);
+    setSelectedProfessorId(turma.professor_id || '');
+  };
+
+  const handleAtribuirProfessor = async () => {
+    try {
+      const token = localStorage.getItem('admin_token');
+      await axios.patch(
+        `${API_URL}/admin/turmas/${professorModal.turma_id}/professor`,
+        { professor_id: selectedProfessorId || null },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setProfessorModal(null);
+      fetchData();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      alert(`Erro ao atribuir professor: ${typeof detail === 'string' ? detail : 'Falha no servidor'}`);
+    }
+  };
 
   const openMatriculaModal = async (turma) => {
     setMatriculaModal(turma);
@@ -453,6 +478,12 @@ function AdminDashboard({ admin, onLogout }) {
                             <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Alunos</p>
                          </div>
                          <button
+                            onClick={() => openProfessorModal(t)}
+                            title="Atribuir professor"
+                            className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 hover:text-amber-400 transition-all border border-white/5 hover:border-amber-400/30">
+                           <UserCog size={24}/>
+                         </button>
+                         <button
                             onClick={() => openMatriculaModal(t)}
                             title="Matricular aluno individualmente"
                             className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 hover:text-[#4B39EF] transition-all border border-white/5 hover:border-[#4B39EF]/30">
@@ -564,6 +595,48 @@ function AdminDashboard({ admin, onLogout }) {
           </div>
         )}
 
+        {professorModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={() => setProfessorModal(null)}>
+            <div className="bg-[#151718] rounded-[40px] border border-white/5 shadow-2xl max-w-xl w-full p-10" onClick={e => e.stopPropagation()}>
+              <div className="flex items-start justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <UserCog className="text-amber-400" size={28} />
+                  <div>
+                    <h3 className="text-2xl font-black text-white">Atribuir Professor</h3>
+                    <p className="text-gray-500 text-sm font-bold mt-1">
+                      {professorModal.nome_disciplina} • {professorModal.codigo_turma}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setProfessorModal(null)} className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all">
+                  <X size={22} />
+                </button>
+              </div>
+
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                <label className={`flex items-center gap-5 p-5 rounded-2xl border transition-all cursor-pointer ${selectedProfessorId === '' ? 'bg-amber-400/10 border-amber-400/40' : 'bg-white/[0.03] border-white/5 hover:border-white/20'}`}>
+                  <input type="radio" name="professor" value="" checked={selectedProfessorId === ''} onChange={() => setSelectedProfessorId('')} className="w-5 h-5 accent-amber-400" />
+                  <p className="font-black text-gray-400 italic">Sem professor</p>
+                </label>
+                {professores.map(p => (
+                  <label key={p.professor_id} className={`flex items-center gap-5 p-5 rounded-2xl border transition-all cursor-pointer ${selectedProfessorId === p.professor_id ? 'bg-amber-400/10 border-amber-400/40' : 'bg-white/[0.03] border-white/5 hover:border-white/20'}`}>
+                    <input type="radio" name="professor" value={p.professor_id} checked={selectedProfessorId === p.professor_id} onChange={() => setSelectedProfessorId(p.professor_id)} className="w-5 h-5 accent-amber-400" />
+                    <div className="flex-1">
+                      <p className="font-black text-white">{p.nome}</p>
+                      <p className="text-xs text-gray-500 font-bold mt-1">{p.email}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex gap-4 pt-8 border-t border-white/5 mt-6">
+                <button type="button" onClick={() => setProfessorModal(null)} className="px-10 py-4 rounded-2xl bg-white/5 font-black text-sm uppercase tracking-widest text-gray-400 hover:bg-white/10 transition-all">Cancelar</button>
+                <button type="button" onClick={handleAtribuirProfessor} className="flex-1 py-4 rounded-2xl bg-amber-400 font-black text-sm uppercase tracking-widest text-black hover:bg-amber-300 transition-all">Confirmar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {matriculaModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={() => setMatriculaModal(null)}>
             <div className="bg-[#151718] rounded-[40px] border border-white/5 shadow-2xl max-w-3xl w-full p-10 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
@@ -598,6 +671,7 @@ function AdminDashboard({ admin, onLogout }) {
                 ) : (
                   (() => {
                     const q = searchAluno.toLowerCase();
+                    const turmaTurno = matriculaModal?.turno;
                     const filtrados = alunosDisponiveis.filter(a =>
                       a.nome.toLowerCase().includes(q) ||
                       (a.email || '').toLowerCase().includes(q) ||
@@ -608,7 +682,8 @@ function AdminDashboard({ admin, onLogout }) {
                     }
                     return filtrados.map(a => {
                       const checked = selectedAlunoIds.has(a.aluno_id);
-                      const disabled = a.ja_matriculado;
+                      const turnoIncompativel = turmaTurno && a.turno && a.turno !== turmaTurno;
+                      const disabled = a.ja_matriculado || turnoIncompativel;
                       return (
                         <label
                           key={a.aluno_id}
@@ -623,7 +698,7 @@ function AdminDashboard({ admin, onLogout }) {
                           <input
                             type="checkbox"
                             disabled={disabled}
-                            checked={checked || disabled}
+                            checked={checked || a.ja_matriculado}
                             onChange={() => !disabled && toggleAluno(a.aluno_id)}
                             className="w-5 h-5 accent-[#4B39EF] cursor-pointer disabled:cursor-not-allowed"
                           />
@@ -631,11 +706,17 @@ function AdminDashboard({ admin, onLogout }) {
                             <p className="font-black text-white">{a.nome}</p>
                             <p className="text-xs text-gray-500 font-bold mt-1">
                               RA {a.ra || '—'} • {a.email}
+                              {a.turno && <span className="ml-2 text-gray-600">• {a.turno}</span>}
                             </p>
                           </div>
-                          {disabled && (
+                          {a.ja_matriculado && (
                             <span className="text-[10px] font-black uppercase tracking-widest text-[#22C55E] bg-[#22C55E]/10 px-3 py-1 rounded-lg">
                               Já matriculado
+                            </span>
+                          )}
+                          {turnoIncompativel && (
+                            <span className="text-[10px] font-black uppercase tracking-widest text-yellow-400 bg-yellow-400/10 px-3 py-1 rounded-lg">
+                              Turno {a.turno}
                             </span>
                           )}
                         </label>

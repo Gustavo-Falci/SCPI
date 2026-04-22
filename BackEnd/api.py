@@ -261,11 +261,12 @@ def admin_listar_turmas(current_user: dict = Depends(require_role("Admin"))):
     try:
         with get_db_cursor() as cur:
             cur.execute("""
-                SELECT t.turma_id, t.nome_disciplina, t.codigo_turma, t.turno, t.semestre, u.nome as professor_nome,
+                SELECT t.turma_id, t.nome_disciplina, t.codigo_turma, t.turno, t.semestre,
+                COALESCE(u.nome, 'Sem professor') as professor_nome,
                 (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = t.turma_id) as total_alunos
                 FROM Turmas t
-                JOIN Professores p ON t.professor_id = p.professor_id
-                JOIN Usuarios u ON p.usuario_id = u.usuario_id
+                LEFT JOIN Professores p ON t.professor_id = p.professor_id
+                LEFT JOIN Usuarios u ON p.usuario_id = u.usuario_id
                 ORDER BY t.semestre ASC, t.nome_disciplina ASC
             """)
             return cur.fetchall()
@@ -273,12 +274,12 @@ def admin_listar_turmas(current_user: dict = Depends(require_role("Admin"))):
         raise internal_error(e)
 
 class TurmaCreate(BaseModel):
-    professor_id: str = Field(..., min_length=1, max_length=64)
+    professor_id: Optional[str] = Field(None, max_length=64)
     codigo_turma: str = Field(..., min_length=1, max_length=30)
     nome_disciplina: str = Field(..., min_length=2, max_length=120)
     periodo_letivo: str = Field(..., min_length=1, max_length=20)
     sala_padrao: str = Field(..., min_length=1, max_length=30)
-    turno: str = Field(..., pattern=r"^(Matutino|Vespertino|Noturno|Integral)$")
+    turno: str = Field(..., pattern=r"^(Matutino|Noturno)$")
     semestre: str = Field(..., min_length=1, max_length=10)
 
 @app.post("/admin/turmas")
@@ -286,15 +287,32 @@ def admin_criar_turma(turma: TurmaCreate, current_user: dict = Depends(require_r
     try:
         import uuid
         turma_id = str(uuid.uuid4())
+        professor_id = turma.professor_id if turma.professor_id else None
         with get_db_cursor(commit=True) as cur:
             cur.execute("""
                 INSERT INTO Turmas (turma_id, professor_id, codigo_turma, nome_disciplina, periodo_letivo, sala_padrao, turno, semestre)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING turma_id
-            """, (turma_id, turma.professor_id, turma.codigo_turma, turma.nome_disciplina, turma.periodo_letivo, turma.sala_padrao, turma.turno, turma.semestre))
+            """, (turma_id, professor_id, turma.codigo_turma, turma.nome_disciplina, turma.periodo_letivo, turma.sala_padrao, turma.turno, turma.semestre))
             return {"mensagem": "Turma criada com sucesso!", "turma_id": turma_id}
     except Exception as e:
         raise internal_error(e)
+
+class AtribuirProfessor(BaseModel):
+    professor_id: Optional[str] = None
+
+@app.patch("/admin/turmas/{turma_id}/professor")
+def admin_atribuir_professor(turma_id: str, dados: AtribuirProfessor, current_user: dict = Depends(require_role("Admin"))):
+    try:
+        professor_id = dados.professor_id if dados.professor_id else None
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("UPDATE Turmas SET professor_id = %s WHERE turma_id = %s", (professor_id, turma_id))
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Turma não encontrada.")
+        return {"mensagem": "Professor atribuído com sucesso."}
+    except Exception as e:
+        raise internal_error(e)
+
 
 class HorarioCreate(BaseModel):
     turma_id: str = Field(..., min_length=1, max_length=64)
@@ -367,7 +385,7 @@ def admin_listar_alunos(turma_id: Optional[str] = None, current_user: dict = Dep
             if turma_id:
                 cur.execute("""
                     SELECT
-                        a.aluno_id, a.ra, u.nome, u.email,
+                        a.aluno_id, a.ra, u.nome, u.email, a.turno,
                         EXISTS(
                             SELECT 1 FROM Turma_Alunos ta
                             WHERE ta.aluno_id = a.aluno_id AND ta.turma_id = %s
@@ -378,7 +396,7 @@ def admin_listar_alunos(turma_id: Optional[str] = None, current_user: dict = Dep
                 """, (turma_id,))
             else:
                 cur.execute("""
-                    SELECT a.aluno_id, a.ra, u.nome, u.email, FALSE as ja_matriculado
+                    SELECT a.aluno_id, a.ra, u.nome, u.email, a.turno, FALSE as ja_matriculado
                     FROM Alunos a
                     JOIN Usuarios u ON a.usuario_id = u.usuario_id
                     ORDER BY u.nome
@@ -399,7 +417,20 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos, current_user
     try:
         matriculados = 0
         with get_db_cursor(commit=True) as cur:
+            cur.execute("SELECT turno FROM Turmas WHERE turma_id = %s", (turma_id,))
+            turma = cur.fetchone()
+            if not turma:
+                raise HTTPException(status_code=404, detail="Turma não encontrada.")
+            turma_turno = turma['turno']
+
             for aluno_id in dados.aluno_ids:
+                cur.execute("SELECT turno FROM Alunos WHERE aluno_id = %s", (aluno_id,))
+                aluno = cur.fetchone()
+                if aluno and aluno['turno'] and aluno['turno'] != turma_turno:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Aluno não pode ser matriculado: turno do aluno ({aluno['turno']}) é diferente do turno da turma ({turma_turno})."
+                    )
                 cur.execute("""
                     INSERT INTO Turma_Alunos (turma_id, aluno_id)
                     VALUES (%s, %s)
@@ -432,9 +463,13 @@ async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...),
                     nome = row.get('nome')
                     email = row.get('email')
                     ra = row.get('ra')
+                    turno = row.get('turno')
 
                     if not nome or not email or not ra:
                         continue
+
+                    if turno not in ('Matutino', 'Noturno'):
+                        turno = None
 
                     # 1. Cria Usuário (Senha padrão '123' segura com Bcrypt)
                     user_uuid = str(uuid.uuid4())
@@ -445,10 +480,10 @@ async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...),
                         ON CONFLICT (email) DO NOTHING
                         RETURNING usuario_id
                     """, (user_uuid, nome, email, senha_padrao_hash))
-                    
+
                     res_user = cur.fetchone()
                     usuario_id = res_user['usuario_id'] if res_user else None
-                    
+
                     if not usuario_id: # Usuário já existe, busca o ID
                         cur.execute("SELECT usuario_id FROM Usuarios WHERE email = %s", (email,))
                         usuario_id = cur.fetchone()['usuario_id']
@@ -456,11 +491,11 @@ async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...),
                     # 2. Cria Aluno
                     aluno_uuid = str(uuid.uuid4())
                     cur.execute("""
-                        INSERT INTO Alunos (aluno_id, usuario_id, ra)
-                        VALUES (%s, %s, %s)
-                        ON CONFLICT (ra) DO NOTHING
+                        INSERT INTO Alunos (aluno_id, usuario_id, ra, turno)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (ra) DO UPDATE SET turno = EXCLUDED.turno WHERE Alunos.turno IS NULL
                         RETURNING aluno_id
-                    """, (aluno_uuid, usuario_id, ra))
+                    """, (aluno_uuid, usuario_id, ra, turno))
                     
                     res_aluno = cur.fetchone()
                     aluno_id = res_aluno['aluno_id'] if res_aluno else None
@@ -866,14 +901,15 @@ def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_curren
             user = cur.fetchone()
             nome = user['nome'] if user else "Aluno"
 
-            # 2. Busca Aluno ID
-            cur.execute("SELECT aluno_id FROM Alunos WHERE usuario_id = %s", (usuario_id,))
+            # 2. Busca Aluno ID e turno
+            cur.execute("SELECT aluno_id, turno FROM Alunos WHERE usuario_id = %s", (usuario_id,))
             aluno = cur.fetchone()
 
             if not aluno:
                 raise HTTPException(status_code=404, detail="Aluno não encontrado")
 
             aluno_id = aluno['aluno_id']
+            aluno_turno = aluno['turno']
 
             # 3. Calcula Frequência Geral
             # (Total de presenças / Total de chamadas das turmas que ele participa)
@@ -890,19 +926,32 @@ def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_curren
             if freq_data['total_chamadas'] > 0:
                 frequencia = round((freq_data['total_presencas'] / freq_data['total_chamadas']) * 100)
 
-            # 4. Busca aulas de hoje reais para o aluno
+            # 4. Busca aulas de hoje reais para o aluno, filtradas pelo turno
             import datetime
             dia_hoje = datetime.datetime.now().weekday()
-            cur.execute("""
-                SELECT h.horario_id as id, t.nome_disciplina as nome,
-                       to_char(h.horario_inicio, 'HH24:MI') || ' - ' || to_char(h.horario_fim, 'HH24:MI') as horario,
-                       h.sala
-                FROM horarios_aulas h
-                JOIN turmas t ON h.turma_id = t.turma_id
-                JOIN turma_alunos ta ON t.turma_id = ta.turma_id
-                WHERE ta.aluno_id = %s
-                AND h.dia_semana = %s
-            """, (aluno_id, dia_hoje))
+            if aluno_turno:
+                cur.execute("""
+                    SELECT h.horario_id as id, t.nome_disciplina as nome,
+                           to_char(h.horario_inicio, 'HH24:MI') || ' - ' || to_char(h.horario_fim, 'HH24:MI') as horario,
+                           h.sala
+                    FROM horarios_aulas h
+                    JOIN turmas t ON h.turma_id = t.turma_id
+                    JOIN turma_alunos ta ON t.turma_id = ta.turma_id
+                    WHERE ta.aluno_id = %s
+                    AND h.dia_semana = %s
+                    AND t.turno = %s
+                """, (aluno_id, dia_hoje, aluno_turno))
+            else:
+                cur.execute("""
+                    SELECT h.horario_id as id, t.nome_disciplina as nome,
+                           to_char(h.horario_inicio, 'HH24:MI') || ' - ' || to_char(h.horario_fim, 'HH24:MI') as horario,
+                           h.sala
+                    FROM horarios_aulas h
+                    JOIN turmas t ON h.turma_id = t.turma_id
+                    JOIN turma_alunos ta ON t.turma_id = ta.turma_id
+                    WHERE ta.aluno_id = %s
+                    AND h.dia_semana = %s
+                """, (aluno_id, dia_hoje))
             aulas_hoje = cur.fetchall()
 
             return {
@@ -1071,14 +1120,17 @@ def get_turmas(usuario_id: str, current_user: dict = Depends(get_current_user)):
                 
                 # Valida se esta aula está acontecendo AGORA
                 if row['dia_semana'] == dia_semana:
-                    if row['horario_inicio'] <= hora_atual <= row['horario_fim']:
+                    happening_now = row['horario_inicio'] <= hora_atual <= row['horario_fim']
+                    if happening_now:
                         turmas_dict[t_id]["pode_iniciar"] = True
-                    
-                    # Formata o horário para exibição
-                    turmas_dict[t_id]["proximo_horario"] = f"Hoje: {row['horario_inicio'].strftime('%H:%M')} - {row['horario_fim'].strftime('%H:%M')}"
+                        # Slot ativo tem prioridade sobre qualquer outro horário de hoje
+                        turmas_dict[t_id]["proximo_horario"] = f"Hoje: {row['horario_inicio'].strftime('%H:%M')} - {row['horario_fim'].strftime('%H:%M')}"
+                    elif not turmas_dict[t_id]["pode_iniciar"]:
+                        # Só atualiza se ainda não há slot ativo (evita sobrescrever com horário errado)
+                        turmas_dict[t_id]["proximo_horario"] = f"Hoje: {row['horario_inicio'].strftime('%H:%M')} - {row['horario_fim'].strftime('%H:%M')}"
                 elif turmas_dict[t_id]["proximo_horario"] == "Sem horário definido" and row['dia_semana'] is not None:
-                     dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-                     turmas_dict[t_id]["proximo_horario"] = f"{dias[row['dia_semana']]}: {row['horario_inicio'].strftime('%H:%M')}"
+                    dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+                    turmas_dict[t_id]["proximo_horario"] = f"{dias[row['dia_semana']]}: {row['horario_inicio'].strftime('%H:%M')}"
 
             return {"turmas": list(turmas_dict.values())}
     except Exception as e:
