@@ -2,7 +2,7 @@
 // Em dev, copie `.env.example` para `.env` e ajuste o IP do backend.
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
-  "http://192.168.15.115:8000";
+  "http://192.168.5.129:8000";
 
 import { storage } from "./storage";
 

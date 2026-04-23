@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   StatusBar,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,6 +27,19 @@ export default function ListaPresenca() {
   const [alunos, setAlunos] = useState<any[]>([]);
   const [closing, setClosing] = useState(false);
 
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+
   const carregarStatus = async () => {
     try {
       if (!turma_id) return;
@@ -33,10 +47,12 @@ export default function ListaPresenca() {
       setStatusChamada(statusResp);
 
       if (statusResp.status === "Aberta") {
-         try {
-             const listResp = await apiGet(`/chamadas/${statusResp.chamada_id}/alunos`);
-             if(listResp && listResp.alunos) setAlunos(listResp.alunos);
-         } catch(e) { console.log("Erro ao buscar alunos", e); }
+        try {
+          const listResp = await apiGet(`/chamadas/${statusResp.chamada_id}/alunos`);
+          if (listResp && listResp.alunos) setAlunos(listResp.alunos);
+        } catch (e) {
+          console.log("Erro ao buscar alunos", e);
+        }
       }
     } catch (err: any) {
       console.error("Erro ao carregar status:", err);
@@ -54,16 +70,16 @@ export default function ListaPresenca() {
   const fecharChamada = async () => {
     if (closing) return;
     try {
-        setClosing(true);
-        await apiPost(`/chamadas/fechar/${turma_id}`, {});
-        Alert.alert("Sucesso", "Chamada encerrada e salva no histórico!");
-        router.back();
-    } catch(err: any) {
-        Alert.alert("Erro", err.message || "Erro ao fechar chamada");
+      setClosing(true);
+      await apiPost(`/chamadas/fechar/${turma_id}`, {});
+      Alert.alert("Sucesso", "Chamada encerrada e salva no histórico!");
+      router.back();
+    } catch (err: any) {
+      Alert.alert("Erro", err.message || "Erro ao fechar chamada");
     } finally {
-        setClosing(false);
+      setClosing(false);
     }
-  }
+  };
 
   const menuItems: any[] = [
     { icon: 'home-outline', activeIcon: 'home', route: '/professor/home', label: 'Início' },
@@ -72,10 +88,12 @@ export default function ListaPresenca() {
     { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil', label: 'Perfil' },
   ];
 
+  const isAberta = statusChamada?.status === "Aberta";
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" />
-      
+
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -86,43 +104,58 @@ export default function ListaPresenca() {
         >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Chamada em Tempo Real</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>Chamada em Tempo Real</Text>
         <View style={{ width: 44 }} />
       </View>
 
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.statusCard}>
           <View style={styles.statusHeader}>
-            <View>
-              <Text style={styles.classTitle}>{turma_nome || "Turma"}</Text>
+            <View style={styles.statusHeaderLeft}>
+              <Text style={styles.classTitle} numberOfLines={2}>{turma_nome || "Turma"}</Text>
               <View style={styles.badgeRow}>
-                <View style={[styles.statusBadge, statusChamada?.status === "Aberta" ? styles.badgeOpen : styles.badgeClosed]}>
-                  <Text style={styles.badgeText}>{statusChamada?.status || 'Aguardando'}</Text>
-                </View>
+                {isAberta ? (
+                  <View style={[styles.statusBadge, styles.badgeOpen]}>
+                    <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
+                    <Text style={styles.badgeText}>Ao Vivo</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.statusBadge, styles.badgeClosed]}>
+                    <Text style={styles.badgeText}>{statusChamada?.status || 'Aguardando'}</Text>
+                  </View>
+                )}
               </View>
             </View>
-            <Ionicons name="radio-outline" size={32} color={statusChamada?.status === "Aberta" ? "#22C55E" : Colors.brand.textSecondary} />
+            <Ionicons
+              name="radio-outline"
+              size={32}
+              color={isAberta ? "#22C55E" : Colors.brand.textSecondary}
+            />
           </View>
+
+          <View style={styles.divider} />
 
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{statusChamada?.total_alunos || 0}</Text>
               <Text style={styles.statLabel}>Total</Text>
             </View>
+            <View style={styles.statDivider} />
             <View style={styles.statBox}>
               <Text style={[styles.statValue, { color: "#22C55E" }]}>{statusChamada?.presentes || 0}</Text>
               <Text style={styles.statLabel}>Presentes</Text>
             </View>
+            <View style={styles.statDivider} />
             <View style={styles.statBox}>
               <Text style={[styles.statValue, { color: Colors.brand.error }]}>{statusChamada?.ausentes || 0}</Text>
               <Text style={styles.statLabel}>Ausentes</Text>
             </View>
           </View>
 
-          {statusChamada?.status === "Aberta" && (
+          {isAberta && (
             <TouchableOpacity
               style={[styles.closeCallBtn, closing && { opacity: 0.75 }]}
               onPress={fecharChamada}
@@ -135,44 +168,67 @@ export default function ListaPresenca() {
               {closing ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.closeCallText}>Encerrar e Salvar Chamada</Text>
+                <>
+                  <Ionicons name="stop-circle-outline" size={20} color="#fff" />
+                  <Text style={styles.closeCallText}>Encerrar e Salvar Chamada</Text>
+                </>
               )}
             </TouchableOpacity>
           )}
         </View>
 
-        <Text style={styles.sectionTitle}>Lista de Alunos</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Lista de Alunos</Text>
+          {alunos.length > 0 && (
+            <Text style={styles.sectionCount}>{alunos.length} aluno{alunos.length !== 1 ? 's' : ''}</Text>
+          )}
+        </View>
 
         {loading ? (
           <ActivityIndicator size="large" color={Colors.brand.primary} style={{ marginTop: 20 }} />
         ) : alunos.length > 0 ? (
           alunos.map((aluno) => (
             <View style={styles.studentCard} key={aluno.id}>
-              <View style={styles.studentInfo}>
-                <View style={[styles.avatar, { backgroundColor: aluno.presente ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255, 75, 75, 0.1)' }]}>
-                  <Text style={[styles.avatarText, { color: aluno.presente ? '#22C55E' : Colors.brand.error }]}>
-                    {aluno.nome.charAt(0)}
-                  </Text>
-                </View>
-                <Text style={styles.studentName}>{aluno.nome}</Text>
+              <View
+                style={[
+                  styles.avatar,
+                  { backgroundColor: aluno.presente ? 'rgba(34, 197, 94, 0.12)' : 'rgba(255, 75, 75, 0.12)' },
+                ]}
+              >
+                <Text style={[styles.avatarText, { color: aluno.presente ? '#22C55E' : Colors.brand.error }]}>
+                  {aluno.nome.charAt(0).toUpperCase()}
+                </Text>
               </View>
 
+              <Text style={styles.studentName} numberOfLines={1} ellipsizeMode="tail">
+                {aluno.nome}
+              </Text>
+
               <View style={[styles.statusTag, aluno.presente ? styles.tagPresent : styles.tagAbsent]}>
-                <Ionicons name={aluno.presente ? "checkmark-circle" : "close-circle"} size={14} color="#fff" />
+                <Ionicons
+                  name={aluno.presente ? "checkmark-circle" : "close-circle"}
+                  size={13}
+                  color="#fff"
+                />
                 <Text style={styles.tagText}>{aluno.presente ? "Presente" : "Ausente"}</Text>
               </View>
             </View>
           ))
         ) : (
           <View style={styles.emptyContainer}>
-            <Ionicons name="people-outline" size={40} color={Colors.brand.textSecondary} />
+            <Ionicons name="people-outline" size={48} color={Colors.brand.textSecondary} />
+            <Text style={styles.emptyTitle}>
+              {isAberta ? "Nenhum aluno identificado" : "Chamada não iniciada"}
+            </Text>
             <Text style={styles.emptyText}>
-              {statusChamada?.status === "Aberta" ? "Nenhum aluno identificado ainda..." : "Aguardando início da chamada."}
+              {isAberta
+                ? "Os alunos aparecem aqui conforme são reconhecidos pelo sistema."
+                : "Aguardando o início da chamada biométrica."}
             </Text>
           </View>
         )}
 
-        <View style={{ height: 120 }} />
+        <View style={{ height: 148 }} />
       </ScrollView>
 
       <FloatingMenu items={menuItems} />
@@ -182,41 +238,154 @@ export default function ListaPresenca() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.brand.background },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: 60 },
-  headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
-  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.brand.card, justifyContent: "center", alignItems: "center" },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 10 },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    height: 60,
+  },
+  headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff", flex: 1, textAlign: "center" },
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.brand.card,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  scrollContent: { paddingHorizontal: 20, paddingTop: 12 },
+
   statusCard: {
-    backgroundColor: Colors.brand.card, borderRadius: 24, padding: 24, marginBottom: 32,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+    backgroundColor: Colors.brand.card,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
-  statusHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 },
-  classTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  statusHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  statusHeaderLeft: { flex: 1, marginRight: 12 },
+  classTitle: { color: "#fff", fontSize: 19, fontWeight: "800", lineHeight: 24 },
   badgeRow: { flexDirection: "row", marginTop: 8 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  badgeOpen: { backgroundColor: "rgba(34, 197, 94, 0.15)" },
-  badgeClosed: { backgroundColor: "rgba(255, 255, 255, 0.05)" },
-  badgeText: { color: "#fff", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
-  statsRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
-  statBox: { alignItems: "center", flex: 1 },
-  statValue: { color: "#fff", fontSize: 24, fontWeight: "800" },
-  statLabel: { color: Colors.brand.textSecondary, fontSize: 12, marginTop: 4 },
-  closeCallBtn: { backgroundColor: Colors.brand.error, height: 56, borderRadius: 14, justifyContent: "center", alignItems: "center" },
-  closeCallText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 16, marginLeft: 4 },
-  studentCard: {
-    backgroundColor: Colors.brand.card, borderRadius: 20, padding: 12, marginBottom: 12,
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    alignSelf: "flex-start",
   },
-  studentInfo: { flexDirection: "row", alignItems: "center", flex: 1 },
-  avatar: { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center", marginRight: 12 },
+  badgeOpen: { backgroundColor: "rgba(34, 197, 94, 0.15)" },
+  badgeClosed: { backgroundColor: "rgba(255, 255, 255, 0.07)" },
+  badgeText: { color: "#fff", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#22C55E",
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    marginBottom: 16,
+  },
+
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  statBox: { alignItems: "center", flex: 1 },
+  statValue: { color: "#fff", fontSize: 26, fontWeight: "800" },
+  statLabel: { color: Colors.brand.textSecondary, fontSize: 12, marginTop: 4 },
+  statDivider: { width: 1, height: 36, backgroundColor: "rgba(255,255,255,0.07)" },
+
+  closeCallBtn: {
+    backgroundColor: Colors.brand.error,
+    height: 52,
+    borderRadius: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  closeCallText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: { color: "#fff", fontSize: 17, fontWeight: "700" },
+  sectionCount: {
+    color: Colors.brand.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  studentCard: {
+    backgroundColor: Colors.brand.card,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+    flexShrink: 0,
+  },
   avatarText: { fontWeight: "800", fontSize: 16 },
-  studentName: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  statusTag: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  tagPresent: { backgroundColor: "#22C55E" },
-  tagAbsent: { backgroundColor: Colors.brand.error },
+  studentName: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+    flex: 1,
+    marginRight: 10,
+  },
+  statusTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    flexShrink: 0,
+    minWidth: 80,
+    justifyContent: "center",
+  },
+  tagPresent: { backgroundColor: "rgba(34, 197, 94, 0.85)" },
+  tagAbsent: { backgroundColor: "rgba(255, 75, 75, 0.85)" },
   tagText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  emptyContainer: { alignItems: "center", paddingVertical: 40 },
-  emptyText: { color: Colors.brand.textSecondary, textAlign: "center", fontSize: 14, marginTop: 12 },
+
+  emptyContainer: { alignItems: "center", paddingVertical: 48, paddingHorizontal: 24 },
+  emptyTitle: { color: "#fff", fontSize: 16, fontWeight: "700", marginTop: 14 },
+  emptyText: {
+    color: Colors.brand.textSecondary,
+    textAlign: "center",
+    fontSize: 13,
+    marginTop: 6,
+    lineHeight: 20,
+  },
 });

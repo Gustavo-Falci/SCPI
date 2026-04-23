@@ -44,6 +44,7 @@ export default function Register() {
   const [cameraOpen, setCameraOpen] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
+  const [confirmarSenhaError, setConfirmarSenhaError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [consentimento, setConsentimento] = useState(false);
   const router = useRouter();
@@ -54,7 +55,11 @@ export default function Register() {
       Alert.alert("Erro", "Por favor, preencha todos os campos obrigatórios.");
       return;
     }
-    if (senha !== confirmarSenha) {
+    if (!allRulesOk) {
+      Alert.alert("Senha fraca", "A senha não atende a todos os requisitos de segurança.");
+      return;
+    }
+    if (!senhasConferem) {
       Alert.alert("Erro", "As senhas não coincidem.");
       return;
     }
@@ -134,6 +139,16 @@ export default function Register() {
       setIsLoading(false);
     }
   };
+
+  const passwordRules = {
+    minLength:    senha.length >= 8,
+    hasNumber:    /\d/.test(senha),
+    hasUppercase: /[A-Z]/.test(senha),
+    hasSpecial:   /[!@#$%^&*(),.?":{}|<>]/.test(senha),
+  };
+  const allRulesOk = Object.values(passwordRules).every(Boolean);
+  const senhasConferem = senha === confirmarSenha;
+  const formValido = allRulesOk && senhasConferem;
 
   if (step === 'face') {
     if (!permission) return <View style={styles.container} />;
@@ -347,10 +362,58 @@ export default function Register() {
               <Input label="Departamento" placeholder="Ex: Engenharia" value={departamento} onChangeText={setDepartamento} icon="business-outline" />
             )}
 
-            <Input label="Senha" placeholder="••••••" value={senha} onChangeText={setSenha} secureTextEntry={!showPassword} icon="lock-closed-outline" />
-            <Input label="Confirmar Senha" placeholder="••••••" value={confirmarSenha} onChangeText={setConfirmarSenha} secureTextEntry={!showPassword} icon="checkmark-circle-outline" />
+            <Input
+              label="Senha"
+              placeholder="••••••"
+              value={senha}
+              onChangeText={setSenha}
+              secureTextEntry={!showPassword}
+              icon="lock-closed-outline"
+              rightIcon={showPassword ? "eye-off-outline" : "eye-outline"}
+              onRightIconPress={() => setShowPassword(v => !v)}
+              containerStyle={{ marginBottom: senha.length > 0 ? 0 : 16 }}
+            />
+            {senha.length > 0 && (
+              <View style={styles.passwordReqs}>
+                {([
+                  { key: 'minLength' as const,    label: 'Mínimo 8 caracteres'             },
+                  { key: 'hasNumber' as const,     label: 'Pelo menos 1 número'             },
+                  { key: 'hasUppercase' as const,  label: 'Pelo menos 1 maiúscula'          },
+                  { key: 'hasSpecial' as const,    label: 'Pelo menos 1 caractere especial' },
+                ]).map(({ key, label }) => (
+                  <View key={key} style={styles.reqItem}>
+                    <Ionicons
+                      name={passwordRules[key] ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={14}
+                      color={passwordRules[key] ? '#22C55E' : '#BFBFBF'}
+                    />
+                    <Text style={[styles.reqText, passwordRules[key] && styles.reqTextOk]}>
+                      {label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            <Input
+              label="Confirmar Senha"
+              placeholder="••••••"
+              value={confirmarSenha}
+              onChangeText={(v) => {
+                setConfirmarSenha(v);
+                setConfirmarSenhaError(v.length > 0 && senha !== v ? 'As senhas não coincidem.' : '');
+              }}
+              secureTextEntry={!showPassword}
+              icon="checkmark-circle-outline"
+              error={confirmarSenhaError}
+            />
 
-            <Button title={tipoUsuario === "Aluno" ? "PRÓXIMO: CADASTRAR FACE" : "CADASTRAR"} onPress={handleRegisterData} loading={isLoading} style={{ marginTop: 10 }} />
+            <Button
+              title={tipoUsuario === "Aluno" ? "PRÓXIMO: CADASTRAR FACE" : "CADASTRAR"}
+              onPress={handleRegisterData}
+              loading={isLoading}
+              disabled={!formValido}
+              style={{ marginTop: 10, opacity: formValido ? 1 : 0.4 }}
+            />
 
             <TouchableOpacity
               onPress={() => router.replace("/auth/login")}
@@ -433,4 +496,27 @@ const styles = StyleSheet.create({
   permissionText: { color: Colors.brand.textSecondary, textAlign: "center", marginVertical: 20, fontSize: 16 },
   primaryButton: { backgroundColor: Colors.brand.primary, paddingHorizontal: 30, paddingVertical: 15, borderRadius: 12 },
   buttonText: { color: "#fff", fontWeight: "700" },
+  passwordReqs: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 6,
+    marginBottom: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  reqItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    width: '47%',
+  },
+  reqText: {
+    color: '#BFBFBF',
+    fontSize: 12,
+  },
+  reqTextOk: {
+    color: '#22C55E',
+  },
 });

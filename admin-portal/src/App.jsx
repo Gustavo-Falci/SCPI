@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Users, BookOpen, Calendar, Plus, Trash2, ChevronRight, LogOut,
+  Users, BookOpen, Calendar, Plus, Trash2, ChevronRight, ChevronDown, LogOut,
   LayoutDashboard, Clock, MapPin, Upload, FileText, CheckCircle2, Lock,
-  Filter, Sun, Moon, GraduationCap, Search, UserPlus, X, UserCog
+  Filter, Sun, Moon, GraduationCap, Search, UserPlus, X, UserCog, AlertTriangle
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://192.168.5.152:8000';
+const API_URL = 'http://192.168.5.129:8000';
 
 // Slots oficiais da grade ADS Fatec
 const SLOTS_MATUTINO = [
@@ -59,9 +59,11 @@ function LoginScreen({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setLoginError('');
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -75,7 +77,7 @@ function LoginScreen({ onLogin }) {
     } catch (err) {
       const detail = err.response?.data?.detail;
       const msg = typeof detail === 'string' ? detail : (detail ? JSON.stringify(detail) : "Erro de conexão");
-      alert(`Falha no login: ${msg}`);
+      setLoginError(`Falha no login: ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -113,12 +115,18 @@ function LoginScreen({ onLogin }) {
               onChange={e => setPassword(e.target.value)}
             />
           </div>
-          <button 
+          <button
             disabled={loading}
             className="w-full bg-[#4B39EF] hover:bg-[#5E47FF] text-white font-black py-6 rounded-2xl shadow-2xl shadow-[#4B39EF]/40 transition-all uppercase tracking-widest text-sm active:scale-[0.98]"
           >
             {loading ? 'Processando...' : 'Entrar no Sistema'}
           </button>
+          {loginError && (
+            <div className="flex items-center gap-3 mt-6 px-5 py-4 rounded-2xl border border-red-500/40 bg-red-500/5">
+              <X size={16} className="text-red-400 shrink-0" />
+              <p className="text-sm font-bold text-red-400">{loginError}</p>
+            </div>
+          )}
         </form>
       </div>
     </div>
@@ -155,6 +163,16 @@ function AdminDashboard({ admin, onLogout }) {
   const [searchAluno, setSearchAluno] = useState('');
   const [loadingAlunos, setLoadingAlunos] = useState(false);
 
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast(t => ({ ...t, show: false })), 3500);
+  };
+
+  const [confirmDialog, setConfirmDialog] = useState({ show: false, title: '', message: '', onConfirm: null });
+  const showConfirm = (title, message, onConfirmFn) =>
+    setConfirmDialog({ show: true, title, message, onConfirm: onConfirmFn });
+
   const openProfessorModal = (turma) => {
     setProfessorModal(turma);
     setSelectedProfessorId(turma.professor_id || '');
@@ -172,7 +190,7 @@ function AdminDashboard({ admin, onLogout }) {
       fetchData();
     } catch (err) {
       const detail = err.response?.data?.detail;
-      alert(`Erro ao atribuir professor: ${typeof detail === 'string' ? detail : 'Falha no servidor'}`);
+      showToast(`Erro ao atribuir professor: ${typeof detail === 'string' ? detail : 'Falha no servidor'}`, 'error');
     }
   };
 
@@ -189,7 +207,7 @@ function AdminDashboard({ admin, onLogout }) {
       });
       setAlunosDisponiveis(res.data);
     } catch (err) {
-      alert('Erro ao carregar alunos.');
+      showToast('Erro ao carregar alunos.', 'error');
       setMatriculaModal(null);
     } finally {
       setLoadingAlunos(false);
@@ -206,7 +224,7 @@ function AdminDashboard({ admin, onLogout }) {
   };
 
   const handleMatricular = async () => {
-    if (selectedAlunoIds.size === 0) { alert('Selecione pelo menos um aluno.'); return; }
+    if (selectedAlunoIds.size === 0) { showToast('Selecione pelo menos um aluno.', 'warning'); return; }
     try {
       const token = localStorage.getItem('admin_token');
       const res = await axios.post(
@@ -214,12 +232,12 @@ function AdminDashboard({ admin, onLogout }) {
         { aluno_ids: Array.from(selectedAlunoIds) },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      alert(res.data.mensagem);
+      showToast(res.data.mensagem);
       setMatriculaModal(null);
       fetchData();
     } catch (err) {
       const detail = err.response?.data?.detail;
-      alert(`Erro ao matricular: ${typeof detail === 'string' ? detail : 'Falha no servidor'}`);
+      showToast(`Erro ao matricular: ${typeof detail === 'string' ? detail : 'Falha no servidor'}`, 'error');
     }
   };
 
@@ -233,8 +251,8 @@ function AdminDashboard({ admin, onLogout }) {
     const slots = getSlots(filterTurno);
     const slotIni = slots.find(s => s.id === Number(horarioForm.slot_inicio));
     const slotFim = slots.find(s => s.id === Number(horarioForm.slot_fim));
-    if (!slotIni || !slotFim || !horarioForm.turma_id) { alert('Preencha turma e slots.'); return; }
-    if (slotFim.id < slotIni.id) { alert('Slot final deve ser >= slot inicial.'); return; }
+    if (!slotIni || !slotFim || !horarioForm.turma_id) { showToast('Preencha turma e slots.', 'warning'); return; }
+    if (slotFim.id < slotIni.id) { showToast('Slot final deve ser ≥ slot inicial.', 'warning'); return; }
     try {
       const token = localStorage.getItem('admin_token');
       await axios.post(`${API_URL}/admin/horarios`, {
@@ -247,7 +265,7 @@ function AdminDashboard({ admin, onLogout }) {
       setHorarioModal(null);
       fetchData();
     } catch (err) {
-      alert('Erro ao adicionar horário');
+      showToast('Erro ao adicionar horário', 'error');
     }
   };
 
@@ -278,11 +296,11 @@ function AdminDashboard({ admin, onLogout }) {
     try {
       const token = localStorage.getItem('admin_token');
       await axios.post(`${API_URL}/admin/turmas`, newTurma, { headers: { Authorization: `Bearer ${token}` } });
-      alert("Turma criada!");
+      showToast('Turma criada com sucesso!');
       setNewTurma({ ...newTurma, nome_disciplina: '', codigo_turma: '' });
       fetchData();
     } catch (err) {
-      alert("Erro ao criar");
+      showToast('Erro ao criar turma', 'error');
     }
   };
 
@@ -302,22 +320,45 @@ function AdminDashboard({ admin, onLogout }) {
       const res = await axios.post(`${API_URL}/admin/turmas/${turmaId}/importar-alunos`, formData, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
       });
-      alert(res.data.mensagem);
+      showToast(res.data.mensagem);
       fetchData();
     } catch (err) {
-      alert("Erro na importação");
+      showToast('Erro na importação de alunos', 'error');
     }
   };
 
-  const handleDeleteTurma = async (id) => {
-    if(!confirm("Deseja realmente excluir esta turma?")) return;
-    try {
-      const token = localStorage.getItem('admin_token');
-      await axios.delete(`${API_URL}/admin/turmas/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-      fetchData();
-    } catch (err) {
-      alert("Erro ao excluir");
-    }
+  const handleDeleteTurma = (id) => {
+    showConfirm(
+      'Excluir Turma',
+      'Deseja realmente excluir esta turma? Todos os alunos e horários vinculados serão removidos.',
+      async () => {
+        try {
+          const token = localStorage.getItem('admin_token');
+          await axios.delete(`${API_URL}/admin/turmas/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+          fetchData();
+        } catch {
+          showToast('Erro ao excluir turma', 'error');
+        }
+      }
+    );
+  };
+
+  const handleDeleteProfessor = (professor_id, nome) => {
+    showConfirm(
+      'Excluir Professor',
+      `Deseja realmente excluir o professor "${nome}"?\n\nAs disciplinas atribuídas a ele ficarão sem professor.`,
+      async () => {
+        try {
+          const token = localStorage.getItem('admin_token');
+          await axios.delete(`${API_URL}/admin/professores/${professor_id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          fetchData();
+        } catch {
+          showToast('Erro ao excluir professor', 'error');
+        }
+      }
+    );
   };
 
   const handleDeleteHorario = async (id) => {
@@ -326,7 +367,7 @@ function AdminDashboard({ admin, onLogout }) {
       await axios.delete(`${API_URL}/admin/horarios/${id}`, { headers: { Authorization: `Bearer ${token}` } });
       fetchData();
     } catch (err) {
-      alert("Erro ao remover");
+      showToast('Erro ao remover horário', 'error');
     }
   };
 
@@ -334,6 +375,55 @@ function AdminDashboard({ admin, onLogout }) {
 
   return (
     <div className="flex h-screen bg-[#0C0C12] text-gray-200 font-sans">
+
+      {toast.show && (
+        <div className={`fixed top-6 right-6 z-[200] flex items-center gap-4 px-6 py-4 rounded-2xl bg-[#151718] border shadow-2xl max-w-sm ${
+          toast.type === 'success' ? 'border-green-500/50' :
+          toast.type === 'error'   ? 'border-red-500/50'   :
+                                     'border-amber-400/50'
+        }`}>
+          {toast.type === 'success' && <CheckCircle2 size={20} className="text-green-400 shrink-0" />}
+          {toast.type === 'error'   && <X            size={20} className="text-red-400 shrink-0" />}
+          {toast.type === 'warning' && <AlertTriangle size={20} className="text-amber-400 shrink-0" />}
+          <p className="text-sm font-bold text-white flex-1">{toast.message}</p>
+          <button onClick={() => setToast(t => ({ ...t, show: false }))} className="text-gray-500 hover:text-white transition-colors ml-2">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {confirmDialog.show && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-6">
+          <div className="bg-[#151718] rounded-[40px] border border-white/5 shadow-2xl max-w-md w-full p-10">
+            <div className="flex flex-col items-center text-center gap-6">
+              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center">
+                <Trash2 size={28} className="text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-black text-white mb-3">{confirmDialog.title}</h3>
+                <p className="text-gray-400 font-medium whitespace-pre-line leading-relaxed">{confirmDialog.message}</p>
+              </div>
+              <div className="flex gap-4 w-full pt-2">
+                <button
+                  onClick={() => setConfirmDialog(d => ({ ...d, show: false }))}
+                  className="flex-1 py-4 rounded-2xl bg-white/5 font-black text-sm uppercase tracking-widest text-gray-400 hover:bg-white/10 transition-all">
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    const fn = confirmDialog.onConfirm;
+                    setConfirmDialog(d => ({ ...d, show: false }));
+                    fn?.();
+                  }}
+                  className="flex-1 py-4 rounded-2xl bg-red-500 font-black text-sm uppercase tracking-widest text-white hover:bg-red-400 transition-all shadow-2xl shadow-red-500/20">
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar - Aumentada */}
       <aside className="w-80 bg-[#151718] border-r border-white/5 flex flex-col shadow-2xl">
         <div className="p-12">
@@ -754,6 +844,7 @@ function AdminDashboard({ admin, onLogout }) {
                     <th className="px-12 py-10">Membro do Corpo Docente</th>
                     <th className="px-12 py-10">Departamento</th>
                     <th className="px-12 py-10">Contato Oficial</th>
+                    <th className="px-12 py-10">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -772,6 +863,15 @@ function AdminDashboard({ admin, onLogout }) {
                          <div className="bg-white/5 inline-block px-6 py-3 rounded-2xl text-sm font-black text-gray-400 border border-white/5 uppercase tracking-widest">{p.departamento}</div>
                       </td>
                       <td className="px-12 py-12 text-gray-300 font-bold text-lg">{p.email}</td>
+                      <td className="px-12 py-12">
+                        <button
+                          onClick={() => handleDeleteProfessor(p.professor_id, p.nome)}
+                          title="Excluir professor"
+                          className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 hover:text-red-500 transition-all border border-white/5 hover:border-red-500/30"
+                        >
+                          <Trash2 size={24} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -801,6 +901,21 @@ function SidebarItem({ icon, label, active, onClick }) {
         {label}
       </span>
     </button>
+  );
+}
+
+function SelectInput({ children, className = '', ...props }) {
+  return (
+    <div className="relative">
+      <select
+        style={{ colorScheme: 'dark' }}
+        className={`w-full bg-[#1A1C1E] border border-white/10 rounded-2xl px-6 py-5 pr-14 text-lg text-white outline-none focus:border-[#4B39EF] focus:ring-2 focus:ring-[#4B39EF]/20 transition-all appearance-none cursor-pointer ${className}`}
+        {...props}
+      >
+        {children}
+      </select>
+      <ChevronDown size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+    </div>
   );
 }
 

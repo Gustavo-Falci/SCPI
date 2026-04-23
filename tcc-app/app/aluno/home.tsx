@@ -20,6 +20,27 @@ import { Colors } from "../../constants/theme";
 import { DashboardHeader } from "../../components/layout/dashboard-header";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 
+function isAulaAgora(horario: string): boolean {
+  if (!horario) return false;
+  const parts = horario.split(' - ');
+  if (parts.length !== 2) return false;
+
+  const toMinutes = (hhmm: string): number => {
+    const [h, m] = hhmm.trim().split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return -1;
+    return h * 60 + m;
+  };
+
+  const inicio = toMinutes(parts[0]);
+  const fim = toMinutes(parts[1]);
+  if (inicio === -1 || fim === -1) return false;
+
+  const now = new Date();
+  const agora = now.getHours() * 60 + now.getMinutes();
+
+  return agora >= inicio && agora <= fim;
+}
+
 export default function HomeAluno() {
   const router = useRouter();
   const [data, setData] = useState<any>(null);
@@ -154,7 +175,7 @@ export default function HomeAluno() {
                     <Text style={styles.classRoomText}>{aula.sala}</Text>
                   </View>
                 </View>
-                {index === 0 && (
+                {isAulaAgora(aula.horario) && (
                    <View style={styles.liveBadge}>
                       <Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
                       <Text style={styles.liveText}>Agora</Text>

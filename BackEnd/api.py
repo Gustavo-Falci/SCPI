@@ -345,6 +345,25 @@ def admin_excluir_turma(turma_id: str, current_user: dict = Depends(require_role
     except Exception as e:
         raise internal_error(e)
 
+@app.delete("/admin/professores/{professor_id}")
+def admin_excluir_professor(professor_id: str, current_user: dict = Depends(require_role("Admin"))):
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("SELECT usuario_id FROM Professores WHERE professor_id = %s", (professor_id,))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Professor não encontrado")
+            usuario_id = row["usuario_id"]
+            cur.execute("UPDATE Turmas SET professor_id = NULL WHERE professor_id = %s", (professor_id,))
+            cur.execute("UPDATE Chamadas SET professor_id = NULL WHERE professor_id = %s", (professor_id,))
+            cur.execute("DELETE FROM Professores WHERE professor_id = %s", (professor_id,))
+            cur.execute("DELETE FROM Usuarios WHERE usuario_id = %s", (usuario_id,))
+            return {"mensagem": "Professor excluído com sucesso"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e)
+
 @app.get("/admin/horarios-todos")
 def admin_listar_todos_horarios(current_user: dict = Depends(require_role("Admin"))):
     try:
