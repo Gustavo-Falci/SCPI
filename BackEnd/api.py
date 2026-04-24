@@ -423,7 +423,7 @@ def admin_listar_todos_horarios(current_user: dict = Depends(require_role("Admin
         raise internal_error(e)
 
 @app.delete("/admin/horarios/{horario_id}")
-def admin_excluir_horario(horario_id: int, current_user: dict = Depends(require_role("Admin"))):
+def admin_excluir_horario(horario_id: str, current_user: dict = Depends(require_role("Admin"))):
     try:
         with get_db_cursor(commit=True) as cur:
             cur.execute("DELETE FROM horarios_aulas WHERE horario_id = %s", (horario_id,))

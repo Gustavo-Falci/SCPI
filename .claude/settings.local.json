@@ -41,7 +41,12 @@
       "Bash(npx tsc *)",
       "Bash(node -e ' *)",
       "Bash(PGPASSWORD='adminpostgres@' psql *)",
-      "Bash(venv/Scripts/pip install *)"
+      "Bash(venv/Scripts/pip install *)",
+      "Bash(claude plugin *)",
+      "Bash(npm run *)"
     ]
+  },
+  "enabledPlugins": {
+    "caveman@caveman": true
   }
 }

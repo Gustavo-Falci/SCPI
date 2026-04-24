@@ -164,19 +164,14 @@ export default function RelatorioDetalhe() {
                 </Text>
               </View>
 
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.studentName} numberOfLines={1}>
                   {a.nome}
                 </Text>
-                <Text style={styles.studentRa}>RA {a.ra}</Text>
+                <Text style={[styles.studentRa, { marginTop: 2 }]}>RA {a.ra}</Text>
               </View>
 
-              <View style={styles.tagGroup}>
-                {a.presente && a.tipo_registro !== "—" && (
-                  <View style={styles.tipoTag}>
-                    <Text style={styles.tipoTagText}>{a.tipo_registro}</Text>
-                  </View>
-                )}
+              <View style={{ alignItems: "flex-end", gap: 4 }}>
                 <View
                   style={[
                     styles.statusTag,
@@ -192,6 +187,11 @@ export default function RelatorioDetalhe() {
                     {a.presente ? "Presente" : "Ausente"}
                   </Text>
                 </View>
+                {a.presente && a.tipo_registro !== "—" && (
+                  <View style={styles.tipoTag}>
+                    <Text style={styles.tipoTagText}>{a.tipo_registro}</Text>
+                  </View>
+                )}
               </View>
             </View>
           ))}
@@ -301,7 +301,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   studentRa: { color: Colors.brand.textSecondary, fontSize: 12, marginTop: 2 },
-  tagGroup: { flexDirection: "row", gap: 6, alignItems: "center", flexShrink: 0 },
   tipoTag: {
     backgroundColor: "rgba(255,255,255,0.07)",
     paddingHorizontal: 8,

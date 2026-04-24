@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users, BookOpen, Calendar, Plus, Trash2, ChevronRight, ChevronDown, LogOut,
   LayoutDashboard, Clock, MapPin, Upload, FileText, CheckCircle2, Lock,
@@ -6,7 +6,50 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://10.34.221.107:8000';
+const API_URL = 'http://192.168.5.179:8000';
+
+// --- Gerenciamento de refresh token (singleton) ---
+// Evita múltiplas chamadas concorrentes de /auth/refresh: se uma requisição de
+// refresh já está em andamento, outras requisições esperam a mesma Promise.
+let refreshPromise = null;
+
+function clearAdminSession() {
+  localStorage.removeItem('admin_token');
+  localStorage.removeItem('admin_refresh_token');
+  localStorage.removeItem('admin_user');
+}
+
+async function tryRefreshAdminToken() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const refresh = localStorage.getItem('admin_refresh_token');
+    if (!refresh) return null;
+    try {
+      // Usa axios "cru" para evitar recursão no interceptor de resposta.
+      const response = await axios.post(
+        `${API_URL}/auth/refresh`,
+        { refresh_token: refresh },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+      const data = response.data;
+      if (data?.access_token && data?.refresh_token) {
+        localStorage.setItem('admin_token', data.access_token);
+        localStorage.setItem('admin_refresh_token', data.refresh_token);
+        return data.access_token;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  })();
+
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
+}
 
 // Slots oficiais da grade ADS Fatec
 const SLOTS_MATUTINO = [
@@ -30,27 +73,109 @@ export default function AdminPortal() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [adminUser, setAdminUser] = useState(null);
 
+  // Callback chamado quando o refresh falha (sessão expirada irrecuperável).
+  // Definido como ref para manter a mesma referência estável no interceptor,
+  // mas sempre executar a lógica mais recente.
+  const onSessionExpiredRef = useRef(() => {
+    clearAdminSession();
+    setIsLoggedIn(false);
+    setAdminUser(null);
+  });
+  onSessionExpiredRef.current = () => {
+    clearAdminSession();
+    setIsLoggedIn(false);
+    setAdminUser(null);
+  };
+
+  // Restaura sessão previamente salva no localStorage.
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
-    if (token) {
-       setIsLoggedIn(true);
-       setAdminUser(JSON.parse(localStorage.getItem('admin_user')));
+    const refresh = localStorage.getItem('admin_refresh_token');
+    const user = localStorage.getItem('admin_user');
+    if (token && refresh && user) {
+      try {
+        setAdminUser(JSON.parse(user));
+        setIsLoggedIn(true);
+      } catch {
+        clearAdminSession();
+      }
+    } else if (token || refresh || user) {
+      // Estado inconsistente (ex.: token antigo sem refresh) — limpa para forçar novo login.
+      clearAdminSession();
     }
+  }, []);
+
+  // Interceptor axios (response): detecta 401, tenta refresh e refaz a request.
+  // Registrado uma única vez no mount do app e ejetado no unmount.
+  useEffect(() => {
+    const interceptorId = axios.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
+        const status = error.response?.status;
+
+        // Não tenta refresh se:
+        // - não há response (erro de rede puro)
+        // - status != 401
+        // - a própria request é do /auth/refresh ou /auth/login (evita loop)
+        // - a request já foi marcada como "retried"
+        if (
+          status !== 401 ||
+          !originalRequest ||
+          originalRequest._retry ||
+          originalRequest.url?.includes('/auth/refresh') ||
+          originalRequest.url?.includes('/auth/login')
+        ) {
+          return Promise.reject(error);
+        }
+
+        originalRequest._retry = true;
+
+        const newToken = await tryRefreshAdminToken();
+        if (!newToken) {
+          onSessionExpiredRef.current?.();
+          return Promise.reject(error);
+        }
+
+        // Atualiza o header Authorization da request original e reenvia.
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return axios(originalRequest);
+      }
+    );
+
+    return () => {
+      axios.interceptors.response.eject(interceptorId);
+    };
   }, []);
 
   if (!isLoggedIn) {
     return <LoginScreen onLogin={(data) => {
       localStorage.setItem('admin_token', data.access_token);
+      localStorage.setItem('admin_refresh_token', data.refresh_token);
       localStorage.setItem('admin_user', JSON.stringify(data));
       setAdminUser(data);
       setIsLoggedIn(true);
     }} />;
   }
 
-  return <AdminDashboard admin={adminUser} onLogout={() => {
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_user');
+  return <AdminDashboard admin={adminUser} onLogout={async () => {
+    const refresh = localStorage.getItem('admin_refresh_token');
+    const token = localStorage.getItem('admin_token');
+    if (refresh) {
+      try {
+        await axios.post(
+          `${API_URL}/auth/logout`,
+          { refresh_token: refresh },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } catch {
+        // Ignora erros — a limpeza local é autoritativa.
+      }
+    }
+    clearAdminSession();
     setIsLoggedIn(false);
+    setAdminUser(null);
   }} />;
 }
 
@@ -145,6 +270,14 @@ function AdminDashboard({ admin, onLogout }) {
   const [filterTurno, setFilterTurno] = useState('Matutino');
   const [filterSemestre, setFilterSemestre] = useState('Todos');
   const [searchTerm, setSearchSearchTerm] = useState('');
+  const [turmaPage, setTurmaPage] = useState(1);
+  const TURMAS_PER_PAGE = 6;
+  const [profPage, setProfPage] = useState(1);
+  const PROF_PER_PAGE = 8;
+  const [alunoPage, setAlunoPage] = useState(1);
+  const ALUNO_PER_PAGE = 8;
+  const [relatorioPage, setRelatorioPage] = useState(1);
+  const RELATORIO_PER_PAGE = 8;
 
   const [newTurma, setNewTurma] = useState({ professor_id: '', codigo_turma: '', nome_disciplina: '', periodo_letivo: '2025-1', sala_padrao: '', turno: 'Matutino', semestre: '1' });
 
@@ -335,6 +468,18 @@ function AdminDashboard({ admin, onLogout }) {
     const slotFim = slots.find(s => s.id === Number(horarioForm.slot_fim));
     if (!slotIni || !slotFim || !horarioForm.turma_id) { showToast('Preencha turma e slots.', 'warning'); return; }
     if (slotFim.id < slotIni.id) { showToast('Slot final deve ser ≥ slot inicial.', 'warning'); return; }
+
+    const conflito = grade.find(g =>
+      g.turma_id === horarioForm.turma_id &&
+      g.dia_semana === horarioModal.dia_semana &&
+      slotIni.inicio < g.fim &&
+      slotFim.fim > g.inicio
+    );
+    if (conflito) {
+      showToast(`Conflito: "${conflito.nome_disciplina}" já ocupa ${conflito.inicio}–${conflito.fim} neste dia.`, 'error');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('admin_token');
       await axios.post(`${API_URL}/admin/horarios`, {
@@ -381,7 +526,7 @@ function AdminDashboard({ admin, onLogout }) {
       const token = localStorage.getItem('admin_token');
       await axios.post(`${API_URL}/admin/turmas`, newTurma, { headers: { Authorization: `Bearer ${token}` } });
       showToast('Turma criada com sucesso!');
-      setNewTurma({ ...newTurma, nome_disciplina: '', codigo_turma: '' });
+      setNewTurma({ ...newTurma, nome_disciplina: '', codigo_turma: '', sala_padrao: '' });
       fetchData();
     } catch (err) {
       showToast('Erro ao criar turma', 'error');
@@ -394,12 +539,23 @@ function AdminDashboard({ admin, onLogout }) {
     const matchSearch = t.nome_disciplina.toLowerCase().includes(searchTerm.toLowerCase()) || t.codigo_turma.toLowerCase().includes(searchTerm.toLowerCase());
     return matchTurno && matchSemestre && matchSearch;
   });
+  const turmasTotalPages = Math.max(1, Math.ceil(filteredTurmas.length / TURMAS_PER_PAGE));
+  const turmasPaged = filteredTurmas.slice((turmaPage - 1) * TURMAS_PER_PAGE, turmaPage * TURMAS_PER_PAGE);
 
   const filteredRelatorios = relatorios.filter(r => {
     const matchTurno = r.turno === filterTurno;
     const matchSemestre = filterSemestre === 'Todos' || String(r.semestre) === filterSemestre;
     return matchTurno && matchSemestre;
   });
+
+  const profTotalPages = Math.max(1, Math.ceil(professores.length / PROF_PER_PAGE));
+  const profPaged = professores.slice((profPage - 1) * PROF_PER_PAGE, profPage * PROF_PER_PAGE);
+
+  const alunoTotalPages = Math.max(1, Math.ceil(alunos.length / ALUNO_PER_PAGE));
+  const alunosPaged = alunos.slice((alunoPage - 1) * ALUNO_PER_PAGE, alunoPage * ALUNO_PER_PAGE);
+
+  const relatorioTotalPages = Math.max(1, Math.ceil(filteredRelatorios.length / RELATORIO_PER_PAGE));
+  const relatoriosPaged = filteredRelatorios.slice((relatorioPage - 1) * RELATORIO_PER_PAGE, relatorioPage * RELATORIO_PER_PAGE);
 
   const handleImportCSV = async (turmaId, file) => {
     if(!file) return;
@@ -451,14 +607,20 @@ function AdminDashboard({ admin, onLogout }) {
     );
   };
 
-  const handleDeleteHorario = async (id) => {
-    try {
-      const token = localStorage.getItem('admin_token');
-      await axios.delete(`${API_URL}/admin/horarios/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-      fetchData();
-    } catch (err) {
-      showToast('Erro ao remover horário', 'error');
-    }
+  const handleDeleteHorario = (id) => {
+    showConfirm(
+      'Excluir Horário',
+      'Deseja realmente remover esta aula da grade semanal?',
+      async () => {
+        try {
+          const token = localStorage.getItem('admin_token');
+          await axios.delete(`${API_URL}/admin/horarios/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+          fetchData();
+        } catch (err) {
+          showToast('Erro ao remover horário', 'error');
+        }
+      }
+    );
   };
 
   const diasSemana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
@@ -545,26 +707,26 @@ function AdminDashboard({ admin, onLogout }) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-[#0C0C12] p-16">
+      <main className="flex-1 overflow-hidden bg-[#0C0C12] p-6 flex flex-col">
         {/* Renderiza Filtros de Turno e Semestre GLOBAIS para as abas Turmas e Horários */}
         {(activeTab === 'turmas' || activeTab === 'horarios' || activeTab === 'relatorios') && (
-          <div className="max-w-7xl mx-auto mb-12">
-            <div className="flex justify-between items-end mb-8">
+          <div className="w-full mb-4 flex-shrink-0">
+            <div className="flex justify-between items-center mb-3">
                <div>
-                  <h2 className="text-5xl font-black text-white tracking-tight">
+                  <h2 className="text-2xl font-black text-white tracking-tight">
                     {activeTab === 'turmas' ? 'Turmas' : activeTab === 'horarios' ? 'Grade Semanal' : 'Relatórios'}
                   </h2>
-                  <p className="text-gray-500 text-xl mt-4 font-medium">
+                  <p className="text-gray-500 text-sm mt-1 font-medium">
                     {activeTab === 'turmas' ? 'Gestão estratégica de disciplinas e alunos.' : activeTab === 'horarios' ? 'Visualize e organize o calendário acadêmico.' : 'Histórico imutável de todas as chamadas realizadas.'}
                   </p>
                </div>
                <div className="flex gap-4">
-                  <div className="bg-[#151718] p-2 rounded-[24px] border border-white/5 flex gap-2">
+                  <div className="bg-[#151718] p-1.5 rounded-2xl border border-white/5 flex gap-1.5">
                      {['Matutino', 'Noturno'].map(t => (
-                       <button 
+                       <button
                          key={t}
-                         onClick={() => setFilterTurno(t)}
-                         className={`px-10 py-4 rounded-2xl text-sm font-black transition-all ${filterTurno === t ? 'bg-[#4B39EF] text-white shadow-2xl' : 'text-gray-500 hover:text-white'}`}
+                         onClick={() => { setFilterTurno(t); setTurmaPage(1); setRelatorioPage(1); }}
+                         className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${filterTurno === t ? 'bg-[#4B39EF] text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
                        >
                          {t.toUpperCase()}
                        </button>
@@ -573,15 +735,14 @@ function AdminDashboard({ admin, onLogout }) {
                </div>
             </div>
 
-            {/* Filtros de Semestre */}
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap gap-2">
                {['Todos', '1', '2', '3', '4', '5', '6'].map(s => (
-                 <button 
-                   key={s} 
-                   onClick={() => setFilterSemestre(s)}
-                   className={`px-8 py-4 rounded-full border text-xs font-black tracking-widest transition-all ${filterSemestre === s ? 'bg-white text-black border-white shadow-xl' : 'border-white/10 text-gray-500 hover:border-white/30'}`}
+                 <button
+                   key={s}
+                   onClick={() => { setFilterSemestre(s); setTurmaPage(1); setRelatorioPage(1); }}
+                   className={`px-4 py-1.5 rounded-full border text-xs font-black tracking-widest transition-all ${filterSemestre === s ? 'bg-white text-black border-white shadow-xl' : 'border-white/10 text-gray-500 hover:border-white/30'}`}
                  >
-                   {s === 'Todos' ? 'TODOS OS SEMESTRES' : `${s}º SEMESTRE`}
+                   {s === 'Todos' ? 'TODOS' : `${s}º SEM`}
                  </button>
                ))}
             </div>
@@ -589,136 +750,153 @@ function AdminDashboard({ admin, onLogout }) {
         )}
 
         {activeTab === 'turmas' && (
-          <div className="max-w-7xl mx-auto space-y-16">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
-              {/* Form Lateral - Robusto */}
-              <div className="lg:col-span-4 space-y-8">
-                 <div className="bg-[#151718] p-10 rounded-[40px] border border-white/5 shadow-2xl">
-                    <h3 className="text-xl font-black text-white mb-10 flex items-center gap-3"><Plus size={24} className="text-[#4B39EF]"/> NOVA TURMA</h3>
-                    <form onSubmit={handleCreateTurma} className="space-y-8">
-                       <InputGroup label="Nome da Disciplina">
-                          <input className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Cálculo I" value={newTurma.nome_disciplina} onChange={e=>setNewTurma({...newTurma, nome_disciplina: e.target.value})} />
-                       </InputGroup>
-                       <div className="grid grid-cols-2 gap-6">
-                          <InputGroup label="Código">
-                             <input className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="MAT-01" value={newTurma.codigo_turma} onChange={e=>setNewTurma({...newTurma, codigo_turma: e.target.value})} />
-                          </InputGroup>
-                          <InputGroup label="Semestre">
-                             <SelectInput value={newTurma.semestre} onChange={e=>setNewTurma({...newTurma, semestre: e.target.value})}>
-                                {[1,2,3,4,5,6].map(v => <option key={v} value={v}>{v}º</option>)}
-                             </SelectInput>
-                          </InputGroup>
-                       </div>
-                       <InputGroup label="Turno">
-                          <SelectInput value={newTurma.turno} onChange={e=>setNewTurma({...newTurma, turno: e.target.value})}>
-                             <option value="Matutino">Matutino</option>
-                             <option value="Noturno">Noturno</option>
-                          </SelectInput>
-                       </InputGroup>
-                       <InputGroup label="Professor">
-                          <SelectInput value={newTurma.professor_id} onChange={e=>setNewTurma({...newTurma, professor_id: e.target.value})}>
-                             <option value="">Selecione...</option>
-                             {professores.map(p => <option key={p.professor_id} value={p.professor_id}>{p.nome}</option>)}
-                          </SelectInput>
-                       </InputGroup>
-                       <button className="w-full bg-[#4B39EF] py-6 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-[#4B39EF]/30 hover:scale-[1.02] transition-all active:scale-[0.98]">CADASTRAR TURMA</button>
-                    </form>
-                 </div>
-              </div>
+          <div className="flex-1 overflow-hidden flex gap-6 min-h-0">
+            {/* Form Lateral */}
+            <div className="w-96 flex-shrink-0 flex flex-col">
+               <div className="bg-[#151718] p-6 rounded-[32px] border border-white/5 shadow-2xl flex-1 flex flex-col">
+                  <h3 className="text-base font-black text-white mb-4 flex items-center gap-2 flex-shrink-0"><Plus size={18} className="text-[#4B39EF]"/> NOVA TURMA</h3>
+                  <form onSubmit={handleCreateTurma} className="flex-1 flex flex-col justify-between">
+                     <InputGroup label="Nome da Disciplina">
+                        <input className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Cálculo I" value={newTurma.nome_disciplina} onChange={e=>setNewTurma({...newTurma, nome_disciplina: e.target.value})} />
+                     </InputGroup>
+                     <div className="grid grid-cols-2 gap-3">
+                        <InputGroup label="Código">
+                           <input className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="MAT-01" value={newTurma.codigo_turma} onChange={e=>setNewTurma({...newTurma, codigo_turma: e.target.value})} />
+                        </InputGroup>
+                        <InputGroup label="Semestre">
+                           <SelectInput value={newTurma.semestre} onChange={e=>setNewTurma({...newTurma, semestre: e.target.value})}>
+                              {[1,2,3,4,5,6].map(v => <option key={v} value={v}>{v}º</option>)}
+                           </SelectInput>
+                        </InputGroup>
+                     </div>
+                     <InputGroup label="Turno">
+                        <SearchableSelect
+                          searchable={false}
+                          value={newTurma.turno}
+                          onChange={val => setNewTurma({...newTurma, turno: val})}
+                          options={[{ value: 'Matutino', label: 'Matutino' }, { value: 'Noturno', label: 'Noturno' }]}
+                          placeholder="Selecione o turno..."
+                        />
+                     </InputGroup>
+                     <InputGroup label="Sala Padrão">
+                        <input className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Lab 01" required value={newTurma.sala_padrao} onChange={e=>setNewTurma({...newTurma, sala_padrao: e.target.value})} />
+                     </InputGroup>
+                     <InputGroup label="Professor">
+                        <SearchableSelect
+                          value={newTurma.professor_id}
+                          onChange={val => setNewTurma({...newTurma, professor_id: val})}
+                          options={professores.map(p => ({ value: p.professor_id, label: p.nome }))}
+                          placeholder="Selecione um professor..."
+                        />
+                     </InputGroup>
+                     <button className="w-full bg-[#4B39EF] py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-[#4B39EF]/30 hover:scale-[1.02] transition-all active:scale-[0.98]">CADASTRAR TURMA</button>
+                  </form>
+               </div>
+            </div>
 
-              {/* Lista Principal - Wide */}
-              <div className="lg:col-span-8 space-y-6">
-                 <div className="relative mb-12">
-                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-600" size={28} />
-                    <input 
-                      className="w-full bg-[#151718] border border-white/5 rounded-[30px] py-6 pl-16 pr-8 outline-none focus:ring-2 focus:ring-[#4B39EF]/30 transition-all font-bold text-lg"
-                      placeholder="Pesquisar por disciplina ou código..."
-                      value={searchTerm}
-                      onChange={e => setSearchSearchTerm(e.target.value)}
-                    />
-                 </div>
+            {/* Lista Principal */}
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+               <div className="relative mb-3 flex-shrink-0">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={20} />
+                  <input
+                    className="w-full bg-[#151718] border border-white/5 rounded-2xl py-3 pl-12 pr-6 outline-none focus:ring-2 focus:ring-[#4B39EF]/30 transition-all font-bold text-sm"
+                    placeholder="Pesquisar por disciplina ou código..."
+                    value={searchTerm}
+                    onChange={e => { setSearchSearchTerm(e.target.value); setTurmaPage(1); }}
+                  />
+               </div>
 
-                 {filteredTurmas.map(t => (
-                   <div key={t.turma_id} className="group bg-[#151718] hover:bg-[#1A1C1E] p-8 rounded-[40px] border border-white/5 flex items-center justify-between transition-all hover:border-[#4B39EF]/40 shadow-lg">
-                      <div className="flex items-center gap-8">
-                         <div className={`w-20 h-20 rounded-3xl flex items-center justify-center font-black text-3xl ${t.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
+               <div className="flex-1 overflow-hidden flex flex-col gap-2 min-h-0">
+                 {turmasPaged.map(t => (
+                   <div key={t.turma_id} className="group bg-[#151718] hover:bg-[#1A1C1E] px-5 rounded-2xl border border-white/5 flex items-center justify-between transition-all hover:border-[#4B39EF]/40 flex-1 min-h-0">
+                      <div className="flex items-center gap-4">
+                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg flex-shrink-0 ${t.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
                             {t.semestre}º
                          </div>
                          <div>
-                            <div className="flex items-center gap-4">
-                               <h4 className="font-black text-white text-2xl tracking-tight">{t.nome_disciplina}</h4>
-                               <span className={`text-xs font-black px-3 py-1 rounded-lg uppercase tracking-tighter ${t.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
+                            <div className="flex items-center gap-3">
+                               <h4 className="font-black text-white text-base tracking-tight">{t.nome_disciplina}</h4>
+                               <span className={`text-xs font-black px-2 py-0.5 rounded-md uppercase tracking-tighter ${t.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
                                  {t.turno}
                                </span>
                             </div>
-                            <p className="text-lg text-gray-500 font-bold mt-2 italic">Prof. {t.professor_nome} • <span className="text-gray-600">{t.codigo_turma}</span></p>
+                            <p className="text-sm text-gray-500 font-bold mt-0.5 italic">Prof. {t.professor_nome} • <span className="text-gray-600">{t.codigo_turma}</span></p>
                          </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                         <div className="text-right mr-6 hidden md:block">
-                            <p className="text-xl font-black text-white">{t.total_alunos}</p>
+                      <div className="flex items-center gap-2">
+                         <div className="text-right mr-4 hidden md:block">
+                            <p className="text-base font-black text-white">{t.total_alunos}</p>
                             <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Alunos</p>
                          </div>
-                         <button
-                            onClick={() => openProfessorModal(t)}
-                            title="Atribuir professor"
-                            className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 hover:text-amber-400 transition-all border border-white/5 hover:border-amber-400/30">
-                           <UserCog size={24}/>
-                         </button>
-                         <button
-                            onClick={() => openMatriculaModal(t)}
-                            title="Matricular aluno individualmente"
-                            className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 hover:text-[#4B39EF] transition-all border border-white/5 hover:border-[#4B39EF]/30">
-                           <UserPlus size={24}/>
-                         </button>
-                         <label
-                            title="Importar alunos via CSV"
-                            className="cursor-pointer w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 hover:text-[#22C55E] transition-all border border-white/5 hover:border-[#22C55E]/30">
-                           <Upload size={24}/>
-                           <input type="file" accept=".csv" className="hidden" onChange={e => handleImportCSV(t.turma_id, e.target.files[0])} />
-                         </label>
-                         <button onClick={() => handleDeleteTurma(t.turma_id)} title="Excluir turma" className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 hover:text-red-500 transition-all border border-white/5 hover:border-red-500/30"><Trash2 size={24}/></button>
+                         <button onClick={() => openProfessorModal(t)} title="Atribuir professor" className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 hover:text-amber-400 transition-all border border-white/5 hover:border-amber-400/30"><UserCog size={18}/></button>
+                         <button onClick={() => openMatriculaModal(t)} title="Matricular aluno" className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 hover:text-[#4B39EF] transition-all border border-white/5 hover:border-[#4B39EF]/30"><UserPlus size={18}/></button>
+                         <label title="Importar CSV" className="cursor-pointer w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 hover:text-[#22C55E] transition-all border border-white/5 hover:border-[#22C55E]/30"><Upload size={18}/><input type="file" accept=".csv" className="hidden" onChange={e => handleImportCSV(t.turma_id, e.target.files[0])} /></label>
+                         <button onClick={() => handleDeleteTurma(t.turma_id)} title="Excluir turma" className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 hover:text-red-500 transition-all border border-white/5 hover:border-red-500/30"><Trash2 size={18}/></button>
                       </div>
                    </div>
                  ))}
-                 
+
                  {filteredTurmas.length === 0 && (
-                   <div className="py-32 text-center bg-white/[0.01] rounded-[50px] border-2 border-dashed border-white/5">
-                      <Filter className="mx-auto text-gray-800 mb-6" size={64} />
-                      <p className="text-gray-500 text-xl font-black">Nenhuma turma para este filtro.</p>
+                   <div className="flex-1 flex flex-col items-center justify-center bg-white/[0.01] rounded-3xl border-2 border-dashed border-white/5">
+                      <Filter className="text-gray-800 mb-4" size={48} />
+                      <p className="text-gray-500 text-base font-black">Nenhuma turma para este filtro.</p>
                    </div>
                  )}
-              </div>
+               </div>
+
+               {turmasTotalPages > 1 && (
+                 <div className="flex items-center justify-between pt-3 flex-shrink-0">
+                   <p className="text-xs font-black text-gray-500">
+                     {filteredTurmas.length} turma{filteredTurmas.length !== 1 ? 's' : ''} • página {turmaPage} de {turmasTotalPages}
+                   </p>
+                   <div className="flex gap-1.5">
+                     <button onClick={() => setTurmaPage(p => Math.max(1, p - 1))} disabled={turmaPage === 1} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                       <ChevronDown size={14} className="rotate-90" />
+                     </button>
+                     {Array.from({ length: turmasTotalPages }, (_, i) => i + 1).map(p => (
+                       <button key={p} onClick={() => setTurmaPage(p)} className={`w-8 h-8 rounded-xl text-xs font-black transition-all border ${turmaPage === p ? 'bg-[#4B39EF] text-white border-[#4B39EF] shadow-lg' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'}`}>{p}</button>
+                     ))}
+                     <button onClick={() => setTurmaPage(p => Math.min(turmasTotalPages, p + 1))} disabled={turmaPage === turmasTotalPages} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                       <ChevronDown size={14} className="-rotate-90" />
+                     </button>
+                   </div>
+                 </div>
+               )}
             </div>
           </div>
         )}
 
         {activeTab === 'horarios' && (
-          <div className="max-w-7xl mx-auto space-y-16">
-            <div className="bg-[#151718] p-12 rounded-[60px] border border-white/5 shadow-2xl shadow-black/40">
-               <div className="grid grid-cols-5 gap-10">
+          <div className="flex-1 overflow-hidden min-h-0">
+            <div className="bg-[#151718] p-6 rounded-3xl border border-white/5 shadow-2xl shadow-black/40 h-full overflow-y-auto">
+               <div className="grid grid-cols-5 gap-4">
                   {diasSemana.slice(0,5).map((dia, idx) => (
-                    <div key={dia} className="space-y-8">
-                      <div className="text-center font-black text-gray-600 text-xs uppercase tracking-[0.4em] mb-4">{dia}</div>
-                      <div className="space-y-6">
+                    <div key={dia} className="space-y-3">
+                      <div className="text-center font-black text-gray-600 text-xs uppercase tracking-[0.3em] mb-2">{dia}</div>
+                      <div className="space-y-3">
                          {grade.filter(g => g.dia_semana === idx && g.turno === filterTurno && (filterSemestre === 'Todos' || g.semestre === filterSemestre)).sort((a,b) => a.inicio.localeCompare(b.inicio)).map(item => {
                            const isNight = item.turno === 'Noturno';
                            return (
-                             <div key={item.horario_id} className={`p-6 rounded-[32px] border-2 shadow-2xl relative group transition-all hover:scale-[1.05] ${isNight ? 'bg-indigo-500/5 border-indigo-500/10' : 'bg-amber-500/5 border-amber-500/10'}`}>
-                                <p className={`text-[11px] font-black uppercase mb-3 ${isNight ? 'text-indigo-400' : 'text-amber-500'}`}>{item.inicio} — {item.fim}</p>
-                                <p className="text-md font-black text-white leading-tight mb-3">{item.nome_disciplina}</p>
-                                <div className="flex items-center gap-2 opacity-40">
-                                   <MapPin size={12} />
-                                   <span className="text-[11px] font-black uppercase">{item.sala}</span>
+                             <div key={item.horario_id} className={`p-4 rounded-2xl border-2 group transition-all ${isNight ? 'bg-indigo-500/5 border-indigo-500/10' : 'bg-amber-500/5 border-amber-500/10'}`}>
+                                <p className={`text-[10px] font-black uppercase mb-1.5 ${isNight ? 'text-indigo-400' : 'text-amber-500'}`}>{item.inicio} — {item.fim}</p>
+                                <p className="text-sm font-black text-white leading-tight mb-1.5">{item.nome_disciplina}</p>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 opacity-40">
+                                    <MapPin size={10} />
+                                    <span className="text-[10px] font-black uppercase">{item.sala}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleDeleteHorario(item.horario_id)}
+                                    className="w-7 h-7 rounded-lg bg-red-500/20 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
                                 </div>
-                                <button onClick={() => handleDeleteHorario(item.horario_id)} className="absolute -top-3 -right-3 w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-2xl scale-0 group-hover:scale-100 active:scale-90">
-                                   <Trash2 size={18} />
-                                </button>
                              </div>
                            );
                          })}
-                         <button onClick={() => openHorarioModal(idx)} className="w-full py-8 border-2 border-dashed border-white/5 rounded-[32px] flex items-center justify-center text-gray-700 hover:border-[#4B39EF]/40 hover:text-[#4B39EF] transition-all">
-                            <Plus size={32} />
+                         <button onClick={() => openHorarioModal(idx)} className="w-full py-4 border-2 border-dashed border-white/5 rounded-2xl flex items-center justify-center text-gray-700 hover:border-[#4B39EF]/40 hover:text-[#4B39EF] transition-all">
+                            <Plus size={22} />
                          </button>
                       </div>
                     </div>
@@ -924,136 +1102,137 @@ function AdminDashboard({ admin, onLogout }) {
         )}
 
         {activeTab === 'professores' && (
-          <div className="max-w-7xl mx-auto space-y-12">
-            <h2 className="text-5xl font-black text-white tracking-tight">Professores</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
-              {/* Form Lateral - Novo Professor */}
-              <div className="lg:col-span-4 space-y-8">
-                <div className="bg-[#151718] p-10 rounded-[40px] border border-white/5 shadow-2xl">
-                  <h3 className="text-xl font-black text-white mb-10 flex items-center gap-3"><Plus size={24} className="text-[#4B39EF]"/> NOVO PROFESSOR</h3>
-                  <form onSubmit={handleCreateProfessor} className="space-y-8">
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+            <h2 className="text-2xl font-black text-white tracking-tight mb-4 flex-shrink-0">Professores</h2>
+            <div className="flex gap-6 flex-1 overflow-hidden min-h-0">
+              <div className="w-96 flex-shrink-0">
+                <div className="bg-[#151718] p-6 rounded-[32px] border border-white/5 shadow-2xl">
+                  <h3 className="text-base font-black text-white mb-4 flex items-center gap-2"><Plus size={18} className="text-[#4B39EF]"/> NOVO PROFESSOR</h3>
+                  <form onSubmit={handleCreateProfessor} className="space-y-4">
                     <InputGroup label="Nome Completo">
-                      <input required minLength={3} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: João Silva" value={novoProfessor.nome} onChange={e=>setNovoProfessor({...novoProfessor, nome: e.target.value})} />
+                      <input required minLength={3} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: João Silva" value={novoProfessor.nome} onChange={e=>setNovoProfessor({...novoProfessor, nome: e.target.value})} />
                     </InputGroup>
                     <InputGroup label="Email">
-                      <input required type="email" className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="professor@scpi.com" value={novoProfessor.email} onChange={e=>setNovoProfessor({...novoProfessor, email: e.target.value})} />
+                      <input required type="email" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="professor@scpi.com" value={novoProfessor.email} onChange={e=>setNovoProfessor({...novoProfessor, email: e.target.value})} />
                     </InputGroup>
                     <InputGroup label="Departamento">
-                      <input className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Informática" value={novoProfessor.departamento} onChange={e=>setNovoProfessor({...novoProfessor, departamento: e.target.value})} />
+                      <input className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Informática" value={novoProfessor.departamento} onChange={e=>setNovoProfessor({...novoProfessor, departamento: e.target.value})} />
                     </InputGroup>
-                    <button type="submit" className="w-full bg-[#4B39EF] py-6 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-[#4B39EF]/30 hover:scale-[1.02] transition-all active:scale-[0.98]">CADASTRAR PROFESSOR</button>
+                    <button type="submit" className="w-full bg-[#4B39EF] py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-[#4B39EF]/30 hover:scale-[1.02] transition-all active:scale-[0.98]">CADASTRAR PROFESSOR</button>
                   </form>
                 </div>
               </div>
 
-              {/* Tabela principal de Professores */}
-              <div className="lg:col-span-8">
-                <div className="bg-[#151718] rounded-[40px] border border-white/5 overflow-hidden shadow-2xl">
+              <div className="flex-1 overflow-hidden flex flex-col gap-3">
+                <div className="bg-[#151718] rounded-3xl border border-white/5 overflow-hidden shadow-2xl flex-1">
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-white/[0.03] text-gray-500 uppercase text-xs tracking-[0.2em]">
-                        <th className="px-8 py-8">Nome</th>
-                        <th className="px-8 py-8">Departamento</th>
-                        <th className="px-8 py-8">Email</th>
-                        <th className="px-8 py-8">Ações</th>
+                        <th className="px-5 py-4">Nome</th>
+                        <th className="px-5 py-4">Departamento</th>
+                        <th className="px-5 py-4">Email</th>
+                        <th className="px-5 py-4">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {professores.map(p => (
+                      {profPaged.map(p => (
                         <tr key={p.professor_id} className="hover:bg-white/[0.01] transition-colors group">
-                          <td className="px-8 py-8">
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-gradient-to-br from-[#4B39EF] to-[#8E44AD] rounded-2xl flex items-center justify-center font-black text-white text-xl shadow-xl shrink-0">{p.nome.charAt(0)}</div>
-                              <p className="font-black text-white text-lg">{p.nome}</p>
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 bg-gradient-to-br from-[#4B39EF] to-[#8E44AD] rounded-xl flex items-center justify-center font-black text-white text-sm shadow-lg shrink-0">{p.nome.charAt(0)}</div>
+                              <p className="font-black text-white text-sm">{p.nome}</p>
                             </div>
                           </td>
-                          <td className="px-8 py-8">
-                            <div className="bg-white/5 inline-block px-4 py-2 rounded-xl text-xs font-black text-gray-400 border border-white/5 uppercase tracking-widest">{p.departamento || '—'}</div>
+                          <td className="px-5 py-3">
+                            <div className="bg-white/5 inline-block px-3 py-1 rounded-lg text-xs font-black text-gray-400 border border-white/5 uppercase tracking-widest">{p.departamento || '—'}</div>
                           </td>
-                          <td className="px-8 py-8 text-gray-300 font-bold text-sm">{p.email}</td>
-                          <td className="px-8 py-8">
-                            <button
-                              onClick={() => handleDeleteProfessor(p.professor_id, p.nome)}
-                              title="Excluir professor"
-                              className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 hover:text-red-500 transition-all border border-white/5 hover:border-red-500/30"
-                            >
-                              <Trash2 size={20} />
-                            </button>
+                          <td className="px-5 py-3 text-gray-300 font-bold text-sm">{p.email}</td>
+                          <td className="px-5 py-3">
+                            <button onClick={() => handleDeleteProfessor(p.professor_id, p.nome)} title="Excluir professor" className="w-9 h-9 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 hover:text-red-500 transition-all border border-white/5 hover:border-red-500/30"><Trash2 size={16} /></button>
                           </td>
                         </tr>
                       ))}
                       {professores.length === 0 && (
-                        <tr>
-                          <td colSpan="4" className="px-8 py-16 text-center text-gray-500 font-black">Nenhum professor cadastrado ainda.</td>
-                        </tr>
+                        <tr><td colSpan="4" className="px-5 py-12 text-center text-gray-500 font-black">Nenhum professor cadastrado ainda.</td></tr>
                       )}
                     </tbody>
                   </table>
                 </div>
+                {profTotalPages > 1 && (
+                  <div className="flex items-center justify-between flex-shrink-0">
+                    <p className="text-xs font-black text-gray-500">{professores.length} professor{professores.length !== 1 ? 'es' : ''} • página {profPage} de {profTotalPages}</p>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => setProfPage(p => Math.max(1, p - 1))} disabled={profPage === 1} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"><ChevronDown size={14} className="rotate-90" /></button>
+                      {Array.from({ length: profTotalPages }, (_, i) => i + 1).map(p => (
+                        <button key={p} onClick={() => setProfPage(p)} className={`w-8 h-8 rounded-xl text-xs font-black transition-all border ${profPage === p ? 'bg-[#4B39EF] text-white border-[#4B39EF]' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'}`}>{p}</button>
+                      ))}
+                      <button onClick={() => setProfPage(p => Math.min(profTotalPages, p + 1))} disabled={profPage === profTotalPages} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"><ChevronDown size={14} className="-rotate-90" /></button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
 
         {activeTab === 'alunos' && (
-          <div className="max-w-7xl mx-auto space-y-12">
-            <h2 className="text-5xl font-black text-white tracking-tight">Alunos</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
-              {/* Form Lateral - Novo Aluno */}
-              <div className="lg:col-span-4 space-y-8">
-                <div className="bg-[#151718] p-10 rounded-[40px] border border-white/5 shadow-2xl">
-                  <h3 className="text-xl font-black text-white mb-10 flex items-center gap-3"><Plus size={24} className="text-[#4B39EF]"/> NOVO ALUNO</h3>
-                  <form onSubmit={handleCreateAluno} className="space-y-8">
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+            <h2 className="text-2xl font-black text-white tracking-tight mb-4 flex-shrink-0">Alunos</h2>
+            <div className="flex gap-6 flex-1 overflow-hidden min-h-0">
+              <div className="w-96 flex-shrink-0">
+                <div className="bg-[#151718] p-6 rounded-[32px] border border-white/5 shadow-2xl">
+                  <h3 className="text-base font-black text-white mb-4 flex items-center gap-2"><Plus size={18} className="text-[#4B39EF]"/> NOVO ALUNO</h3>
+                  <form onSubmit={handleCreateAluno} className="space-y-4">
                     <InputGroup label="Nome Completo">
-                      <input required minLength={3} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Maria Souza" value={novoAluno.nome} onChange={e=>setNovoAluno({...novoAluno, nome: e.target.value})} />
+                      <input required minLength={3} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Maria Souza" value={novoAluno.nome} onChange={e=>setNovoAluno({...novoAluno, nome: e.target.value})} />
                     </InputGroup>
                     <InputGroup label="Email">
-                      <input required type="email" className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="aluno@scpi.com" value={novoAluno.email} onChange={e=>setNovoAluno({...novoAluno, email: e.target.value})} />
+                      <input required type="email" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="aluno@scpi.com" value={novoAluno.email} onChange={e=>setNovoAluno({...novoAluno, email: e.target.value})} />
                     </InputGroup>
                     <InputGroup label="RA">
-                      <input required pattern="^[A-Za-z0-9]{4,20}$" className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: 202400123" value={novoAluno.ra} onChange={e=>setNovoAluno({...novoAluno, ra: e.target.value})} />
+                      <input required pattern="^[A-Za-z0-9]{4,20}$" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: 202400123" value={novoAluno.ra} onChange={e=>setNovoAluno({...novoAluno, ra: e.target.value})} />
                     </InputGroup>
                     <InputGroup label="Turno">
-                      <SelectInput value={novoAluno.turno} onChange={e=>setNovoAluno({...novoAluno, turno: e.target.value})}>
-                        <option value="Matutino">Matutino</option>
-                        <option value="Noturno">Noturno</option>
-                      </SelectInput>
+                      <SearchableSelect
+                        searchable={false}
+                        value={novoAluno.turno}
+                        onChange={val => setNovoAluno({...novoAluno, turno: val})}
+                        options={[{ value: 'Matutino', label: 'Matutino' }, { value: 'Noturno', label: 'Noturno' }]}
+                        placeholder="Selecione o turno..."
+                      />
                     </InputGroup>
-                    <button type="submit" className="w-full bg-[#4B39EF] py-6 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-[#4B39EF]/30 hover:scale-[1.02] transition-all active:scale-[0.98]">CADASTRAR ALUNO</button>
+                    <button type="submit" className="w-full bg-[#4B39EF] py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-[#4B39EF]/30 hover:scale-[1.02] transition-all active:scale-[0.98]">CADASTRAR ALUNO</button>
                   </form>
                 </div>
               </div>
 
-              {/* Tabela principal de Alunos */}
-              <div className="lg:col-span-8">
-                <div className="bg-[#151718] rounded-[40px] border border-white/5 overflow-hidden shadow-2xl">
+              <div className="flex-1 overflow-hidden flex flex-col gap-3">
+                <div className="bg-[#151718] rounded-3xl border border-white/5 overflow-hidden shadow-2xl flex-1">
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-white/[0.03] text-gray-500 uppercase text-xs tracking-[0.2em]">
-                        <th className="px-8 py-8">Nome</th>
-                        <th className="px-8 py-8">Email</th>
-                        <th className="px-8 py-8">RA</th>
-                        <th className="px-8 py-8">Turno</th>
+                        <th className="px-5 py-4">Nome</th>
+                        <th className="px-5 py-4">Email</th>
+                        <th className="px-5 py-4">RA</th>
+                        <th className="px-5 py-4">Turno</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {alunos.map(a => (
-                        <tr key={a.aluno_id} className="hover:bg-white/[0.01] transition-colors group">
-                          <td className="px-8 py-8">
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-gradient-to-br from-[#22C55E] to-[#4B39EF] rounded-2xl flex items-center justify-center font-black text-white text-xl shadow-xl shrink-0">{a.nome.charAt(0)}</div>
-                              <p className="font-black text-white text-lg">{a.nome}</p>
+                      {alunosPaged.map(a => (
+                        <tr key={a.aluno_id} className="hover:bg-white/[0.01] transition-colors">
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 bg-gradient-to-br from-[#22C55E] to-[#4B39EF] rounded-xl flex items-center justify-center font-black text-white text-sm shadow-lg shrink-0">{a.nome.charAt(0)}</div>
+                              <p className="font-black text-white text-sm">{a.nome}</p>
                             </div>
                           </td>
-                          <td className="px-8 py-8 text-gray-300 font-bold text-sm">{a.email}</td>
-                          <td className="px-8 py-8">
-                            <div className="bg-white/5 inline-block px-4 py-2 rounded-xl text-xs font-black text-gray-400 border border-white/5 uppercase tracking-widest">{a.ra || '—'}</div>
+                          <td className="px-5 py-3 text-gray-300 font-bold text-sm">{a.email}</td>
+                          <td className="px-5 py-3">
+                            <div className="bg-white/5 inline-block px-3 py-1 rounded-lg text-xs font-black text-gray-400 border border-white/5 uppercase tracking-widest">{a.ra || '—'}</div>
                           </td>
-                          <td className="px-8 py-8">
+                          <td className="px-5 py-3">
                             {a.turno ? (
-                              <span className={`text-xs font-black px-3 py-1 rounded-lg uppercase tracking-tighter ${a.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
-                                {a.turno}
-                              </span>
+                              <span className={`text-xs font-black px-2 py-0.5 rounded-md uppercase tracking-tighter ${a.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>{a.turno}</span>
                             ) : (
                               <span className="text-xs text-gray-600 font-bold">—</span>
                             )}
@@ -1061,13 +1240,23 @@ function AdminDashboard({ admin, onLogout }) {
                         </tr>
                       ))}
                       {alunos.length === 0 && (
-                        <tr>
-                          <td colSpan="4" className="px-8 py-16 text-center text-gray-500 font-black">Nenhum aluno cadastrado ainda.</td>
-                        </tr>
+                        <tr><td colSpan="4" className="px-5 py-12 text-center text-gray-500 font-black">Nenhum aluno cadastrado ainda.</td></tr>
                       )}
                     </tbody>
                   </table>
                 </div>
+                {alunoTotalPages > 1 && (
+                  <div className="flex items-center justify-between flex-shrink-0">
+                    <p className="text-xs font-black text-gray-500">{alunos.length} aluno{alunos.length !== 1 ? 's' : ''} • página {alunoPage} de {alunoTotalPages}</p>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => setAlunoPage(p => Math.max(1, p - 1))} disabled={alunoPage === 1} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"><ChevronDown size={14} className="rotate-90" /></button>
+                      {Array.from({ length: alunoTotalPages }, (_, i) => i + 1).map(p => (
+                        <button key={p} onClick={() => setAlunoPage(p)} className={`w-8 h-8 rounded-xl text-xs font-black transition-all border ${alunoPage === p ? 'bg-[#4B39EF] text-white border-[#4B39EF]' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'}`}>{p}</button>
+                      ))}
+                      <button onClick={() => setAlunoPage(p => Math.min(alunoTotalPages, p + 1))} disabled={alunoPage === alunoTotalPages} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"><ChevronDown size={14} className="-rotate-90" /></button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1075,62 +1264,67 @@ function AdminDashboard({ admin, onLogout }) {
 
         {/* ── ABA RELATÓRIOS ── */}
         {activeTab === 'relatorios' && (
-          <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex-1 overflow-hidden flex flex-col gap-3 min-h-0">
             {loadingRelatorios ? (
-              <div className="py-32 text-center">
-                <p className="text-gray-500 font-black text-xl">Carregando relatórios...</p>
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-gray-500 font-black text-base">Carregando relatórios...</p>
               </div>
             ) : filteredRelatorios.length === 0 ? (
-              <div className="py-32 text-center bg-white/[0.01] rounded-[50px] border-2 border-dashed border-white/5">
-                <FileText className="mx-auto text-gray-800 mb-6" size={64} />
-                <p className="text-gray-500 text-xl font-black">Nenhuma chamada para este filtro.</p>
+              <div className="flex-1 flex flex-col items-center justify-center bg-white/[0.01] rounded-3xl border-2 border-dashed border-white/5">
+                <FileText className="text-gray-800 mb-4" size={48} />
+                <p className="text-gray-500 text-base font-black">Nenhuma chamada para este filtro.</p>
               </div>
             ) : (
-              filteredRelatorios.map(r => (
-                <button
-                  key={r.chamada_id}
-                  onClick={() => handleOpenRelatorioDetalhe(r.chamada_id)}
-                  className="group w-full bg-[#151718] hover:bg-[#1A1C1E] p-8 rounded-[40px] border border-white/5 flex items-center justify-between transition-all hover:border-[#4B39EF]/30 shadow-lg text-left"
-                >
-                  <div className="flex items-center gap-8">
-                    <div className={`w-20 h-20 rounded-3xl flex items-center justify-center font-black text-3xl shrink-0 ${r.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
-                      {r.semestre}º
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-4 mb-2">
-                        <h4 className="font-black text-white text-xl tracking-tight">{r.nome_disciplina}</h4>
-                        <span className={`text-xs font-black px-3 py-1 rounded-lg uppercase tracking-tighter ${r.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
-                          {r.turno}
-                        </span>
+              <>
+                <div className="flex-1 overflow-hidden flex flex-col gap-2 min-h-0">
+                  {relatoriosPaged.map(r => (
+                    <button
+                      key={r.chamada_id}
+                      onClick={() => handleOpenRelatorioDetalhe(r.chamada_id)}
+                      className="group w-full bg-[#151718] hover:bg-[#1A1C1E] px-5 py-3 rounded-2xl border border-white/5 flex items-center justify-between transition-all hover:border-[#4B39EF]/30 text-left flex-shrink-0"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shrink-0 ${r.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
+                          {r.semestre}º
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-3 mb-0.5">
+                            <h4 className="font-black text-white text-base tracking-tight">{r.nome_disciplina}</h4>
+                            <span className={`text-xs font-black px-2 py-0.5 rounded-md uppercase tracking-tighter ${r.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>{r.turno}</span>
+                          </div>
+                          <p className="text-gray-500 font-bold text-xs">
+                            Prof. {r.professor_nome} • {r.codigo_turma} • {r.data_chamada} • {r.horario_inicio} – {r.horario_fim}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-gray-500 font-bold text-sm">
-                        Prof. {r.professor_nome} • {r.codigo_turma} • {r.data_chamada} • {r.horario_inicio} – {r.horario_fim}
-                      </p>
+                      <div className="flex items-center gap-6 shrink-0">
+                        <div className="hidden md:flex items-center gap-4">
+                          <div className="text-center"><p className="text-sm font-black text-white">{r.total_alunos}</p><p className="text-xs text-gray-600 font-black uppercase tracking-widest">Total</p></div>
+                          <div className="text-center"><p className="text-sm font-black text-green-400">{r.presentes}</p><p className="text-xs text-gray-600 font-black uppercase tracking-widest">Pres.</p></div>
+                          <div className="text-center"><p className="text-sm font-black text-red-400">{r.ausentes}</p><p className="text-xs text-gray-600 font-black uppercase tracking-widest">Aus.</p></div>
+                        </div>
+                        <div className="text-center min-w-[50px]">
+                          <p className={`text-lg font-black ${r.percentual >= 75 ? 'text-green-400' : 'text-red-400'}`}>{r.percentual}%</p>
+                          <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Pres.</p>
+                        </div>
+                        <ChevronRight size={16} className="text-gray-600 group-hover:text-[#4B39EF] transition-colors" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {relatorioTotalPages > 1 && (
+                  <div className="flex items-center justify-between flex-shrink-0">
+                    <p className="text-xs font-black text-gray-500">{filteredRelatorios.length} chamada{filteredRelatorios.length !== 1 ? 's' : ''} • página {relatorioPage} de {relatorioTotalPages}</p>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => setRelatorioPage(p => Math.max(1, p - 1))} disabled={relatorioPage === 1} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"><ChevronDown size={14} className="rotate-90" /></button>
+                      {Array.from({ length: relatorioTotalPages }, (_, i) => i + 1).map(p => (
+                        <button key={p} onClick={() => setRelatorioPage(p)} className={`w-8 h-8 rounded-xl text-xs font-black transition-all border ${relatorioPage === p ? 'bg-[#4B39EF] text-white border-[#4B39EF]' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'}`}>{p}</button>
+                      ))}
+                      <button onClick={() => setRelatorioPage(p => Math.min(relatorioTotalPages, p + 1))} disabled={relatorioPage === relatorioTotalPages} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"><ChevronDown size={14} className="-rotate-90" /></button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-8 shrink-0">
-                    <div className="hidden md:flex items-center gap-6">
-                      <div className="text-center">
-                        <p className="text-lg font-black text-white">{r.total_alunos}</p>
-                        <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Total</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-black text-green-400">{r.presentes}</p>
-                        <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Presentes</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-black text-red-400">{r.ausentes}</p>
-                        <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Ausentes</p>
-                      </div>
-                    </div>
-                    <div className="text-center min-w-[60px]">
-                      <p className={`text-2xl font-black ${r.percentual >= 75 ? 'text-green-400' : 'text-red-400'}`}>{r.percentual}%</p>
-                      <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Presença</p>
-                    </div>
-                    <ChevronRight size={20} className="text-gray-600 group-hover:text-[#4B39EF] transition-colors" />
-                  </div>
-                </button>
-              ))
+                )}
+              </>
             )}
           </div>
         )}
@@ -1269,7 +1463,7 @@ function SelectInput({ children, className = '', ...props }) {
     <div className="relative">
       <select
         style={{ colorScheme: 'dark' }}
-        className={`w-full bg-[#1A1C1E] border border-white/10 rounded-2xl px-6 py-5 pr-14 text-lg text-white outline-none focus:border-[#4B39EF] focus:ring-2 focus:ring-[#4B39EF]/20 transition-all appearance-none cursor-pointer ${className}`}
+        className={`w-full bg-[#1A1C1E] border border-white/10 rounded-xl px-4 py-3 pr-10 text-sm text-white outline-none focus:border-[#4B39EF] focus:ring-2 focus:ring-[#4B39EF]/20 transition-all appearance-none cursor-pointer ${className}`}
         {...props}
       >
         {children}
@@ -1281,9 +1475,115 @@ function SelectInput({ children, className = '', ...props }) {
 
 function InputGroup({ label, children }) {
   return (
-    <div className="space-y-4">
-      <label className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{label}</label>
+    <div className="space-y-1.5">
+      <label className="text-xs font-black text-gray-400 uppercase tracking-[0.15em] ml-1">{label}</label>
       {children}
+    </div>
+  );
+}
+
+function SearchableSelect({ value, onChange, options, placeholder = 'Selecione...', searchable = true, className = '' }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [openUp, setOpenUp] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleOpen = () => {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUp(spaceBelow < 220);
+    }
+    setOpen(o => !o);
+    setSearch('');
+  };
+
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+  const selected = options.find(o => o.value === value);
+
+  const handleSelect = (opt) => {
+    onChange(opt.value);
+    setSearch('');
+    setOpen(false);
+  };
+
+  const handleClear = (e) => {
+    e.stopPropagation();
+    onChange('');
+    setSearch('');
+  };
+
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <div
+        onClick={handleOpen}
+        className="w-full bg-[#1A1C1E] border border-white/10 rounded-xl px-4 py-3 pr-10 text-sm text-white outline-none focus:border-[#4B39EF] transition-all cursor-pointer flex items-center justify-between gap-2 select-none"
+        style={{ minHeight: '46px' }}
+      >
+        <span className={selected ? 'text-white' : 'text-gray-600'}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {selected && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-white transition-colors"
+            >
+              <X size={12} />
+            </button>
+          )}
+          <ChevronDown size={14} className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
+      </div>
+
+      {open && (
+        <div className={`absolute z-50 w-full bg-[#1A1C1E] border border-white/10 rounded-xl shadow-2xl overflow-hidden ${openUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'}`}>
+          {searchable && (
+            <div className="p-2 border-b border-white/5">
+              <div className="relative">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                <input
+                  autoFocus
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Pesquisar..."
+                  className="w-full bg-black/30 rounded-lg pl-8 pr-3 py-2 text-sm text-white outline-none placeholder:text-gray-600 border border-white/5 focus:border-[#4B39EF] transition-all"
+                  onClick={e => e.stopPropagation()}
+                />
+              </div>
+            </div>
+          )}
+          <div className="max-h-48 overflow-y-auto">
+            <div
+              onClick={() => handleSelect({ value: '', label: placeholder })}
+              className="px-4 py-2.5 text-sm text-gray-500 hover:bg-white/5 cursor-pointer italic transition-colors"
+            >
+              {placeholder}
+            </div>
+            {filtered.length === 0 ? (
+              <div className="px-4 py-3 text-sm text-gray-600 text-center">Nenhum resultado</div>
+            ) : (
+              filtered.map(opt => (
+                <div
+                  key={opt.value}
+                  onClick={() => handleSelect(opt)}
+                  className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${opt.value === value ? 'bg-[#4B39EF]/20 text-[#7B6EFF] font-black' : 'text-white hover:bg-white/5'}`}
+                >
+                  {opt.label}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

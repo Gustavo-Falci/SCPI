@@ -53,10 +53,9 @@ def get_db_connection():
     """Cria uma conexão crua com o banco."""
     try:
         conn = psycopg2.connect(_build_database_url())
-
-        # Se for pg8000 (psycopg2 fake), não suporta cursor_factory no connect
-        # Mas vamos lidar com Dicts manualmente se precisar ou usar wrapper
-        # Para simplificar, se for pg8000, usamos fetchall e convertemos
+        with conn.cursor() as cur:
+            cur.execute("SET TIME ZONE 'America/Sao_Paulo'")
+        conn.commit()
         return conn
     except Exception as e:
         logger.error(f"Erro de conexão PostgreSQL: {e}")
