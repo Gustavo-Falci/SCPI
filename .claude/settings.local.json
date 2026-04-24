@@ -40,7 +40,8 @@
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('expo-notifications:', p.dependencies['expo-notifications'] || 'NAO ENCONTRADO'\\); console.log\\('expo-device:', p.dependencies['expo-device'] || 'NAO ENCONTRADO'\\);\")",
       "Bash(npx tsc *)",
       "Bash(node -e ' *)",
-      "Bash(PGPASSWORD='adminpostgres@' psql *)"
+      "Bash(PGPASSWORD='adminpostgres@' psql *)",
+      "Bash(venv/Scripts/pip install *)"
     ]
   }
 }

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://192.168.5.129:8000';
+const API_URL = 'http://10.34.221.107:8000';
 
 // Slots oficiais da grade ADS Fatec
 const SLOTS_MATUTINO = [
@@ -148,6 +148,12 @@ function AdminDashboard({ admin, onLogout }) {
 
   const [newTurma, setNewTurma] = useState({ professor_id: '', codigo_turma: '', nome_disciplina: '', periodo_letivo: '2025-1', sala_padrao: '', turno: 'Matutino', semestre: '1' });
 
+  // Criação de usuários (admin)
+  const [novoProfessor, setNovoProfessor] = useState({ nome: '', email: '', departamento: '' });
+  const [novoAluno, setNovoAluno] = useState({ nome: '', email: '', ra: '', turno: 'Matutino' });
+  const [senhaTemporariaModal, setSenhaTemporariaModal] = useState(null);
+  const [alunos, setAlunos] = useState([]);
+
   // Modal de adicionar horário (usa slots oficiais do turno)
   const [horarioModal, setHorarioModal] = useState(null); // { dia_semana } ou null
   const [horarioForm, setHorarioForm] = useState({ turma_id: '', slot_inicio: 1, slot_fim: 1, sala: '' });
@@ -162,6 +168,82 @@ function AdminDashboard({ admin, onLogout }) {
   const [selectedAlunoIds, setSelectedAlunoIds] = useState(new Set());
   const [searchAluno, setSearchAluno] = useState('');
   const [loadingAlunos, setLoadingAlunos] = useState(false);
+
+  // Relatórios
+  const [relatorios, setRelatorios] = useState([]);
+  const [loadingRelatorios, setLoadingRelatorios] = useState(false);
+  const [relatorioExpandido, setRelatorioExpandido] = useState(null);
+
+  const fetchRelatorios = async () => {
+    setLoadingRelatorios(true);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const res = await axios.get(`${API_URL}/admin/relatorios/chamadas`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setRelatorios(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingRelatorios(false);
+    }
+  };
+
+  const fetchAlunos = async () => {
+    try {
+      const token = localStorage.getItem('admin_token');
+      const res = await axios.get(`${API_URL}/admin/alunos`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setAlunos(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCreateProfessor = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('admin_token');
+      const res = await axios.post(`${API_URL}/admin/usuarios/professor`, novoProfessor, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSenhaTemporariaModal({ nome: novoProfessor.nome, senha: res.data.senha_temporaria, tipo: 'Professor' });
+      setNovoProfessor({ nome: '', email: '', departamento: '' });
+      fetchData();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      showToast(`Erro ao criar professor: ${typeof detail === 'string' ? detail : 'Falha no servidor'}`, 'error');
+    }
+  };
+
+  const handleCreateAluno = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('admin_token');
+      const res = await axios.post(`${API_URL}/admin/usuarios/aluno`, novoAluno, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSenhaTemporariaModal({ nome: novoAluno.nome, senha: res.data.senha_temporaria, tipo: 'Aluno' });
+      setNovoAluno({ nome: '', email: '', ra: '', turno: 'Matutino' });
+      fetchAlunos();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      showToast(`Erro ao criar aluno: ${typeof detail === 'string' ? detail : 'Falha no servidor'}`, 'error');
+    }
+  };
+
+  const handleOpenRelatorioDetalhe = async (chamada_id) => {
+    try {
+      const token = localStorage.getItem('admin_token');
+      const res = await axios.get(`${API_URL}/admin/relatorios/chamadas/${chamada_id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setRelatorioExpandido(res.data);
+    } catch (err) {
+      showToast('Erro ao carregar detalhe da chamada.', 'error');
+    }
+  };
 
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const showToast = (message, type = 'success') => {
@@ -270,6 +352,8 @@ function AdminDashboard({ admin, onLogout }) {
   };
 
   useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (activeTab === 'relatorios') fetchRelatorios(); }, [activeTab]);
+  useEffect(() => { if (activeTab === 'alunos') fetchAlunos(); }, [activeTab]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -309,6 +393,12 @@ function AdminDashboard({ admin, onLogout }) {
     const matchSemestre = filterSemestre === 'Todos' || t.semestre === filterSemestre;
     const matchSearch = t.nome_disciplina.toLowerCase().includes(searchTerm.toLowerCase()) || t.codigo_turma.toLowerCase().includes(searchTerm.toLowerCase());
     return matchTurno && matchSemestre && matchSearch;
+  });
+
+  const filteredRelatorios = relatorios.filter(r => {
+    const matchTurno = r.turno === filterTurno;
+    const matchSemestre = filterSemestre === 'Todos' || String(r.semestre) === filterSemestre;
+    return matchTurno && matchSemestre;
   });
 
   const handleImportCSV = async (turmaId, file) => {
@@ -437,6 +527,8 @@ function AdminDashboard({ admin, onLogout }) {
           <SidebarItem icon={<LayoutDashboard size={24}/>} label="Turmas & Matrículas" active={activeTab === 'turmas'} onClick={() => setActiveTab('turmas')} />
           <SidebarItem icon={<Calendar size={24}/>} label="Grade Semanal" active={activeTab === 'horarios'} onClick={() => setActiveTab('horarios')} />
           <SidebarItem icon={<Users size={24}/>} label="Professores" active={activeTab === 'professores'} onClick={() => setActiveTab('professores')} />
+          <SidebarItem icon={<GraduationCap size={24}/>} label="Alunos" active={activeTab === 'alunos'} onClick={() => setActiveTab('alunos')} />
+          <SidebarItem icon={<FileText size={24}/>} label="Relatórios" active={activeTab === 'relatorios'} onClick={() => setActiveTab('relatorios')} />
         </nav>
 
         <div className="p-8 border-t border-white/5">
@@ -455,15 +547,15 @@ function AdminDashboard({ admin, onLogout }) {
 
       <main className="flex-1 overflow-y-auto bg-[#0C0C12] p-16">
         {/* Renderiza Filtros de Turno e Semestre GLOBAIS para as abas Turmas e Horários */}
-        {(activeTab === 'turmas' || activeTab === 'horarios') && (
+        {(activeTab === 'turmas' || activeTab === 'horarios' || activeTab === 'relatorios') && (
           <div className="max-w-7xl mx-auto mb-12">
             <div className="flex justify-between items-end mb-8">
                <div>
                   <h2 className="text-5xl font-black text-white tracking-tight">
-                    {activeTab === 'turmas' ? 'Turmas' : 'Grade Semanal'}
+                    {activeTab === 'turmas' ? 'Turmas' : activeTab === 'horarios' ? 'Grade Semanal' : 'Relatórios'}
                   </h2>
                   <p className="text-gray-500 text-xl mt-4 font-medium">
-                    {activeTab === 'turmas' ? 'Gestão estratégica de disciplinas e alunos.' : 'Visualize e organize o calendário acadêmico.'}
+                    {activeTab === 'turmas' ? 'Gestão estratégica de disciplinas e alunos.' : activeTab === 'horarios' ? 'Visualize e organize o calendário acadêmico.' : 'Histórico imutável de todas as chamadas realizadas.'}
                   </p>
                </div>
                <div className="flex gap-4">
@@ -512,22 +604,22 @@ function AdminDashboard({ admin, onLogout }) {
                              <input className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="MAT-01" value={newTurma.codigo_turma} onChange={e=>setNewTurma({...newTurma, codigo_turma: e.target.value})} />
                           </InputGroup>
                           <InputGroup label="Semestre">
-                             <select className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all appearance-none cursor-pointer" value={newTurma.semestre} onChange={e=>setNewTurma({...newTurma, semestre: e.target.value})}>
+                             <SelectInput value={newTurma.semestre} onChange={e=>setNewTurma({...newTurma, semestre: e.target.value})}>
                                 {[1,2,3,4,5,6].map(v => <option key={v} value={v}>{v}º</option>)}
-                             </select>
+                             </SelectInput>
                           </InputGroup>
                        </div>
                        <InputGroup label="Turno">
-                          <select className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all appearance-none cursor-pointer" value={newTurma.turno} onChange={e=>setNewTurma({...newTurma, turno: e.target.value})}>
+                          <SelectInput value={newTurma.turno} onChange={e=>setNewTurma({...newTurma, turno: e.target.value})}>
                              <option value="Matutino">Matutino</option>
                              <option value="Noturno">Noturno</option>
-                          </select>
+                          </SelectInput>
                        </InputGroup>
                        <InputGroup label="Professor">
-                          <select className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all appearance-none cursor-pointer" value={newTurma.professor_id} onChange={e=>setNewTurma({...newTurma, professor_id: e.target.value})}>
+                          <SelectInput value={newTurma.professor_id} onChange={e=>setNewTurma({...newTurma, professor_id: e.target.value})}>
                              <option value="">Selecione...</option>
                              {professores.map(p => <option key={p.professor_id} value={p.professor_id}>{p.nome}</option>)}
-                          </select>
+                          </SelectInput>
                        </InputGroup>
                        <button className="w-full bg-[#4B39EF] py-6 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-[#4B39EF]/30 hover:scale-[1.02] transition-all active:scale-[0.98]">CADASTRAR TURMA</button>
                     </form>
@@ -650,26 +742,23 @@ function AdminDashboard({ admin, onLogout }) {
               </div>
               <form onSubmit={handleAddHorario} className="space-y-6">
                 <InputGroup label="Turma">
-                  <select required className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all appearance-none cursor-pointer"
-                    value={horarioForm.turma_id} onChange={e => setHorarioForm({ ...horarioForm, turma_id: e.target.value })}>
+                  <SelectInput required value={horarioForm.turma_id} onChange={e => setHorarioForm({ ...horarioForm, turma_id: e.target.value })}>
                     <option value="">Selecione uma turma...</option>
                     {turmas.filter(t => t.turno === filterTurno).map(t => (
                       <option key={t.turma_id} value={t.turma_id}>{t.semestre}º • {t.nome_disciplina} ({t.codigo_turma})</option>
                     ))}
-                  </select>
+                  </SelectInput>
                 </InputGroup>
                 <div className="grid grid-cols-2 gap-6">
                   <InputGroup label="Slot Inicial">
-                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all appearance-none cursor-pointer"
-                      value={horarioForm.slot_inicio} onChange={e => setHorarioForm({ ...horarioForm, slot_inicio: e.target.value, slot_fim: Math.max(Number(e.target.value), Number(horarioForm.slot_fim)) })}>
+                    <SelectInput value={horarioForm.slot_inicio} onChange={e => setHorarioForm({ ...horarioForm, slot_inicio: e.target.value, slot_fim: Math.max(Number(e.target.value), Number(horarioForm.slot_fim)) })}>
                       {getSlots(filterTurno).map(s => <option key={s.id} value={s.id}>{s.id}º — {s.inicio}</option>)}
-                    </select>
+                    </SelectInput>
                   </InputGroup>
                   <InputGroup label="Slot Final">
-                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all appearance-none cursor-pointer"
-                      value={horarioForm.slot_fim} onChange={e => setHorarioForm({ ...horarioForm, slot_fim: e.target.value })}>
+                    <SelectInput value={horarioForm.slot_fim} onChange={e => setHorarioForm({ ...horarioForm, slot_fim: e.target.value })}>
                       {getSlots(filterTurno).filter(s => s.id >= Number(horarioForm.slot_inicio)).map(s => <option key={s.id} value={s.id}>{s.id}º — {s.fim}</option>)}
-                    </select>
+                    </SelectInput>
                   </InputGroup>
                 </div>
                 <InputGroup label="Sala">
@@ -837,48 +926,319 @@ function AdminDashboard({ admin, onLogout }) {
         {activeTab === 'professores' && (
           <div className="max-w-7xl mx-auto space-y-12">
             <h2 className="text-5xl font-black text-white tracking-tight">Professores</h2>
-            <div className="bg-[#151718] rounded-[50px] border border-white/5 overflow-hidden shadow-2xl">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-white/[0.03] text-gray-500 uppercase text-xs tracking-[0.2em]">
-                    <th className="px-12 py-10">Membro do Corpo Docente</th>
-                    <th className="px-12 py-10">Departamento</th>
-                    <th className="px-12 py-10">Contato Oficial</th>
-                    <th className="px-12 py-10">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {professores.map(p => (
-                    <tr key={p.professor_id} className="hover:bg-white/[0.01] transition-colors group">
-                      <td className="px-12 py-12">
-                        <div className="flex items-center gap-6">
-                          <div className="w-16 h-16 bg-gradient-to-br from-[#4B39EF] to-[#8E44AD] rounded-2xl flex items-center justify-center font-black text-white text-2xl shadow-xl">{p.nome.charAt(0)}</div>
-                          <div>
-                             <p className="font-black text-white text-xl">{p.nome}</p>
-                             <p className="text-sm text-[#4B39EF] font-black uppercase tracking-[0.2em] mt-2">Doutorado / Mestre</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-12 py-12">
-                         <div className="bg-white/5 inline-block px-6 py-3 rounded-2xl text-sm font-black text-gray-400 border border-white/5 uppercase tracking-widest">{p.departamento}</div>
-                      </td>
-                      <td className="px-12 py-12 text-gray-300 font-bold text-lg">{p.email}</td>
-                      <td className="px-12 py-12">
-                        <button
-                          onClick={() => handleDeleteProfessor(p.professor_id, p.nome)}
-                          title="Excluir professor"
-                          className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 hover:text-red-500 transition-all border border-white/5 hover:border-red-500/30"
-                        >
-                          <Trash2 size={24} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
+              {/* Form Lateral - Novo Professor */}
+              <div className="lg:col-span-4 space-y-8">
+                <div className="bg-[#151718] p-10 rounded-[40px] border border-white/5 shadow-2xl">
+                  <h3 className="text-xl font-black text-white mb-10 flex items-center gap-3"><Plus size={24} className="text-[#4B39EF]"/> NOVO PROFESSOR</h3>
+                  <form onSubmit={handleCreateProfessor} className="space-y-8">
+                    <InputGroup label="Nome Completo">
+                      <input required minLength={3} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: João Silva" value={novoProfessor.nome} onChange={e=>setNovoProfessor({...novoProfessor, nome: e.target.value})} />
+                    </InputGroup>
+                    <InputGroup label="Email">
+                      <input required type="email" className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="professor@scpi.com" value={novoProfessor.email} onChange={e=>setNovoProfessor({...novoProfessor, email: e.target.value})} />
+                    </InputGroup>
+                    <InputGroup label="Departamento">
+                      <input className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Informática" value={novoProfessor.departamento} onChange={e=>setNovoProfessor({...novoProfessor, departamento: e.target.value})} />
+                    </InputGroup>
+                    <button type="submit" className="w-full bg-[#4B39EF] py-6 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-[#4B39EF]/30 hover:scale-[1.02] transition-all active:scale-[0.98]">CADASTRAR PROFESSOR</button>
+                  </form>
+                </div>
+              </div>
+
+              {/* Tabela principal de Professores */}
+              <div className="lg:col-span-8">
+                <div className="bg-[#151718] rounded-[40px] border border-white/5 overflow-hidden shadow-2xl">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-white/[0.03] text-gray-500 uppercase text-xs tracking-[0.2em]">
+                        <th className="px-8 py-8">Nome</th>
+                        <th className="px-8 py-8">Departamento</th>
+                        <th className="px-8 py-8">Email</th>
+                        <th className="px-8 py-8">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {professores.map(p => (
+                        <tr key={p.professor_id} className="hover:bg-white/[0.01] transition-colors group">
+                          <td className="px-8 py-8">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-gradient-to-br from-[#4B39EF] to-[#8E44AD] rounded-2xl flex items-center justify-center font-black text-white text-xl shadow-xl shrink-0">{p.nome.charAt(0)}</div>
+                              <p className="font-black text-white text-lg">{p.nome}</p>
+                            </div>
+                          </td>
+                          <td className="px-8 py-8">
+                            <div className="bg-white/5 inline-block px-4 py-2 rounded-xl text-xs font-black text-gray-400 border border-white/5 uppercase tracking-widest">{p.departamento || '—'}</div>
+                          </td>
+                          <td className="px-8 py-8 text-gray-300 font-bold text-sm">{p.email}</td>
+                          <td className="px-8 py-8">
+                            <button
+                              onClick={() => handleDeleteProfessor(p.professor_id, p.nome)}
+                              title="Excluir professor"
+                              className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 hover:text-red-500 transition-all border border-white/5 hover:border-red-500/30"
+                            >
+                              <Trash2 size={20} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {professores.length === 0 && (
+                        <tr>
+                          <td colSpan="4" className="px-8 py-16 text-center text-gray-500 font-black">Nenhum professor cadastrado ainda.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         )}
+
+        {activeTab === 'alunos' && (
+          <div className="max-w-7xl mx-auto space-y-12">
+            <h2 className="text-5xl font-black text-white tracking-tight">Alunos</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
+              {/* Form Lateral - Novo Aluno */}
+              <div className="lg:col-span-4 space-y-8">
+                <div className="bg-[#151718] p-10 rounded-[40px] border border-white/5 shadow-2xl">
+                  <h3 className="text-xl font-black text-white mb-10 flex items-center gap-3"><Plus size={24} className="text-[#4B39EF]"/> NOVO ALUNO</h3>
+                  <form onSubmit={handleCreateAluno} className="space-y-8">
+                    <InputGroup label="Nome Completo">
+                      <input required minLength={3} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Maria Souza" value={novoAluno.nome} onChange={e=>setNovoAluno({...novoAluno, nome: e.target.value})} />
+                    </InputGroup>
+                    <InputGroup label="Email">
+                      <input required type="email" className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="aluno@scpi.com" value={novoAluno.email} onChange={e=>setNovoAluno({...novoAluno, email: e.target.value})} />
+                    </InputGroup>
+                    <InputGroup label="RA">
+                      <input required pattern="^[A-Za-z0-9]{4,20}$" className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: 202400123" value={novoAluno.ra} onChange={e=>setNovoAluno({...novoAluno, ra: e.target.value})} />
+                    </InputGroup>
+                    <InputGroup label="Turno">
+                      <SelectInput value={novoAluno.turno} onChange={e=>setNovoAluno({...novoAluno, turno: e.target.value})}>
+                        <option value="Matutino">Matutino</option>
+                        <option value="Noturno">Noturno</option>
+                      </SelectInput>
+                    </InputGroup>
+                    <button type="submit" className="w-full bg-[#4B39EF] py-6 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-[#4B39EF]/30 hover:scale-[1.02] transition-all active:scale-[0.98]">CADASTRAR ALUNO</button>
+                  </form>
+                </div>
+              </div>
+
+              {/* Tabela principal de Alunos */}
+              <div className="lg:col-span-8">
+                <div className="bg-[#151718] rounded-[40px] border border-white/5 overflow-hidden shadow-2xl">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-white/[0.03] text-gray-500 uppercase text-xs tracking-[0.2em]">
+                        <th className="px-8 py-8">Nome</th>
+                        <th className="px-8 py-8">Email</th>
+                        <th className="px-8 py-8">RA</th>
+                        <th className="px-8 py-8">Turno</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {alunos.map(a => (
+                        <tr key={a.aluno_id} className="hover:bg-white/[0.01] transition-colors group">
+                          <td className="px-8 py-8">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-gradient-to-br from-[#22C55E] to-[#4B39EF] rounded-2xl flex items-center justify-center font-black text-white text-xl shadow-xl shrink-0">{a.nome.charAt(0)}</div>
+                              <p className="font-black text-white text-lg">{a.nome}</p>
+                            </div>
+                          </td>
+                          <td className="px-8 py-8 text-gray-300 font-bold text-sm">{a.email}</td>
+                          <td className="px-8 py-8">
+                            <div className="bg-white/5 inline-block px-4 py-2 rounded-xl text-xs font-black text-gray-400 border border-white/5 uppercase tracking-widest">{a.ra || '—'}</div>
+                          </td>
+                          <td className="px-8 py-8">
+                            {a.turno ? (
+                              <span className={`text-xs font-black px-3 py-1 rounded-lg uppercase tracking-tighter ${a.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
+                                {a.turno}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-600 font-bold">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {alunos.length === 0 && (
+                        <tr>
+                          <td colSpan="4" className="px-8 py-16 text-center text-gray-500 font-black">Nenhum aluno cadastrado ainda.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── ABA RELATÓRIOS ── */}
+        {activeTab === 'relatorios' && (
+          <div className="max-w-7xl mx-auto space-y-6">
+            {loadingRelatorios ? (
+              <div className="py-32 text-center">
+                <p className="text-gray-500 font-black text-xl">Carregando relatórios...</p>
+              </div>
+            ) : filteredRelatorios.length === 0 ? (
+              <div className="py-32 text-center bg-white/[0.01] rounded-[50px] border-2 border-dashed border-white/5">
+                <FileText className="mx-auto text-gray-800 mb-6" size={64} />
+                <p className="text-gray-500 text-xl font-black">Nenhuma chamada para este filtro.</p>
+              </div>
+            ) : (
+              filteredRelatorios.map(r => (
+                <button
+                  key={r.chamada_id}
+                  onClick={() => handleOpenRelatorioDetalhe(r.chamada_id)}
+                  className="group w-full bg-[#151718] hover:bg-[#1A1C1E] p-8 rounded-[40px] border border-white/5 flex items-center justify-between transition-all hover:border-[#4B39EF]/30 shadow-lg text-left"
+                >
+                  <div className="flex items-center gap-8">
+                    <div className={`w-20 h-20 rounded-3xl flex items-center justify-center font-black text-3xl shrink-0 ${r.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
+                      {r.semestre}º
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-4 mb-2">
+                        <h4 className="font-black text-white text-xl tracking-tight">{r.nome_disciplina}</h4>
+                        <span className={`text-xs font-black px-3 py-1 rounded-lg uppercase tracking-tighter ${r.turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
+                          {r.turno}
+                        </span>
+                      </div>
+                      <p className="text-gray-500 font-bold text-sm">
+                        Prof. {r.professor_nome} • {r.codigo_turma} • {r.data_chamada} • {r.horario_inicio} – {r.horario_fim}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-8 shrink-0">
+                    <div className="hidden md:flex items-center gap-6">
+                      <div className="text-center">
+                        <p className="text-lg font-black text-white">{r.total_alunos}</p>
+                        <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Total</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-black text-green-400">{r.presentes}</p>
+                        <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Presentes</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-black text-red-400">{r.ausentes}</p>
+                        <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Ausentes</p>
+                      </div>
+                    </div>
+                    <div className="text-center min-w-[60px]">
+                      <p className={`text-2xl font-black ${r.percentual >= 75 ? 'text-green-400' : 'text-red-400'}`}>{r.percentual}%</p>
+                      <p className="text-xs text-gray-600 font-black uppercase tracking-widest">Presença</p>
+                    </div>
+                    <ChevronRight size={20} className="text-gray-600 group-hover:text-[#4B39EF] transition-colors" />
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Modal detalhe de chamada */}
+        {relatorioExpandido && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={() => setRelatorioExpandido(null)}>
+            <div className="bg-[#151718] rounded-[40px] border border-white/5 shadow-2xl max-w-3xl w-full p-10 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="flex items-start justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <FileText className="text-[#4B39EF] shrink-0" size={28} />
+                  <div>
+                    <h3 className="text-2xl font-black text-white">{relatorioExpandido.nome_disciplina}</h3>
+                    <p className="text-gray-500 text-sm font-bold mt-1">
+                      {relatorioExpandido.data_chamada} • {relatorioExpandido.horario_inicio} – {relatorioExpandido.horario_fim} • Prof. {relatorioExpandido.professor_nome}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setRelatorioExpandido(null)} className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all shrink-0">
+                  <X size={22} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-4 gap-4 mb-8">
+                {[
+                  { label: 'Total', value: relatorioExpandido.total_alunos, cls: 'text-white', bg: 'bg-white/[0.03] border-white/5' },
+                  { label: 'Presentes', value: relatorioExpandido.presentes, cls: 'text-green-400', bg: 'bg-green-500/5 border-green-500/10' },
+                  { label: 'Ausentes', value: relatorioExpandido.ausentes, cls: 'text-red-400', bg: 'bg-red-500/5 border-red-500/10' },
+                  {
+                    label: 'Presença',
+                    value: `${relatorioExpandido.percentual}%`,
+                    cls: relatorioExpandido.percentual >= 75 ? 'text-green-400' : 'text-red-400',
+                    bg: relatorioExpandido.percentual >= 75 ? 'bg-green-500/5 border-green-500/10' : 'bg-red-500/5 border-red-500/10',
+                  },
+                ].map(({ label, value, cls, bg }) => (
+                  <div key={label} className={`${bg} rounded-2xl p-4 text-center border`}>
+                    <p className={`text-2xl font-black ${cls}`}>{value}</p>
+                    <p className="text-xs text-gray-500 font-black uppercase tracking-widest mt-1">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-3 -mx-2 px-2">
+                {relatorioExpandido.alunos.map(a => (
+                  <div key={a.aluno_id} className={`flex items-center gap-5 p-5 rounded-2xl border transition-all ${a.presente ? 'bg-green-500/[0.03] border-green-500/10' : 'bg-red-500/[0.03] border-red-500/10'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-lg shrink-0 ${a.presente ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                      {a.nome.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-black text-white truncate">{a.nome}</p>
+                      <p className="text-xs text-gray-500 font-bold mt-1">RA {a.ra}</p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {a.presente && a.tipo_registro !== '—' && (
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 bg-white/5 px-3 py-1 rounded-lg">
+                          {a.tipo_registro}
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${a.presente ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'}`}>
+                        {a.presente ? 'Presente' : 'Ausente'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-8 border-t border-white/5 mt-6">
+                <button onClick={() => setRelatorioExpandido(null)} className="w-full py-4 rounded-2xl bg-white/5 font-black text-sm uppercase tracking-widest text-gray-400 hover:bg-white/10 transition-all">
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {senhaTemporariaModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-6">
+            <div className="bg-[#151718] rounded-[40px] border border-white/5 shadow-2xl max-w-md w-full p-10">
+              <div className="flex flex-col items-center text-center gap-6">
+                <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center">
+                  <CheckCircle2 size={28} className="text-green-400" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-white mb-3">{senhaTemporariaModal.tipo} Criado!</h3>
+                  <p className="text-gray-400 font-medium">{senhaTemporariaModal.nome} foi cadastrado com sucesso.</p>
+                </div>
+                <div className="w-full bg-black/40 rounded-2xl p-6 border border-white/10">
+                  <p className="text-xs text-gray-500 font-black uppercase tracking-widest mb-3">Senha Temporária</p>
+                  <p className="text-2xl font-black text-white tracking-widest font-mono">{senhaTemporariaModal.senha}</p>
+                  <p className="text-xs text-gray-600 mt-3">Compartilhe com o usuário. Esta senha não será exibida novamente.</p>
+                </div>
+                <div className="flex gap-4 w-full">
+                  <button
+                    onClick={() => {navigator.clipboard?.writeText(senhaTemporariaModal.senha); showToast('Senha copiada!');}}
+                    className="flex-1 py-4 rounded-2xl bg-white/5 font-black text-sm uppercase tracking-widest text-gray-400 hover:bg-white/10 transition-all">
+                    Copiar Senha
+                  </button>
+                  <button
+                    onClick={() => setSenhaTemporariaModal(null)}
+                    className="flex-1 py-4 rounded-2xl bg-[#4B39EF] font-black text-sm uppercase tracking-widest text-white hover:bg-[#5E47FF] transition-all">
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );

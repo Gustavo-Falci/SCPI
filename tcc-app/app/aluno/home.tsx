@@ -126,7 +126,7 @@ export default function HomeAluno() {
               <View>
                 <Text style={styles.faceCardTitle}>Biometria Facial</Text>
                 <Text style={styles.faceCardStatus}>
-                  {data?.face_registrada ? "Atualize sua face quando quiser" : "Cadastre sua face agora"}
+                  Atualize sua face quando quiser
                 </Text>
               </View>
               <MaterialCommunityIcons name="face-recognition" size={40} color="#fff" />

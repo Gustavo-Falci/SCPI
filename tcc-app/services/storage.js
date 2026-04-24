@@ -44,7 +44,7 @@ export const storage = {
   },
 
   async clear() {
-    const keys = ['access_token', 'refresh_token', 'user_role', 'user_id', 'user_name', 'user_email', 'user_ra'];
+    const keys = ['access_token', 'refresh_token', 'user_role', 'user_id', 'user_name', 'user_email', 'user_ra', 'primeiro_acesso', 'face_cadastrada'];
     if (Platform.OS === 'web') {
       try {
         localStorage.clear();

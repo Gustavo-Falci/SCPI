@@ -2,7 +2,7 @@
 // Em dev, copie `.env.example` para `.env` e ajuste o IP do backend.
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
-  "http://192.168.5.129:8000";
+  "http://10.34.221.107:8000";
 
 import { storage } from "./storage";
 
@@ -30,6 +30,8 @@ async function clearSession() {
   await storage.removeItem("user_name");
   await storage.removeItem("user_email");
   await storage.removeItem("user_ra");
+  await storage.removeItem("primeiro_acesso");
+  await storage.removeItem("face_cadastrada");
 }
 
 // Evita múltiplas chamadas de refresh concorrentes

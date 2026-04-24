@@ -97,21 +97,36 @@ export default function Frequencia() {
           data.frequencias.map((item: any, index: number) => {
             const isLow = item.presenca < 75;
             return (
-              <View style={styles.card} key={index}>
+              <TouchableOpacity
+                key={index}
+                style={styles.card}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel={`Ver histórico de ${item.nome}`}
+                onPress={() =>
+                  router.push({
+                    pathname: "/aluno/frequencia-detalhe",
+                    params: { turma_id: item.turma_id, turma_nome: item.nome },
+                  })
+                }
+              >
                 <View style={styles.cardHeader}>
-                  <Text style={styles.subjectName}>{item.nome}</Text>
-                  <Text style={[styles.percentageText, isLow && { color: Colors.brand.error }]}>
-                    {item.presenca}%
-                  </Text>
+                  <Text style={styles.subjectName} numberOfLines={1}>{item.nome}</Text>
+                  <View style={styles.percentRow}>
+                    <Text style={[styles.percentageText, isLow && { color: Colors.brand.error }]}>
+                      {item.presenca}%
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={isLow ? Colors.brand.error : "#22C55E"} />
+                  </View>
                 </View>
 
                 <View style={styles.progressBarBg}>
-                  <View 
+                  <View
                     style={[
-                      styles.progressBarFill, 
+                      styles.progressBarFill,
                       { width: `${item.presenca}%` },
-                      isLow && { backgroundColor: Colors.brand.error }
-                    ]} 
+                      isLow && { backgroundColor: Colors.brand.error },
+                    ]}
                   />
                 </View>
 
@@ -131,7 +146,7 @@ export default function Frequencia() {
                     </Text>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })
         ) : (
@@ -172,6 +187,7 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   subjectName: { color: "#fff", fontSize: 16, fontWeight: "700", flex: 1, marginRight: 10 },
+  percentRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   percentageText: { color: "#22C55E", fontSize: 18, fontWeight: "800" },
   progressBarBg: { height: 8, backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 4, overflow: "hidden", marginBottom: 16 },
   progressBarFill: { height: "100%", backgroundColor: "#22C55E", borderRadius: 4 },

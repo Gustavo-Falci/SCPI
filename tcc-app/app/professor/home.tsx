@@ -65,7 +65,7 @@ export default function HomeProfessor() {
   const menuItems: any[] = [
     { icon: 'home-outline', activeIcon: 'home', route: '/professor/home', label: 'Início' },
     { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas', label: 'Turmas' },
-    { icon: 'calendar-outline', activeIcon: 'calendar', route: '/professor/horarios-turmas', label: 'Agenda' },
+    { icon: 'document-text-outline', activeIcon: 'document-text', route: '/professor/relatorios', label: 'Relatórios' },
     { icon: 'person-outline', activeIcon: 'person', route: '/professor/perfil', label: 'Perfil' },
   ];
 
@@ -184,6 +184,23 @@ export default function HomeProfessor() {
           <View style={{ flex: 1, marginLeft: 16 }}>
             <Text style={styles.secondaryCardTitle}>Minhas Turmas</Text>
             <Text style={styles.secondaryCardSubtitle}>Gerenciar listas e presenças</Text>
+          </View>
+          <Ionicons name="arrow-forward" size={20} color={Colors.brand.textSecondary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.secondaryCard, { marginTop: 12 }]}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Relatórios de chamadas"
+          onPress={() => router.push("/professor/relatorios")}
+        >
+          <View style={[styles.iconCircle, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}>
+            <Ionicons name="document-text" size={24} color="#22C55E" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 16 }}>
+            <Text style={styles.secondaryCardTitle}>Relatórios</Text>
+            <Text style={styles.secondaryCardSubtitle}>Histórico de chamadas realizadas</Text>
           </View>
           <Ionicons name="arrow-forward" size={20} color={Colors.brand.textSecondary} />
         </TouchableOpacity>

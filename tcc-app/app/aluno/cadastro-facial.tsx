@@ -1,5 +1,5 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import React, { useRef, useState, useEffect } from "react";
 import {
   StyleSheet,
@@ -22,6 +22,8 @@ const { width, height } = Dimensions.get("window");
 
 export default function CadastroFacial() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const obrigatorio = params.obrigatorio === "true";
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -75,9 +77,15 @@ export default function CadastroFacial() {
       formData.append("consentimento_biometrico", "true");
 
       await apiPostFormData("/alunos/cadastrar-face", formData);
-      
-      Alert.alert("Sucesso!", "Sua biometria facial foi atualizada com sucesso!");
-      router.back();
+
+      await storage.setItem("face_cadastrada", "true");
+      if (obrigatorio) {
+        Alert.alert("Sucesso!", "Sua biometria facial foi cadastrada com sucesso!");
+        router.replace("/aluno/home");
+      } else {
+        Alert.alert("Sucesso!", "Sua biometria facial foi atualizada com sucesso!");
+        router.back();
+      }
     } catch (error: any) {
       console.error("Erro no cadastro facial:", error);
       Alert.alert("Erro", error.message || "Não foi possível processar sua face. Tente novamente.");

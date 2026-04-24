@@ -139,11 +139,51 @@ def _ensure_push_tokens_table():
         logger.error("Falha ao criar tabela PushTokens: %s", e)
 
 
+def _ensure_primeiro_acesso_column():
+    """Adiciona coluna primeiro_acesso em Usuarios (idempotente)."""
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                ALTER TABLE Usuarios
+                ADD COLUMN IF NOT EXISTS primeiro_acesso BOOLEAN NOT NULL DEFAULT FALSE
+                """
+            )
+    except Exception as e:
+        logger.error("Falha ao aplicar coluna primeiro_acesso: %s", e)
+
+
+import resend as _resend
+_resend.api_key = os.getenv("RESEND_API_KEY", "")
+_RESEND_FROM = os.getenv("RESEND_FROM_EMAIL", "SCPI <onboarding@resend.dev>")
+
+
+def _ensure_reset_codes_table():
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS PasswordResetCodes (
+                    id SERIAL PRIMARY KEY,
+                    email VARCHAR(255) NOT NULL,
+                    code VARCHAR(6) NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    used BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+    except Exception as e:
+        logger.error("Falha ao criar tabela PasswordResetCodes: %s", e)
+
+
 @app.on_event("startup")
 def _on_startup():
     _ensure_refresh_tokens_table()
     _ensure_lgpd_columns()
     _ensure_push_tokens_table()
+    _ensure_primeiro_acesso_column()
+    _ensure_reset_codes_table()
 
 
 # ---- Rate limiting (por IP) ----
@@ -228,6 +268,8 @@ class Token(BaseModel):
     user_name: str
     user_email: str
     user_ra: Optional[str] = None
+    primeiro_acesso: bool = False
+    face_cadastrada: bool = True
 
 
 class RefreshRequest(BaseModel):
@@ -492,10 +534,10 @@ async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...),
 
                     # 1. Cria Usuário (Senha padrão '123' segura com Bcrypt)
                     user_uuid = str(uuid.uuid4())
-                    senha_padrao_hash = get_password_hash("123")
+                    senha_padrao_hash = get_password_hash("Scpi@12345")
                     cur.execute("""
-                        INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario)
-                        VALUES (%s, %s, %s, %s, 'Aluno')
+                        INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario, primeiro_acesso)
+                        VALUES (%s, %s, %s, %s, 'Aluno', TRUE)
                         ON CONFLICT (email) DO NOTHING
                         RETURNING usuario_id
                     """, (user_uuid, nome, email, senha_padrao_hash))
@@ -538,6 +580,111 @@ async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...),
     except Exception as e:
         raise internal_error(e)
 
+class CriarProfessorAdmin(BaseModel):
+    nome: str = Field(..., min_length=3, max_length=100)
+    email: EmailStr
+    departamento: Optional[str] = Field(None, max_length=100)
+
+
+class CriarAlunoAdmin(BaseModel):
+    nome: str = Field(..., min_length=3, max_length=100)
+    email: EmailStr
+    ra: str = Field(..., pattern=r"^[A-Za-z0-9]{4,20}$")
+    turno: Optional[str] = Field(None, pattern=r"^(Matutino|Noturno)$")
+
+
+def _gerar_senha_temporaria() -> str:
+    return "Scpi@12345"
+
+
+@app.post("/admin/usuarios/professor")
+def admin_criar_professor(dados: CriarProfessorAdmin, current_user: dict = Depends(require_role("Admin"))):
+    import uuid
+    email_limpo = dados.email.strip()
+    try:
+        if buscar_usuario_por_email(email_limpo):
+            raise HTTPException(status_code=400, detail="Email já cadastrado.")
+
+        senha_temporaria = _gerar_senha_temporaria()
+        senha_hash = get_password_hash(senha_temporaria)
+        usuario_id = str(uuid.uuid4())
+        professor_id = str(uuid.uuid4())
+
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario, primeiro_acesso)
+                VALUES (%s, %s, %s, %s, 'Professor', TRUE)
+                """,
+                (usuario_id, dados.nome, email_limpo, senha_hash),
+            )
+            cur.execute(
+                """
+                INSERT INTO Professores (professor_id, usuario_id, departamento)
+                VALUES (%s, %s, %s)
+                """,
+                (professor_id, usuario_id, dados.departamento),
+            )
+
+        audit_logger.info("Professor criado admin=%s professor_id=%s", current_user.get("sub"), professor_id)
+        return {
+            "mensagem": "Professor criado com sucesso!",
+            "usuario_id": usuario_id,
+            "senha_temporaria": senha_temporaria,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "admin_criar_professor")
+
+
+@app.post("/admin/usuarios/aluno")
+def admin_criar_aluno(dados: CriarAlunoAdmin, current_user: dict = Depends(require_role("Admin"))):
+    import uuid
+    email_limpo = dados.email.strip()
+    try:
+        if buscar_usuario_por_email(email_limpo):
+            raise HTTPException(status_code=400, detail="Email já cadastrado.")
+
+        with get_db_cursor() as cur:
+            cur.execute("SELECT 1 FROM Alunos WHERE ra = %s", (dados.ra,))
+            if cur.fetchone():
+                raise HTTPException(status_code=400, detail="RA já cadastrado.")
+
+        senha_temporaria = _gerar_senha_temporaria()
+        senha_hash = get_password_hash(senha_temporaria)
+        usuario_id = str(uuid.uuid4())
+        aluno_id = str(uuid.uuid4())
+
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario, primeiro_acesso)
+                VALUES (%s, %s, %s, %s, 'Aluno', TRUE)
+                """,
+                (usuario_id, dados.nome, email_limpo, senha_hash),
+            )
+            cur.execute(
+                """
+                INSERT INTO Alunos (aluno_id, usuario_id, ra, turno)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (aluno_id, usuario_id, dados.ra, dados.turno),
+            )
+
+        audit_logger.info("Aluno criado admin=%s aluno_id=%s", current_user.get("sub"), aluno_id)
+        return {
+            "mensagem": "Aluno criado com sucesso!",
+            "usuario_id": usuario_id,
+            "aluno_id": aluno_id,
+            "senha_temporaria": senha_temporaria,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "admin_criar_aluno")
+
+
 @app.get("/")
 def home():
     return {"mensagem": "API SCPI está rodando!"}
@@ -547,36 +694,10 @@ def home():
 @app.post("/auth/register")
 @limiter.limit("5/minute")
 def register(request: Request, usuario: UsuarioRegistro):
-    # 1. Verificar se usuário já existe
-    user_existente = buscar_usuario_por_email(usuario.email.strip())
-    if user_existente:
-        raise HTTPException(status_code=400, detail="Email já cadastrado.")
-
-    # 2. Validar dados específicos
-    dados_perfil = {}
-    if usuario.tipo_usuario == 'Aluno':
-        if not usuario.ra:
-            raise HTTPException(status_code=400, detail="RA é obrigatório para alunos.")
-        dados_perfil['ra'] = usuario.ra
-    elif usuario.tipo_usuario == 'Professor':
-        dados_perfil['departamento'] = usuario.departamento
-
-    # 3. Criar hash da senha
-    senha_hash = get_password_hash(usuario.senha)
-
-    # 4. Salvar no banco
-    dados_usuario = {
-        "nome": usuario.nome,
-        "email": usuario.email,
-        "senha_hash": senha_hash,
-        "tipo_usuario": usuario.tipo_usuario
-    }
-    
-    sucesso = criar_usuario_completo(dados_usuario, dados_perfil)
-    if not sucesso:
-        raise HTTPException(status_code=500, detail="B.O no servidor ao criar usuário. Tente novamente.")
-
-    return {"mensagem": "Usuário criado com sucesso!"}
+    raise HTTPException(
+        status_code=403,
+        detail="Cadastros de usuários são realizados exclusivamente pelo administrador do sistema.",
+    )
 
 
 @app.post("/auth/register-aluno-com-face")
@@ -590,10 +711,11 @@ async def register_aluno_com_face(
     foto: UploadFile = File(...),
     consentimento_biometrico: bool = Form(...),
 ):
-    """
-    Cadastro atômico de Aluno: a face é validada no Rekognition ANTES
-    de qualquer gravação no banco. Se a face falhar, nenhum registro é criado.
-    """
+    raise HTTPException(
+        status_code=403,
+        detail="Cadastros de usuários são realizados exclusivamente pelo administrador do sistema.",
+    )
+    # Código original mantido abaixo (inalcançável) para referência futura.
     import uuid as _uuid
 
     if not consentimento_biometrico:
@@ -691,7 +813,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
 
     # Busca usuário de forma insensível a maiúsculas/minúsculas
     with get_db_cursor() as cur:
-        cur.execute("SELECT usuario_id, nome, email, senha, tipo_usuario FROM Usuarios WHERE LOWER(email) = LOWER(%s)", (email_limpo,))
+        cur.execute("SELECT usuario_id, nome, email, senha, tipo_usuario, primeiro_acesso FROM Usuarios WHERE LOWER(email) = LOWER(%s)", (email_limpo,))
         user = cur.fetchone()
 
     if not user:
@@ -726,14 +848,22 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     except Exception as e:
         raise internal_error(e, "login.persist_refresh_token")
 
-    # Busca RA se for aluno
+    # Busca RA se for aluno e status da face cadastrada
     ra = None
+    face_cadastrada = True
     if user['tipo_usuario'] == 'Aluno':
         with get_db_cursor() as cur:
-            cur.execute("SELECT ra FROM Alunos WHERE usuario_id = %s", (user['usuario_id'],))
+            cur.execute("SELECT aluno_id, ra FROM Alunos WHERE usuario_id = %s", (user['usuario_id'],))
             aluno_data = cur.fetchone()
             if aluno_data:
                 ra = aluno_data['ra']
+                cur.execute(
+                    "SELECT 1 FROM Colecao_Rostos WHERE aluno_id = %s AND revogado_em IS NULL",
+                    (aluno_data['aluno_id'],),
+                )
+                face_cadastrada = cur.fetchone() is not None
+            else:
+                face_cadastrada = False
 
     return {
         "access_token": access_token,
@@ -743,7 +873,9 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
         "user_id": str(user['usuario_id']),
         "user_name": user['nome'],
         "user_email": user['email'],
-        "user_ra": ra
+        "user_ra": ra,
+        "primeiro_acesso": bool(user.get('primeiro_acesso', False)),
+        "face_cadastrada": bool(face_cadastrada),
     }
 
 
@@ -817,6 +949,45 @@ def logout(body: RefreshRequest, current_user: dict = Depends(get_current_user))
         return {"mensagem": "Sessão encerrada."}
     except Exception as e:
         raise internal_error(e, "logout")
+
+
+class AlterarSenhaBody(BaseModel):
+    senha_atual: str
+    nova_senha: str = Field(..., min_length=8, max_length=128)
+
+
+@app.post("/auth/alterar-senha")
+def alterar_senha(body: AlterarSenhaBody, current_user: dict = Depends(get_current_user)):
+    usuario_id = current_user.get("sub")
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT senha FROM Usuarios WHERE usuario_id = %s",
+                (usuario_id,),
+            )
+            user = cur.fetchone()
+            if not user:
+                raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+
+        try:
+            senha_ok = verify_password(body.senha_atual, user['senha'])
+        except Exception:
+            senha_ok = False
+        if not senha_ok:
+            raise HTTPException(status_code=401, detail="Senha atual incorreta.")
+
+        nova_hash = get_password_hash(body.nova_senha)
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                "UPDATE Usuarios SET senha = %s, primeiro_acesso = FALSE WHERE usuario_id = %s",
+                (nova_hash, usuario_id),
+            )
+        audit_logger.info("Senha alterada usuario=%s", usuario_id)
+        return {"mensagem": "Senha alterada com sucesso."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "alterar_senha")
 
 
 class RegisterTokenBody(BaseModel):
@@ -998,19 +1169,21 @@ def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get
             # 2. Busca estatísticas por disciplina
             # Pega todas as turmas que o aluno participa e conta as chamadas totais e presenças dele
             cur.execute("""
-                SELECT 
-                    t.nome_disciplina as nome,
-                    (SELECT COUNT(*) FROM Chamadas ch WHERE ch.turma_id = t.turma_id AND ch.status = 'Fechada') as total_aulas,
-                    (SELECT COUNT(*) FROM Presencas p 
+                SELECT
+                    t.turma_id,
+                    t.nome_disciplina AS nome,
+                    t.codigo_turma,
+                    (SELECT COUNT(*) FROM Chamadas ch WHERE ch.turma_id = t.turma_id AND ch.status = 'Fechada') AS total_aulas,
+                    (SELECT COUNT(*) FROM Presencas p
                      JOIN Chamadas ch ON p.chamada_id = ch.chamada_id
-                     WHERE p.aluno_id = %s AND ch.turma_id = t.turma_id) as presencas
+                     WHERE p.aluno_id = %s AND ch.turma_id = t.turma_id) AS presencas
                 FROM Turma_Alunos ta
                 JOIN Turmas t ON ta.turma_id = t.turma_id
                 WHERE ta.aluno_id = %s
             """, (aluno_id, aluno_id))
-            
+
             rows = cur.fetchall()
-            
+
             frequencias = []
             total_presencas_global = 0
             total_chamadas_global = 0
@@ -1019,13 +1192,15 @@ def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get
                 presencas = row['presencas']
                 total = row['total_aulas']
                 percentual = round((presencas / total * 100)) if total > 0 else 0
-                
+
                 frequencias.append({
+                    "turma_id": row['turma_id'],
+                    "codigo_turma": row['codigo_turma'],
                     "nome": row['nome'],
                     "presenca": percentual,
                     "total": total,
                     "presencas_count": presencas,
-                    "faltas_count": total - presencas
+                    "faltas_count": total - presencas,
                 })
                 
                 total_presencas_global += presencas
@@ -1039,6 +1214,77 @@ def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get
             }
     except Exception as e:
         raise internal_error(e)
+
+
+@app.get("/aluno/historico-chamadas/{usuario_id}")
+def get_historico_chamadas_aluno(
+    usuario_id: str,
+    turma_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    require_self_or_admin(usuario_id, current_user)
+    try:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT aluno_id FROM Alunos WHERE usuario_id = %s", (usuario_id,))
+            aluno = cur.fetchone()
+            if not aluno:
+                raise HTTPException(status_code=404, detail="Aluno não encontrado.")
+            aluno_id = aluno["aluno_id"]
+
+            cur.execute(
+                "SELECT 1 FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = %s",
+                (turma_id, aluno_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=403, detail="Você não está matriculado nesta turma.")
+
+            cur.execute(
+                "SELECT nome_disciplina, codigo_turma FROM Turmas WHERE turma_id = %s",
+                (turma_id,),
+            )
+            turma = cur.fetchone()
+
+            cur.execute(
+                """
+                SELECT
+                    c.chamada_id,
+                    to_char(c.data_chamada,   'DD/MM/YYYY') AS data_chamada,
+                    EXTRACT(ISODOW FROM c.data_chamada)::int AS dia_iso,
+                    to_char(c.horario_inicio, 'HH24:MI')    AS horario_inicio,
+                    to_char(c.horario_fim,    'HH24:MI')    AS horario_fim,
+                    CASE WHEN p.presenca_id IS NOT NULL THEN true ELSE false END AS presente,
+                    COALESCE(p.tipo_registro, '—') AS tipo_registro
+                FROM Chamadas c
+                LEFT JOIN Presencas p ON p.chamada_id = c.chamada_id AND p.aluno_id = %s
+                WHERE c.turma_id = %s AND c.status = 'Fechada'
+                ORDER BY c.data_chamada DESC, c.horario_inicio DESC
+                """,
+                (aluno_id, turma_id),
+            )
+            rows = cur.fetchall()
+
+        DIAS = {1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb", 7: "Dom"}
+        chamadas = [
+            {**dict(r), "dia_semana": DIAS.get(r["dia_iso"], "")}
+            for r in rows
+        ]
+
+        total = len(chamadas)
+        presentes = sum(1 for c in chamadas if c["presente"])
+        return {
+            "turma_id": turma_id,
+            "nome_disciplina": turma["nome_disciplina"],
+            "codigo_turma": turma["codigo_turma"],
+            "total": total,
+            "presentes": presentes,
+            "ausentes": total - presentes,
+            "percentual": round(presentes / total * 100) if total > 0 else 0,
+            "chamadas": chamadas,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "get_historico_chamadas_aluno")
 
 
 @app.get("/professor/dashboard/{usuario_id}")
@@ -1654,3 +1900,362 @@ async def registrar_rosto_aluno(
         raise
     except Exception as e:
         raise internal_error(e, "registrar_rosto_aluno")
+
+
+# --- ENDPOINTS DE RELATÓRIOS ---
+
+@app.get("/professor/relatorios/chamadas")
+def listar_relatorios_professor(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(require_role("Professor")),
+):
+    usuario_id = current_user.get("sub")
+    professor_id = obter_professor_id(usuario_id)
+    if not professor_id:
+        raise HTTPException(status_code=404, detail="Professor não encontrado.")
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.chamada_id,
+                    c.turma_id,
+                    t.nome_disciplina,
+                    t.codigo_turma,
+                    to_char(c.data_chamada, 'DD/MM/YYYY') AS data_chamada,
+                    to_char(c.horario_inicio, 'HH24:MI') AS horario_inicio,
+                    to_char(c.horario_fim,   'HH24:MI') AS horario_fim,
+                    (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = c.turma_id) AS total_alunos,
+                    (SELECT COUNT(*) FROM Presencas p  WHERE p.chamada_id  = c.chamada_id) AS presentes
+                FROM Chamadas c
+                JOIN Turmas t ON t.turma_id = c.turma_id
+                WHERE c.professor_id = %s AND c.status = 'Fechada'
+                ORDER BY c.data_chamada DESC, c.horario_inicio DESC
+                LIMIT %s OFFSET %s
+                """,
+                (professor_id, limit, offset),
+            )
+            rows = cur.fetchall()
+        relatorios = []
+        for r in rows:
+            total = r["total_alunos"]
+            presentes = r["presentes"]
+            relatorios.append({
+                **dict(r),
+                "ausentes": total - presentes,
+                "percentual": round(presentes / total * 100) if total > 0 else 0,
+            })
+        return relatorios
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "listar_relatorios_professor")
+
+
+@app.get("/professor/relatorios/chamadas/{chamada_id}")
+def detalhe_relatorio_professor(
+    chamada_id: str,
+    current_user: dict = Depends(require_role("Professor")),
+):
+    usuario_id = current_user.get("sub")
+    professor_id = obter_professor_id(usuario_id)
+    if not professor_id:
+        raise HTTPException(status_code=404, detail="Professor não encontrado.")
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.chamada_id, c.turma_id,
+                    t.nome_disciplina, t.codigo_turma,
+                    to_char(c.data_chamada,   'DD/MM/YYYY') AS data_chamada,
+                    to_char(c.horario_inicio, 'HH24:MI')    AS horario_inicio,
+                    to_char(c.horario_fim,    'HH24:MI')    AS horario_fim
+                FROM Chamadas c
+                JOIN Turmas t ON t.turma_id = c.turma_id
+                WHERE c.chamada_id = %s AND c.professor_id = %s AND c.status = 'Fechada'
+                """,
+                (chamada_id, professor_id),
+            )
+            chamada = cur.fetchone()
+            if not chamada:
+                raise HTTPException(status_code=404, detail="Chamada não encontrada.")
+
+            cur.execute(
+                """
+                SELECT
+                    al.aluno_id,
+                    u.nome,
+                    COALESCE(al.ra, '—')          AS ra,
+                    CASE WHEN p.presenca_id IS NOT NULL THEN true ELSE false END AS presente,
+                    COALESCE(p.tipo_registro, '—') AS tipo_registro
+                FROM Turma_Alunos ta
+                JOIN Alunos   al ON al.aluno_id   = ta.aluno_id
+                JOIN Usuarios u  ON u.usuario_id  = al.usuario_id
+                LEFT JOIN Presencas p ON p.aluno_id = al.aluno_id AND p.chamada_id = %s
+                WHERE ta.turma_id = %s
+                ORDER BY u.nome ASC
+                """,
+                (chamada_id, chamada["turma_id"]),
+            )
+            alunos = cur.fetchall()
+
+        total = len(alunos)
+        presentes = sum(1 for a in alunos if a["presente"])
+        return {
+            **dict(chamada),
+            "total_alunos": total,
+            "presentes": presentes,
+            "ausentes": total - presentes,
+            "percentual": round(presentes / total * 100) if total > 0 else 0,
+            "alunos": [dict(a) for a in alunos],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "detalhe_relatorio_professor")
+
+
+@app.get("/admin/relatorios/chamadas")
+def listar_relatorios_admin(
+    turma_id: Optional[str] = None,
+    limit: int = 200,
+    offset: int = 0,
+    current_user: dict = Depends(require_role("Admin")),
+):
+    try:
+        with get_db_cursor() as cur:
+            base_sql = """
+                SELECT
+                    c.chamada_id, c.turma_id,
+                    t.nome_disciplina, t.codigo_turma,
+                    t.semestre, t.turno,
+                    u.nome AS professor_nome,
+                    to_char(c.data_chamada,   'DD/MM/YYYY') AS data_chamada,
+                    to_char(c.horario_inicio, 'HH24:MI')    AS horario_inicio,
+                    to_char(c.horario_fim,    'HH24:MI')    AS horario_fim,
+                    (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = c.turma_id) AS total_alunos,
+                    (SELECT COUNT(*) FROM Presencas p  WHERE p.chamada_id  = c.chamada_id) AS presentes
+                FROM Chamadas c
+                JOIN Turmas     t  ON t.turma_id     = c.turma_id
+                JOIN Professores pr ON pr.professor_id = c.professor_id
+                JOIN Usuarios    u  ON u.usuario_id   = pr.usuario_id
+                WHERE c.status = 'Fechada'
+            """
+            if turma_id:
+                cur.execute(base_sql + " AND c.turma_id = %s ORDER BY c.data_chamada DESC, c.horario_inicio DESC LIMIT %s OFFSET %s",
+                            (turma_id, limit, offset))
+            else:
+                cur.execute(base_sql + " ORDER BY c.data_chamada DESC, c.horario_inicio DESC LIMIT %s OFFSET %s",
+                            (limit, offset))
+            rows = cur.fetchall()
+
+        relatorios = []
+        for r in rows:
+            total = r["total_alunos"]
+            presentes = r["presentes"]
+            relatorios.append({
+                **dict(r),
+                "ausentes": total - presentes,
+                "percentual": round(presentes / total * 100) if total > 0 else 0,
+            })
+        return relatorios
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "listar_relatorios_admin")
+
+
+@app.get("/admin/relatorios/chamadas/{chamada_id}")
+def detalhe_relatorio_admin(
+    chamada_id: str,
+    current_user: dict = Depends(require_role("Admin")),
+):
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.chamada_id, c.turma_id,
+                    t.nome_disciplina, t.codigo_turma, t.semestre, t.turno,
+                    u.nome AS professor_nome,
+                    to_char(c.data_chamada,   'DD/MM/YYYY') AS data_chamada,
+                    to_char(c.horario_inicio, 'HH24:MI')    AS horario_inicio,
+                    to_char(c.horario_fim,    'HH24:MI')    AS horario_fim
+                FROM Chamadas c
+                JOIN Turmas     t  ON t.turma_id     = c.turma_id
+                JOIN Professores pr ON pr.professor_id = c.professor_id
+                JOIN Usuarios    u  ON u.usuario_id   = pr.usuario_id
+                WHERE c.chamada_id = %s AND c.status = 'Fechada'
+                """,
+                (chamada_id,),
+            )
+            chamada = cur.fetchone()
+            if not chamada:
+                raise HTTPException(status_code=404, detail="Chamada não encontrada.")
+
+            cur.execute(
+                """
+                SELECT
+                    al.aluno_id,
+                    u.nome,
+                    COALESCE(al.ra, '—')          AS ra,
+                    CASE WHEN p.presenca_id IS NOT NULL THEN true ELSE false END AS presente,
+                    COALESCE(p.tipo_registro, '—') AS tipo_registro
+                FROM Turma_Alunos ta
+                JOIN Alunos   al ON al.aluno_id  = ta.aluno_id
+                JOIN Usuarios u  ON u.usuario_id = al.usuario_id
+                LEFT JOIN Presencas p ON p.aluno_id = al.aluno_id AND p.chamada_id = %s
+                WHERE ta.turma_id = %s
+                ORDER BY u.nome ASC
+                """,
+                (chamada_id, chamada["turma_id"]),
+            )
+            alunos = cur.fetchall()
+
+        total = len(alunos)
+        presentes = sum(1 for a in alunos if a["presente"])
+        return {
+            **dict(chamada),
+            "total_alunos": total,
+            "presentes": presentes,
+            "ausentes": total - presentes,
+            "percentual": round(presentes / total * 100) if total > 0 else 0,
+            "alunos": [dict(a) for a in alunos],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "detalhe_relatorio_admin")
+
+
+# ---- Esqueci minha senha ----
+
+class EsqueciSenhaBody(BaseModel):
+    email: EmailStr
+
+class VerificarCodigoBody(BaseModel):
+    email: EmailStr
+    codigo: str
+
+class RedefinirSenhaBody(BaseModel):
+    reset_token: str
+    nova_senha: str = Field(..., min_length=8)
+
+
+@app.post("/auth/esqueci-senha")
+def esqueci_senha(body: EsqueciSenhaBody):
+    import secrets
+    from datetime import datetime, timedelta
+
+    email = body.email.strip().lower()
+
+    with get_db_cursor() as cur:
+        cur.execute("SELECT usuario_id FROM Usuarios WHERE LOWER(email) = %s", (email,))
+        user = cur.fetchone()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Email não encontrado. Fale com a secretaria para realizar seu cadastro.",
+        )
+
+    code = str(secrets.randbelow(900000) + 100000)  # 6 dígitos
+    expires_at = datetime.utcnow() + timedelta(minutes=15)
+
+    with get_db_cursor(commit=True) as cur:
+        # Invalida códigos anteriores do mesmo email
+        cur.execute("UPDATE PasswordResetCodes SET used = TRUE WHERE email = %s AND used = FALSE", (email,))
+        cur.execute(
+            "INSERT INTO PasswordResetCodes (email, code, expires_at) VALUES (%s, %s, %s)",
+            (email, code, expires_at),
+        )
+
+    try:
+        _resend.Emails.send({
+            "from": _RESEND_FROM,
+            "to": [email],
+            "subject": "SCPI — Código de redefinição de senha",
+            "html": f"""
+                <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#0f1117;border-radius:16px;color:#fff">
+                    <h2 style="margin:0 0 8px;color:#4B39EF">SCPI</h2>
+                    <p style="color:#aaa;margin:0 0 24px">Sistema de Controle de Presença Inteligente</p>
+                    <p style="margin:0 0 16px">Recebemos uma solicitação para redefinir a senha da sua conta.</p>
+                    <div style="background:#1a1c1e;border-radius:12px;padding:24px;text-align:center;margin:24px 0;border:1px solid #333">
+                        <p style="margin:0 0 8px;font-size:13px;color:#aaa;text-transform:uppercase;letter-spacing:2px">Seu código</p>
+                        <p style="margin:0;font-size:40px;font-weight:900;letter-spacing:8px;color:#4B39EF">{code}</p>
+                    </div>
+                    <p style="color:#aaa;font-size:13px;margin:0">Este código expira em <strong style="color:#fff">15 minutos</strong>. Se não foi você, ignore este e-mail.</p>
+                </div>
+            """,
+        })
+    except Exception as e:
+        logger.error("Falha ao enviar email de redefinição: %s", e)
+        raise HTTPException(status_code=500, detail="Não foi possível enviar o e-mail. Tente novamente.")
+
+    return {"mensagem": "Código enviado para o e-mail informado."}
+
+
+@app.post("/auth/verificar-codigo")
+def verificar_codigo(body: VerificarCodigoBody):
+    from datetime import datetime
+
+    email = body.email.strip().lower()
+
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, expires_at FROM PasswordResetCodes
+            WHERE email = %s AND code = %s AND used = FALSE
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (email, body.codigo),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=400, detail="Código inválido ou já utilizado.")
+
+    if datetime.utcnow() > row["expires_at"]:
+        raise HTTPException(status_code=400, detail="Código expirado. Solicite um novo.")
+
+    with get_db_cursor(commit=True) as cur:
+        cur.execute("UPDATE PasswordResetCodes SET used = TRUE WHERE id = %s", (row["id"],))
+
+    from datetime import datetime, timedelta
+    from jose import jwt as _jwt
+    from auth_utils import SECRET_KEY, ALGORITHM
+    reset_payload = {
+        "sub": email,
+        "type": "password_reset",
+        "exp": datetime.utcnow() + timedelta(minutes=15),
+    }
+    reset_token = _jwt.encode(reset_payload, SECRET_KEY, algorithm=ALGORITHM)
+    return {"reset_token": reset_token}
+
+
+@app.post("/auth/redefinir-senha")
+def redefinir_senha(body: RedefinirSenhaBody):
+    from jose import jwt as _jwt, JWTError
+    from auth_utils import SECRET_KEY, ALGORITHM
+    try:
+        payload = _jwt.decode(body.reset_token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Token inválido ou expirado.")
+
+    if payload.get("type") != "password_reset":
+        raise HTTPException(status_code=400, detail="Token inválido.")
+
+    email = payload.get("sub", "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Token inválido.")
+
+    nova_hash = get_password_hash(body.nova_senha)
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE Usuarios SET senha = %s, primeiro_acesso = FALSE WHERE LOWER(email) = %s",
+            (nova_hash, email),
+        )
+
+    return {"mensagem": "Senha redefinida com sucesso."}

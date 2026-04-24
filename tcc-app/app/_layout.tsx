@@ -26,10 +26,13 @@ export default function RootLayout() {
             router.replace('/auth/login');
           }
         } else {
-          // Se tem token e está na index, vai pra home
+          // Se tem token e está na index, vai pra home (ou primeiro acesso)
           // Removi o redirecionamento automático de quem já está em /auth/login
           if (isIndex) {
-            if (role === 'Professor') {
+            const primeiroAcesso = await storage.getItem('primeiro_acesso');
+            if (primeiroAcesso === 'true') {
+              router.replace('/auth/primeiro-acesso');
+            } else if (role === 'Professor') {
               router.replace('/professor/home');
             } else {
               router.replace('/aluno/home');
@@ -54,9 +57,14 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="auth/login" options={{ headerShown: false }} />
         <Stack.Screen name="auth/register" options={{ headerShown: false }} />
+        <Stack.Screen name="auth/primeiro-acesso" options={{ headerShown: false }} />
+        <Stack.Screen name="auth/esqueci-senha" options={{ headerShown: false }} />
         <Stack.Screen name="aluno/home" options={{ headerShown: false }} />
         <Stack.Screen name="aluno/cadastro-facial" options={{ headerShown: false }} />
+        <Stack.Screen name="aluno/frequencia-detalhe" options={{ headerShown: false }} />
         <Stack.Screen name="professor/home" options={{ headerShown: false }} />
+        <Stack.Screen name="professor/relatorios" options={{ headerShown: false }} />
+        <Stack.Screen name="professor/relatorio-detalhe" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

@@ -8,7 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  TouchableOpacity
+  TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -44,11 +44,15 @@ export default function Login() {
       await storage.setItem("user_name", resp.user_name);
       await storage.setItem("user_email", resp.user_email);
       if (resp.user_ra) await storage.setItem("user_ra", resp.user_ra);
+      await storage.setItem("primeiro_acesso", resp.primeiro_acesso ? "true" : "false");
+      await storage.setItem("face_cadastrada", resp.face_cadastrada ? "true" : "false");
 
       // Registra push token em background (sem bloquear navegação)
       registerForPushNotificationsAsync();
 
-      if (resp.user_role === "Professor") {
+      if (resp.primeiro_acesso) {
+        router.replace("/auth/primeiro-acesso");
+      } else if (resp.user_role === "Professor") {
         router.replace("/professor/home");
       } else {
         router.replace("/aluno/home");
@@ -112,15 +116,11 @@ export default function Login() {
             />
 
             <TouchableOpacity
-              onPress={() => router.push("/auth/register")}
-              style={styles.registerContainer}
-              activeOpacity={0.7}
+              style={styles.forgotBtn}
+              onPress={() => router.push("/auth/esqueci-senha")}
               accessibilityRole="button"
-              accessibilityLabel="Criar nova conta"
             >
-              <Text style={styles.registerText}>
-                Ainda não tem uma conta? <Text style={styles.link}>Cadastre-se</Text>
-              </Text>
+              <Text style={styles.forgotText}>Esqueceu sua senha?</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -159,16 +159,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.15)",
     marginVertical: 24,
   },
-  registerContainer: {
+  forgotBtn: {
     marginTop: 20,
     alignItems: "center",
   },
-  registerText: {
-    color: Colors.brand.textSecondary,
-    fontSize: 14,
-  },
-  link: {
+  forgotText: {
     color: Colors.brand.primary,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
