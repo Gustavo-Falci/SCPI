@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://192.168.5.179:8000';
+const API_URL = 'http://10.34.221.165:8000';
 
 // --- Gerenciamento de refresh token (singleton) ---
 // Evita múltiplas chamadas concorrentes de /auth/refresh: se uma requisição de
