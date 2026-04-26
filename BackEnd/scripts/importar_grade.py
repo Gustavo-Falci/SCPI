@@ -18,9 +18,10 @@ import sys
 import uuid
 import hashlib
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from database import get_db_cursor
-from auth_utils import get_password_hash
+import pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from infra.database import get_db_cursor
+from core.auth_utils import get_password_hash
 
 PERIODO_LETIVO = "2026-1"
 

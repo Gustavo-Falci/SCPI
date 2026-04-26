@@ -43,7 +43,18 @@
       "Bash(PGPASSWORD='adminpostgres@' psql *)",
       "Bash(venv/Scripts/pip install *)",
       "Bash(claude plugin *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(python -m py_compile api.py)",
+      "Read(//c/c/Users/gufal/OneDrive/Documentos/GitHub/**)",
+      "Bash(mv config.py utils.py auth_utils.py core/)",
+      "Bash(mv database.py aws_clientes.py notificacoes.py rekognition_aws.py infra/)",
+      "Bash(mv db_operacoes.py repositories/usuarios.py)",
+      "Bash(mv criar_admin.py setup_teste.py importar_grade.py listar_e_excluir_rostos.py reconhecimento_tempo_real.py scripts/)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0,'.'\\); import api\")",
+      "Bash(pip install *)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0,'.'\\); import api; print\\('IMPORT OK'\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0,'.'\\); import api; print\\('IMPORT OK,', sum\\(1 for _ in api.app.routes\\), 'rotas'\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0,'.'\\); import api; print\\('IMPORT OK,', sum\\(1 for _ in api.app.routes\\), 'rotas'\\); [print\\('-', r.methods if hasattr\\(r,'methods'\\) else '?', r.path\\) for r in api.app.routes]\")"
     ]
   },
   "enabledPlugins": {

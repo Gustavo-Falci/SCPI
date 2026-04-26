@@ -7,8 +7,14 @@ import urllib.error
 logger = logging.getLogger("scpi.notificacoes")
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-RESEND_FROM = os.getenv("RESEND_FROM_EMAIL", "SCPI <onboarding@resend.dev>")
+
+
+def _resend_api_key() -> str:
+    return os.getenv("RESEND_API_KEY", "")
+
+
+def _resend_from() -> str:
+    return os.getenv("RESEND_FROM_EMAIL", "SCPI <onboarding@resend.dev>")
 
 
 def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) -> bool:
@@ -53,7 +59,8 @@ def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) 
 
 
 def send_email_resend(to_email: str, aluno_nome: str, turma_nome: str, hora: str) -> bool:
-    if not RESEND_API_KEY:
+    api_key = _resend_api_key()
+    if not api_key:
         logger.warning("RESEND_API_KEY não configurado — notificação por email ignorada.")
         return False
 
@@ -92,7 +99,7 @@ def send_email_resend(to_email: str, aluno_nome: str, turma_nome: str, hora: str
 """
 
     payload = json.dumps({
-        "from": RESEND_FROM,
+        "from": _resend_from(),
         "to": [to_email],
         "subject": f"Presença confirmada em {turma_nome}",
         "html": html_body,
@@ -103,7 +110,7 @@ def send_email_resend(to_email: str, aluno_nome: str, turma_nome: str, hora: str
         "https://api.resend.com/emails",
         data=payload,
         headers={
-            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "User-Agent": "SCPI/1.0",
         },

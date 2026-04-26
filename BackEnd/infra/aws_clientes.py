@@ -1,10 +1,8 @@
 import logging
 import boto3
 from botocore.exceptions import ClientError
-from config import AWS_REGION
+from core.config import AWS_REGION
 
-# Configuração de logging
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s (aws_clients): %(message)s")
 logger = logging.getLogger(__name__)
 
 try:
@@ -72,6 +70,7 @@ def verificar_conexao_s3():
 
 # Exemplo de como executar um teste de conexão se este arquivo for rodado diretamente
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s: %(message)s")
     logger.info("Testando conexões com AWS...")
     if rekognition_client:
         verificar_conexao_rekognition()

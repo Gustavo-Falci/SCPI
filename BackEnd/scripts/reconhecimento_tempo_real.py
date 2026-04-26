@@ -1,9 +1,13 @@
+import sys
+import pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
 import cv2
 import time
 import threading
 import logging
-from config import COLLECTION_ID, AWS_REGION
-from aws_clientes import rekognition_client
+from core.config import COLLECTION_ID, AWS_REGION
+from infra.aws_clientes import rekognition_client
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

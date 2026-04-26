@@ -1,10 +1,12 @@
-from aws_clientes import rekognition_client
-from config import COLLECTION_ID
+import sys
+import pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from infra.aws_clientes import rekognition_client
+from core.config import COLLECTION_ID
 import logging
 
-# Configuração do Rekognition
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 def listar_rostos():
     """Lista todos os rostos cadastrados na coleção do Rekognition."""
@@ -67,6 +69,7 @@ def excluir_rosto_por_id(external_image_id: str):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
     if rekognition_client:
         listar_rostos()

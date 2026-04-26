@@ -1,8 +1,8 @@
 import logging
 
 import botocore.exceptions
-from aws_clientes import rekognition_client
-from config import BUCKET_NAME, COLLECTION_ID  # Usa a configuração correta
+from infra.aws_clientes import rekognition_client
+from core.config import BUCKET_NAME, COLLECTION_ID
 
 # Configuração de logging
 logger = logging.getLogger(__name__)

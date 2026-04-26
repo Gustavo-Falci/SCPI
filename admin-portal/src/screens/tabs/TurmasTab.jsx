@@ -51,7 +51,25 @@ export function TurmasTab({ showToast, showConfirm, onOpenProfessorModal, onOpen
     if (!file) return;
     try {
       const data = await importarAlunosCSV(turmaId, file);
-      showToast(data.mensagem);
+      const geradas = Array.isArray(data.senhas_geradas) ? data.senhas_geradas : [];
+      if (geradas.length > 0) {
+        const header = 'email,senha_temporaria\n';
+        const rows = geradas
+          .map((g) => `${g.email},${g.senha_temporaria}`)
+          .join('\n');
+        const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `senhas_temporarias_${turmaId}_${Date.now()}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        showToast(`${data.mensagem} ${geradas.length} senha(s) gerada(s) — CSV baixado.`);
+      } else {
+        showToast(data.mensagem);
+      }
       refetchTurmasProfsGrade();
     } catch (err) {
       showToast(extractErrorMessage(err, 'Erro na importação de alunos'), 'error');

@@ -1,4 +1,8 @@
-from database import get_db_connection
+import sys
+import pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from infra.database import get_db_connection, release_connection, close_pool
 import uuid
 
 def criar_dados_teste():
@@ -146,7 +150,10 @@ def criar_dados_teste():
         # repr(e) ajuda a ver erros com acentuação se o terminal Windows reclamar
         print(f"❌ Erro ao criar dados: {repr(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
 
 if __name__ == "__main__":
-    criar_dados_teste()
+    try:
+        criar_dados_teste()
+    finally:
+        close_pool()
