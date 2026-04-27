@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Trash2, Search } from 'lucide-react';
 import { InputGroup } from '../../components/ui/InputGroup';
 import { Pagination } from '../../components/ui/Pagination';
 import { useDashboardData } from '../../contexts/DashboardDataContext';
@@ -12,7 +12,19 @@ const PROF_PER_PAGE = 8;
 export function ProfessoresTab({ showToast, showConfirm, onCreatedComSenha }) {
   const { professores, refetchTurmasProfsGrade } = useDashboardData();
   const [novoProfessor, setNovoProfessor] = useState({ nome: '', email: '', departamento: '' });
-  const { page, setPage, totalPages, paged } = usePagination(professores, PROF_PER_PAGE);
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    if (!q) return professores;
+    return professores.filter((p) =>
+      p.nome.toLowerCase().includes(q) ||
+      (p.email || '').toLowerCase().includes(q) ||
+      (p.departamento || '').toLowerCase().includes(q)
+    );
+  }, [professores, search]);
+
+  const { page, setPage, totalPages, paged } = usePagination(filtered, PROF_PER_PAGE);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -68,7 +80,16 @@ export function ProfessoresTab({ showToast, showConfirm, onCreatedComSenha }) {
         </div>
 
         <div className="flex-1 overflow-hidden flex flex-col gap-3">
-          <div className="bg-[#151718] rounded-3xl border border-white/5 overflow-hidden shadow-2xl flex-1">
+          <div className="relative flex-shrink-0">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
+            <input
+              className="w-full bg-[#151718] border border-white/5 rounded-2xl py-3 pl-11 pr-5 outline-none focus:ring-2 focus:ring-[#4B39EF]/30 transition-all font-bold text-sm"
+              placeholder="Buscar por nome, email ou departamento..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
+          </div>
+          <div className="bg-[#151718] rounded-3xl border border-white/5 overflow-hidden shadow-2xl overflow-y-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-white/[0.03] text-gray-500 uppercase text-xs tracking-[0.2em]">
@@ -98,8 +119,10 @@ export function ProfessoresTab({ showToast, showConfirm, onCreatedComSenha }) {
                     </td>
                   </tr>
                 ))}
-                {professores.length === 0 && (
-                  <tr><td colSpan="4" className="px-5 py-12 text-center text-gray-500 font-black">Nenhum professor cadastrado ainda.</td></tr>
+                {filtered.length === 0 && (
+                  <tr><td colSpan="4" className="px-5 py-12 text-center text-gray-500 font-black">
+                    {search ? 'Nenhum professor encontrado para esta busca.' : 'Nenhum professor cadastrado ainda.'}
+                  </td></tr>
                 )}
               </tbody>
             </table>
@@ -108,8 +131,8 @@ export function ProfessoresTab({ showToast, showConfirm, onCreatedComSenha }) {
             page={page}
             totalPages={totalPages}
             onPageChange={setPage}
-            totalItems={professores.length}
-            itemLabel={`professor${professores.length !== 1 ? 'es' : ''}`}
+            totalItems={filtered.length}
+            itemLabel={`professor${filtered.length !== 1 ? 'es' : ''}`}
           />
         </div>
       </div>

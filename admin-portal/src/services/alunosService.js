@@ -9,3 +9,7 @@ export async function criarAluno(payload) {
   const res = await apiClient.post('/admin/usuarios/aluno', payload);
   return res.data;
 }
+
+export async function deletarAluno(aluno_id) {
+  await apiClient.delete(`/admin/alunos/${aluno_id}`);
+}

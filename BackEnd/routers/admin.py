@@ -126,6 +126,27 @@ def admin_excluir_turma(turma_id: str):
         raise internal_error(e)
 
 
+@router.delete("/alunos/{aluno_id}")
+def admin_excluir_aluno(aluno_id: str):
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("SELECT usuario_id FROM Alunos WHERE aluno_id = %s", (aluno_id,))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Aluno não encontrado")
+            usuario_id = row["usuario_id"]
+            cur.execute("DELETE FROM Colecao_Rostos WHERE aluno_id = %s", (aluno_id,))
+            cur.execute("DELETE FROM Turma_Alunos WHERE aluno_id = %s", (aluno_id,))
+            cur.execute("DELETE FROM Presencas WHERE aluno_id = %s", (aluno_id,))
+            cur.execute("DELETE FROM Alunos WHERE aluno_id = %s", (aluno_id,))
+            cur.execute("DELETE FROM Usuarios WHERE usuario_id = %s", (usuario_id,))
+            return {"mensagem": "Aluno excluído com sucesso"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e)
+
+
 @router.delete("/professores/{professor_id}")
 def admin_excluir_professor(professor_id: str):
     try:

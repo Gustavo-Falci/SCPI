@@ -79,6 +79,7 @@ function DashboardInner({ admin, onLogout }) {
         {activeTab === 'alunos' && (
           <AlunosTab
             showToast={showToast}
+            showConfirm={showConfirm}
             onCreatedComSenha={setSenhaTemporariaModal}
           />
         )}
