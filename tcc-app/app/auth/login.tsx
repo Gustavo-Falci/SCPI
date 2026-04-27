@@ -39,6 +39,7 @@ export default function Login() {
       const resp = await loginRequest(email, senha);
 
       await storage.setItem("access_token", resp.access_token);
+      await storage.setItem("refresh_token", resp.refresh_token);
       await storage.setItem("user_role", resp.user_role);
       await storage.setItem("user_id", resp.user_id);
       await storage.setItem("user_name", resp.user_name);

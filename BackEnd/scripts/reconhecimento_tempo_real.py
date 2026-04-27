@@ -41,9 +41,7 @@ class SistemaReconhecimento:
     def _registrar_presenca(self, external_image_id):
         """Registra no banco usando nossa nova estrutura otimizada."""
         try:
-            # Importamos aqui para evitar ciclo se estivesse no topo, 
-            # mas como db_operacoes usa database, tudo bem.
-            from db_operacoes import registrar_presenca_por_face
+            from repositories.usuarios import registrar_presenca_por_face
             
             sucesso = registrar_presenca_por_face(external_image_id)
             if sucesso:

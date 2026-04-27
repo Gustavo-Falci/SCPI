@@ -120,6 +120,7 @@ export default function PrimeiroAcesso() {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.7,
         base64: false,
+        shutterSound: false,
       });
 
       const formData = new FormData();
@@ -140,6 +141,7 @@ export default function PrimeiroAcesso() {
       } as any);
       formData.append("consentimento_biometrico", "true");
 
+      console.log("[face] uri:", localUri, "type:", type, "userData:", JSON.stringify(userData));
       await apiPostFormData("/alunos/cadastrar-face", formData);
 
       await storage.setItem("face_cadastrada", "true");

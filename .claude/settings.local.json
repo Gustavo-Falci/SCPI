@@ -54,7 +54,11 @@
       "Bash(pip install *)",
       "Bash(python -c \"import sys; sys.path.insert\\(0,'.'\\); import api; print\\('IMPORT OK'\\)\")",
       "Bash(python -c \"import sys; sys.path.insert\\(0,'.'\\); import api; print\\('IMPORT OK,', sum\\(1 for _ in api.app.routes\\), 'rotas'\\)\")",
-      "Bash(python -c \"import sys; sys.path.insert\\(0,'.'\\); import api; print\\('IMPORT OK,', sum\\(1 for _ in api.app.routes\\), 'rotas'\\); [print\\('-', r.methods if hasattr\\(r,'methods'\\) else '?', r.path\\) for r in api.app.routes]\")"
+      "Bash(python -c \"import sys; sys.path.insert\\(0,'.'\\); import api; print\\('IMPORT OK,', sum\\(1 for _ in api.app.routes\\), 'rotas'\\); [print\\('-', r.methods if hasattr\\(r,'methods'\\) else '?', r.path\\) for r in api.app.routes]\")",
+      "Bash(xargs grep *)",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/c/Users/itconsol/Documents/SCPI/tcc-app/app.json'\\)\\); print\\(json.dumps\\(d.get\\('expo',{}\\).get\\('android',{}\\), indent=2\\)\\)\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('expo',{}\\).get\\('android',{}\\), indent=2\\)\\)\")",
+      "Bash(python *)"
     ]
   },
   "enabledPlugins": {

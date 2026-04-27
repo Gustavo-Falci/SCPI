@@ -41,7 +41,7 @@ def notificar_alunos_presentes(chamada_id: str, turma_nome: str) -> None:
                 FROM Presencas p
                 JOIN Alunos a ON a.aluno_id = p.aluno_id
                 JOIN Usuarios u ON u.usuario_id = a.usuario_id
-                LEFT JOIN PushTokens pt ON pt.usuario_id = u.usuario_id
+                LEFT JOIN PushTokens pt ON pt.usuario_id = u.usuario_id::text
                 WHERE p.chamada_id = %s
                 """,
                 (chamada_id,),

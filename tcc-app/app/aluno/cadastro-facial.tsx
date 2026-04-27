@@ -56,6 +56,7 @@ export default function CadastroFacial() {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.7,
         base64: false,
+        shutterSound: false,
       });
       
       const formData = new FormData();
