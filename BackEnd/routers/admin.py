@@ -92,6 +92,8 @@ def admin_atribuir_professor(turma_id: str, dados: AtribuirProfessor):
             if cur.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Turma não encontrada.")
         return {"mensagem": "Professor atribuído com sucesso."}
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e)
 
@@ -218,9 +220,10 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos):
                 raise HTTPException(status_code=404, detail="Turma não encontrada.")
             turma_turno = turma['turno']
 
+            placeholders = ",".join(["%s"] * len(dados.aluno_ids))
             cur.execute(
-                "SELECT aluno_id, turno FROM Alunos WHERE aluno_id = ANY(%s)",
-                (dados.aluno_ids,),
+                f"SELECT aluno_id, turno FROM Alunos WHERE aluno_id IN ({placeholders})",
+                dados.aluno_ids,
             )
             alunos_rows = cur.fetchall()
 
@@ -233,12 +236,15 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos):
 
             execute_values(
                 cur,
-                "INSERT INTO Turma_Alunos (turma_id, aluno_id) VALUES %s ON CONFLICT (turma_id, aluno_id) DO NOTHING",
+                "INSERT INTO Turma_Alunos (turma_id, aluno_id, data_associacao) VALUES %s ON CONFLICT (turma_id, aluno_id) DO NOTHING",
                 [(turma_id, aid) for aid in dados.aluno_ids],
+                template="(%s, %s, NOW())",
             )
             matriculados = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
 
         return {"mensagem": f"{matriculados} aluno(s) matriculado(s) com sucesso.", "total_enviados": len(dados.aluno_ids)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e)
 
