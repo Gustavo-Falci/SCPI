@@ -1,13 +1,13 @@
 import React from 'react';
 import {
-  LayoutDashboard, Calendar, Users, GraduationCap, FileText, LogOut,
+  LayoutDashboard, Calendar, Users, GraduationCap, FileText, LogOut, ScanFace,
 } from 'lucide-react';
 
 function SidebarItem({ icon, label, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-5 px-8 py-5 rounded-[24px] transition-all duration-300 group ${
+      className={`w-full flex items-center gap-5 px-6 py-3.5 rounded-[24px] transition-all duration-300 group ${
         active
           ? 'bg-[#4B39EF] text-white shadow-2xl shadow-[#4B39EF]/40 scale-[1.03]'
           : 'text-gray-500 hover:bg-white/5 hover:text-white'
@@ -26,24 +26,25 @@ function SidebarItem({ icon, label, active, onClick }) {
 export function Sidebar({ admin, activeTab, onChangeTab, onLogout }) {
   return (
     <aside className="w-80 bg-[#151718] border-r border-white/5 flex flex-col shadow-2xl">
-      <div className="p-12">
+      <div className="px-8 py-6 flex-shrink-0">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-[#4B39EF] rounded-2xl flex items-center justify-center font-black text-white text-2xl shadow-xl shadow-[#4B39EF]/30">S</div>
           <h1 className="text-2xl font-black text-white tracking-tighter">SCPI <span className="text-[#4B39EF]">CORE</span></h1>
         </div>
       </div>
 
-      <nav className="flex-1 px-6 space-y-4">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-6 py-2 space-y-2">
         <SidebarItem icon={<LayoutDashboard size={24} />} label="Turmas & Matrículas" active={activeTab === 'turmas'} onClick={() => onChangeTab('turmas')} />
         <SidebarItem icon={<Calendar size={24} />} label="Grade Semanal" active={activeTab === 'horarios'} onClick={() => onChangeTab('horarios')} />
         <SidebarItem icon={<Users size={24} />} label="Professores" active={activeTab === 'professores'} onClick={() => onChangeTab('professores')} />
         <SidebarItem icon={<GraduationCap size={24} />} label="Alunos" active={activeTab === 'alunos'} onClick={() => onChangeTab('alunos')} />
         <SidebarItem icon={<FileText size={24} />} label="Relatórios" active={activeTab === 'relatorios'} onClick={() => onChangeTab('relatorios')} />
+        <SidebarItem icon={<ScanFace size={24} />} label="Rostos AWS" active={activeTab === 'rostos'} onClick={() => onChangeTab('rostos')} />
       </nav>
 
-      <div className="p-8 border-t border-white/5">
-        <div className="flex items-center gap-4 p-5 bg-white/[0.03] rounded-[24px] mb-8">
-          <div className="w-12 h-12 bg-gradient-to-tr from-[#4B39EF] to-[#5E47FF] rounded-full flex items-center justify-center font-bold text-white text-lg uppercase">
+      <div className="px-6 py-5 border-t border-white/5 flex-shrink-0">
+        <div className="flex items-center gap-4 p-4 bg-white/[0.03] rounded-[24px] mb-4">
+          <div className="w-10 h-10 bg-gradient-to-tr from-[#4B39EF] to-[#5E47FF] rounded-full flex items-center justify-center font-bold text-white text-lg uppercase shrink-0">
             {admin?.user_name.charAt(0)}
           </div>
           <div className="flex-1 overflow-hidden">
@@ -53,7 +54,7 @@ export function Sidebar({ admin, activeTab, onChangeTab, onLogout }) {
         </div>
         <button
           onClick={onLogout}
-          className="flex items-center gap-4 text-gray-500 hover:text-red-400 transition-all w-full px-4 py-4 font-black text-xs uppercase tracking-widest"
+          className="flex items-center gap-4 text-gray-500 hover:text-red-400 transition-all w-full px-4 py-3 font-black text-xs uppercase tracking-widest"
         >
           <LogOut size={20} /> Sair do Sistema
         </button>

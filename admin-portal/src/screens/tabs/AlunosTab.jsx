@@ -105,31 +105,33 @@ export function AlunosTab({ showToast, showConfirm, onCreatedComSenha }) {
             />
           </div>
 
-          <div className="bg-[#151718] rounded-3xl border border-white/5 overflow-hidden shadow-2xl overflow-y-auto">
-            <table className="w-full text-left">
+          <div className="bg-[#151718] rounded-3xl border border-white/5 overflow-hidden shadow-2xl overflow-y-auto [scrollbar-gutter:stable]">
+            <table className="w-full text-left table-fixed">
               <thead>
                 <tr className="bg-white/[0.03] text-gray-500 uppercase text-xs tracking-[0.2em]">
-                  <th className="px-5 py-4">Nome</th>
-                  <th className="px-5 py-4">Email</th>
-                  <th className="px-5 py-4">RA</th>
-                  <th className="px-5 py-4">Turno</th>
-                  <th className="px-5 py-4">Ações</th>
+                  <th className="px-5 py-4 w-[30%]">Nome</th>
+                  <th className="px-5 py-4 w-[30%]">Email</th>
+                  <th className="px-5 py-4 w-[15%]">RA</th>
+                  <th className="px-5 py-4 w-[15%]">Turno</th>
+                  <th className="px-5 py-4 w-[10%]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {paged.map((a) => (
                   <tr key={a.aluno_id} className="hover:bg-white/[0.01] transition-colors group">
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
+                    <td className="px-5 py-3 overflow-hidden">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-9 h-9 bg-gradient-to-br from-[#22C55E] to-[#4B39EF] rounded-xl flex items-center justify-center font-black text-white text-sm shadow-lg shrink-0">
                           {a.nome.charAt(0).toUpperCase()}
                         </div>
-                        <p className="font-black text-white text-sm">{a.nome}</p>
+                        <p className="font-black text-white text-sm truncate">{a.nome}</p>
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-gray-300 font-bold text-sm">{a.email}</td>
-                    <td className="px-5 py-3">
-                      <span className="bg-white/5 px-3 py-1 rounded-lg text-xs font-black text-gray-400 border border-white/5 uppercase tracking-widest">
+                    <td className="px-5 py-3 overflow-hidden">
+                      <p className="text-gray-300 font-bold text-sm truncate">{a.email}</p>
+                    </td>
+                    <td className="px-5 py-3 overflow-hidden">
+                      <span className="bg-white/5 px-3 py-1 rounded-lg text-xs font-black text-gray-400 border border-white/5 uppercase tracking-widest block truncate max-w-full" title={a.ra || '—'}>
                         {a.ra || '—'}
                       </span>
                     </td>

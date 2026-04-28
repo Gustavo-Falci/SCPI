@@ -2,14 +2,17 @@ import csv
 import io
 import logging
 import uuid
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from psycopg2.extras import execute_values
+from pydantic import BaseModel
 
 from core.auth_utils import get_password_hash
+from core.config import BUCKET_NAME, COLLECTION_ID
 from core.helpers import gerar_senha_temporaria, internal_error
 from core.security import require_role
+from infra.aws_clientes import rekognition_client, s3_client
 from infra.database import get_db_cursor
 from repositories.usuarios import buscar_usuario_por_email
 from schemas.admin import (
@@ -443,3 +446,91 @@ def admin_criar_aluno(dados: CriarAlunoAdmin, current_user: dict = Depends(requi
         raise
     except Exception as e:
         raise internal_error(e, "admin_criar_aluno")
+
+
+class BulkFaceIds(BaseModel):
+    face_ids: List[str]
+
+
+class S3KeyPayload(BaseModel):
+    key: str
+
+
+@router.get("/rostos/rekognition")
+def admin_listar_rostos_rekognition():
+    if rekognition_client is None:
+        raise HTTPException(status_code=503, detail="Rekognition não disponível")
+    try:
+        response = rekognition_client.list_faces(CollectionId=COLLECTION_ID, MaxResults=4096)
+        faces = response.get("Faces", [])
+        return [
+            {
+                "face_id": f.get("FaceId"),
+                "external_image_id": f.get("ExternalImageId"),
+                "image_id": f.get("ImageId"),
+            }
+            for f in faces
+        ]
+    except Exception as e:
+        raise internal_error(e, "admin_listar_rostos_rekognition")
+
+
+@router.get("/rostos/s3")
+def admin_listar_rostos_s3():
+    if s3_client is None:
+        raise HTTPException(status_code=503, detail="S3 não disponível")
+    try:
+        response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix="alunos/")
+        contents = response.get("Contents", [])
+        resultado = []
+        for obj in contents:
+            key = obj.get("Key", "")
+            if not key or key.endswith("/"):
+                continue
+            last_modified = obj.get("LastModified")
+            resultado.append({
+                "key": key,
+                "size": obj.get("Size", 0),
+                "last_modified": last_modified.isoformat() if last_modified else None,
+            })
+        return resultado
+    except Exception as e:
+        raise internal_error(e, "admin_listar_rostos_s3")
+
+
+@router.delete("/rostos/rekognition/bulk")
+def admin_excluir_rostos_rekognition_bulk(payload: BulkFaceIds):
+    if rekognition_client is None:
+        raise HTTPException(status_code=503, detail="Rekognition não disponível")
+    if not payload.face_ids:
+        raise HTTPException(status_code=400, detail="Nenhum face_id informado.")
+    try:
+        face_ids = payload.face_ids[:4096]
+        rekognition_client.delete_faces(CollectionId=COLLECTION_ID, FaceIds=face_ids)
+        return {"mensagem": f"{len(face_ids)} rosto(s) removido(s) com sucesso."}
+    except Exception as e:
+        raise internal_error(e, "admin_excluir_rostos_rekognition_bulk")
+
+
+@router.delete("/rostos/rekognition/{face_id}")
+def admin_excluir_rosto_rekognition(face_id: str):
+    if rekognition_client is None:
+        raise HTTPException(status_code=503, detail="Rekognition não disponível")
+    try:
+        rekognition_client.delete_faces(CollectionId=COLLECTION_ID, FaceIds=[face_id])
+        return {"mensagem": "Rosto removido com sucesso."}
+    except Exception as e:
+        raise internal_error(e, "admin_excluir_rosto_rekognition")
+
+
+@router.delete("/rostos/s3")
+def admin_excluir_rosto_s3(payload: S3KeyPayload):
+    if s3_client is None:
+        raise HTTPException(status_code=503, detail="S3 não disponível")
+    if not payload.key:
+        raise HTTPException(status_code=400, detail="Key não informada.")
+    try:
+        s3_client.delete_object(Bucket=BUCKET_NAME, Key=payload.key)
+        return {"mensagem": "Arquivo S3 removido com sucesso."}
+    except Exception as e:
+        raise internal_error(e, "admin_excluir_rosto_s3")

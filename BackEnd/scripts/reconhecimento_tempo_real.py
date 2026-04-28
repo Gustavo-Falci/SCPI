@@ -6,6 +6,7 @@ import cv2
 import time
 import threading
 import logging
+import botocore.exceptions
 from core.config import COLLECTION_ID, AWS_REGION
 from infra.aws_clientes import rekognition_client
 
@@ -18,42 +19,60 @@ class SistemaReconhecimento:
     def __init__(self):
         self.rodando = False
         self.frame_atual = None
-        self.ultimo_reconhecimento = {} # Cache para não spamar o banco {face_id: timestamp}
         self.texto_na_tela = "Aguardando..."
         self.cor_texto = (0, 255, 255) # Amarelo (BGR)
-        
+
         # Configurações
         self.INTERVALO_ENVIO_AWS = 1.5  # Segundos entre envios para AWS
-        self.TEMPO_COOLDOWN_ALUNO = 15  # Segundos para registrar o mesmo aluno de novo
-        self.CAM_INDEX = 0 # Tente 1 se o 0 for a webcam integrada e você quiser a USB
-        
-        # Thread lock para evitar conflito de leitura/escrita no frame
-        self.lock = threading.Lock()
-
         self.CAM_INDEX = 0
 
+        # Rastreamento por chamada — substituiu cooldown por tempo
+        self.chamada_id_atual = None          # ID da chamada aberta monitorada
+        self.presentes_chamada: set = set()   # face_ids já registrados nessa chamada
+
+        self.lock = threading.Lock()
         self.face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         )
 
-        self.lock = threading.Lock()
+    def _sincronizar_chamada(self):
+        """Verifica chamada aberta no banco. Se mudou, limpa o set de presentes."""
+        try:
+            from infra.database import get_db_cursor
+            with get_db_cursor() as cur:
+                if not cur:
+                    return
+                cur.execute(
+                    "SELECT chamada_id FROM Chamadas WHERE status = 'Aberta' ORDER BY data_criacao DESC LIMIT 1"
+                )
+                row = cur.fetchone()
+                chamada_id = row["chamada_id"] if row else None
 
-    def _registrar_presenca(self, external_image_id):
-        """Registra no banco usando nossa nova estrutura otimizada."""
+            if chamada_id != self.chamada_id_atual:
+                anteriores = len(self.presentes_chamada)
+                self.chamada_id_atual = chamada_id
+                self.presentes_chamada.clear()
+                if chamada_id:
+                    logger.info(f"📋 Nova chamada detectada: {chamada_id} — {anteriores} presentes resetados.")
+                else:
+                    logger.info(f"📋 Nenhuma chamada aberta — {anteriores} presentes resetados.")
+        except Exception as e:
+            logger.error(f"Erro ao sincronizar chamada: {e}")
+
+    def _registrar_presenca(self, external_image_id, face_id):
+        """Registra no banco. Adiciona face_id ao set se bem-sucedido."""
         try:
             from repositories.usuarios import registrar_presenca_por_face
-            
+
             sucesso = registrar_presenca_por_face(external_image_id)
             if sucesso:
                 self.texto_na_tela = f"PRESENCA: {external_image_id}"
-                self.cor_texto = (0, 255, 0) # Verde
+                self.cor_texto = (0, 255, 0)
             else:
                 self.texto_na_tela = f"Reconhecido (Sem chamada): {external_image_id}"
-                self.cor_texto = (0, 165, 255) # Laranja
-                
-            # Limpa o texto após 3 segundos (feito via timer simples na thread de video)
+                self.cor_texto = (0, 165, 255)
+
             threading.Timer(3.0, self._resetar_texto).start()
-            
         except Exception as e:
             logger.error(f"Erro ao registrar presença: {e}")
 
@@ -62,69 +81,92 @@ class SistemaReconhecimento:
         self.cor_texto = (255, 255, 255)
 
     def _thread_aws_rekognition(self):
-        """Loop inteligente: Só envia para AWS se o PC detectar um rosto antes."""
+        """Loop: pré-detecção local → AWS por rosto → skip se já presente na chamada."""
         ultimo_envio = 0
-        
+        ultima_sync_chamada = 0
+        INTERVALO_SYNC_CHAMADA = 5  # Verifica chamada aberta a cada 5s
+
         while self.rodando:
             agora = time.time()
-            
-            # 1. Controle de tempo
+
+            # Sincroniza chamada aberta periodicamente
+            if agora - ultima_sync_chamada >= INTERVALO_SYNC_CHAMADA:
+                self._sincronizar_chamada()
+                ultima_sync_chamada = agora
+
+            # Controle de intervalo entre envios AWS
             if agora - ultimo_envio < self.INTERVALO_ENVIO_AWS:
                 time.sleep(0.1)
                 continue
-            
-            # 2. Obter frame
+
+            # Obter frame
             with self.lock:
-                if self.frame_atual is None: continue
+                if self.frame_atual is None:
+                    continue
                 img_para_processar = self.frame_atual.copy()
 
-            # --- NOVO: FILTRAGEM LOCAL (CUSTO ZERO) ---
-            # Converte para escala de cinza (o detector local funciona melhor assim)
+            # PRÉ-DETECÇÃO LOCAL (custo zero) — filtra frames sem rosto
             gray = cv2.cvtColor(img_para_processar, cv2.COLOR_BGR2GRAY)
-            
-            # Detecta rostos na imagem
-            # scaleFactor=1.1, minNeighbors=5 são ajustes padrões para precisão
             rostos_detectados = self.face_cascade.detectMultiScale(gray, 1.1, 5)
-            
-            # Se a lista de rostos for vazia, NÃO envia para AWS
+
             if len(rostos_detectados) == 0:
-                # Opcional: Atualiza texto na tela para debug
-                # self.texto_na_tela = "Nenhum rosto detectado (Local)"
                 time.sleep(0.2)
-                continue 
-            
-            # Se chegou aqui, TEM rosto. Vamos gastar crédito da AWS para saber QUEM É.
-            # ------------------------------------------
+                continue
 
-            # 3. Codificar e Enviar (Código original mantido abaixo)
-            ret, buffer = cv2.imencode('.jpg', img_para_processar)
-            if not ret: continue
-            image_bytes = buffer.tobytes()
-            
-            ultimo_envio = agora # Reseta o timer apenas se enviou de verdade
-            
-            try:
-                response = rekognition_client.search_faces_by_image(
-                    CollectionId=COLLECTION_ID,
-                    Image={'Bytes': image_bytes},
-                    MaxFaces=1,
-                    FaceMatchThreshold=85
-                )
+            ultimo_envio = agora
 
-                if response['FaceMatches']:
+            # MÚLTIPLOS ROSTOS — crop por rosto, 1 chamada AWS cada
+            h_img, w_img = img_para_processar.shape[:2]
+            for (x, y, w, h) in rostos_detectados:
+                margin = int(0.2 * max(w, h))
+                x1 = max(0, x - margin)
+                y1 = max(0, y - margin)
+                x2 = min(w_img, x + w + margin)
+                y2 = min(h_img, y + h + margin)
+
+                face_crop = img_para_processar[y1:y2, x1:x2]
+                ret, buffer = cv2.imencode('.jpg', face_crop)
+                if not ret:
+                    continue
+                face_bytes = buffer.tobytes()
+
+                try:
+                    response = rekognition_client.search_faces_by_image(
+                        CollectionId=COLLECTION_ID,
+                        Image={'Bytes': face_bytes},
+                        MaxFaces=1,
+                        FaceMatchThreshold=85,
+                    )
+
+                    if not response['FaceMatches']:
+                        continue
+
                     match = response['FaceMatches'][0]
                     face_id = match['Face']['FaceId']
                     aluno_external_id = match['Face']['ExternalImageId']
-                    
-                    ultimo_rec = self.ultimo_reconhecimento.get(face_id, 0)
-                    if agora - ultimo_rec > self.TEMPO_COOLDOWN_ALUNO:
-                        logger.info(f"🎯 Reconhecido: {aluno_external_id}")
-                        self.ultimo_reconhecimento[face_id] = agora
-                        t_banco = threading.Thread(target=self._registrar_presenca, args=(aluno_external_id,))
-                        t_banco.start()
-            
-            except Exception as e:
-                logger.error(f"Erro AWS: {e}")
+
+                    # Já registrado nesta chamada → skip
+                    if face_id in self.presentes_chamada:
+                        continue
+
+                    # Add otimista: bloqueia duplicata mesmo antes da thread confirmar
+                    self.presentes_chamada.add(face_id)
+                    logger.info(f"🎯 Reconhecido: {aluno_external_id}")
+                    threading.Thread(
+                        target=self._registrar_presenca,
+                        args=(aluno_external_id, face_id),
+                        daemon=True,
+                    ).start()
+
+                except botocore.exceptions.ClientError as e:
+                    code = e.response["Error"]["Code"]
+                    msg = e.response["Error"]["Message"]
+                    if code == "InvalidParameterException" and "no faces" in msg.lower():
+                        logger.debug("Haar falso positivo ignorado: sem rosto válido no crop.")
+                    else:
+                        logger.error(f"Erro AWS (face individual): {code} - {msg}")
+                except Exception as e:
+                    logger.error(f"Erro AWS (face individual): {e}")
 
     def iniciar(self, visualizar=False):
         """Inicia a captura de vídeo e as threads.

@@ -13,6 +13,7 @@ import { HorariosTab } from './tabs/HorariosTab';
 import { ProfessoresTab } from './tabs/ProfessoresTab';
 import { AlunosTab } from './tabs/AlunosTab';
 import { RelatoriosTab } from './tabs/RelatoriosTab';
+import { RostosTab } from './tabs/RostosTab';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
 import { DashboardDataProvider, useDashboardData } from '../contexts/DashboardDataContext';
@@ -89,6 +90,10 @@ function DashboardInner({ admin, onLogout }) {
             showToast={showToast}
             onOpenDetalhe={setRelatorioExpandido}
           />
+        )}
+
+        {activeTab === 'rostos' && (
+          <RostosTab showToast={showToast} showConfirm={showConfirm} />
         )}
 
         <HorarioModal
