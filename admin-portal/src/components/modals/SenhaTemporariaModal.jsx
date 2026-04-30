@@ -1,13 +1,8 @@
 import React from 'react';
 import { CheckCircle2 } from 'lucide-react';
 
-export function SenhaTemporariaModal({ data, onClose, showToast }) {
+export function SenhaTemporariaModal({ data, onClose }) {
   if (!data) return null;
-
-  const handleCopy = () => {
-    navigator.clipboard?.writeText(data.senha);
-    showToast('Senha copiada!');
-  };
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-6">
@@ -22,17 +17,13 @@ export function SenhaTemporariaModal({ data, onClose, showToast }) {
           </div>
           <div className="w-full bg-black/40 rounded-2xl p-6 border border-white/10">
             <p className="text-xs text-gray-500 font-black uppercase tracking-widest mb-3">Senha Temporária</p>
-            <p className="text-2xl font-black text-white tracking-widest font-mono">{data.senha}</p>
-            <p className="text-xs text-gray-600 mt-3">Compartilhe com o usuário. Esta senha não será exibida novamente.</p>
+            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-2">Enviada para</p>
+            <p className="text-base font-black text-white font-mono break-all">{data.email}</p>
+            <p className="text-xs text-gray-600 mt-4">O usuário deverá alterar a senha no primeiro acesso.</p>
           </div>
-          <div className="flex gap-4 w-full">
-            <button onClick={handleCopy} className="flex-1 py-4 rounded-2xl bg-white/5 font-black text-sm uppercase tracking-widest text-gray-400 hover:bg-white/10 transition-all">
-              Copiar Senha
-            </button>
-            <button onClick={onClose} className="flex-1 py-4 rounded-2xl bg-[#4B39EF] font-black text-sm uppercase tracking-widest text-white hover:bg-[#5E47FF] transition-all">
-              Fechar
-            </button>
-          </div>
+          <button onClick={onClose} className="w-full py-4 rounded-2xl bg-[#4B39EF] font-black text-sm uppercase tracking-widest text-white hover:bg-[#5E47FF] transition-all">
+            Fechar
+          </button>
         </div>
       </div>
     </div>

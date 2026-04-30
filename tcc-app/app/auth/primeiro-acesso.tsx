@@ -33,10 +33,8 @@ export default function PrimeiroAcesso() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Step 1 — senha
-  const [senhaAtual, setSenhaAtual] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
-  const [showSenhaAtual, setShowSenhaAtual] = useState(false);
   const [showNovaSenha, setShowNovaSenha] = useState(false);
   const [confirmarSenhaError, setConfirmarSenhaError] = useState("");
 
@@ -66,13 +64,9 @@ export default function PrimeiroAcesso() {
   };
   const allRulesOk = Object.values(passwordRules).every(Boolean);
   const senhasConferem = novaSenha === confirmarSenha && novaSenha.length > 0;
-  const formValido = allRulesOk && senhasConferem && senhaAtual.length > 0;
+  const formValido = allRulesOk && senhasConferem;
 
   const handleAlterarSenha = async () => {
-    if (!senhaAtual) {
-      Alert.alert("Erro", "Informe sua senha temporária.");
-      return;
-    }
     if (!allRulesOk) {
       Alert.alert("Senha fraca", "A senha não atende a todos os requisitos de segurança.");
       return;
@@ -84,8 +78,7 @@ export default function PrimeiroAcesso() {
 
     setIsLoading(true);
     try {
-      await apiPost("/auth/alterar-senha", {
-        senha_atual: senhaAtual,
+      await apiPost("/auth/alterar-senha-primeiro-acesso", {
         nova_senha: novaSenha,
       });
 
@@ -345,17 +338,6 @@ export default function PrimeiroAcesso() {
             </View>
 
             <View style={styles.divider} />
-
-            <Input
-              label="Senha Temporária"
-              placeholder="Senha atual"
-              value={senhaAtual}
-              onChangeText={setSenhaAtual}
-              secureTextEntry={!showSenhaAtual}
-              icon="key-outline"
-              rightIcon={showSenhaAtual ? "eye-off-outline" : "eye-outline"}
-              onRightIconPress={() => setShowSenhaAtual((v) => !v)}
-            />
 
             <Input
               label="Nova Senha"

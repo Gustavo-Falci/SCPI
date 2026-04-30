@@ -25,6 +25,7 @@ from infra.database import get_db_cursor
 from schemas.auth import (
     AlterarSenhaBody,
     EsqueciSenhaBody,
+    PrimeiroAcessoSenhaBody,
     RedefinirSenhaBody,
     RefreshRequest,
     RegisterTokenBody,
@@ -231,6 +232,32 @@ def alterar_senha(body: AlterarSenhaBody, current_user: dict = Depends(get_curre
         raise
     except Exception as e:
         raise internal_error(e, "alterar_senha")
+
+
+@router.post("/alterar-senha-primeiro-acesso")
+def alterar_senha_primeiro_acesso(body: PrimeiroAcessoSenhaBody, current_user: dict = Depends(get_current_user)):
+    usuario_id = current_user.get("sub")
+    try:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT primeiro_acesso FROM Usuarios WHERE usuario_id = %s", (usuario_id,))
+            user = cur.fetchone()
+            if not user:
+                raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+            if not user["primeiro_acesso"]:
+                raise HTTPException(status_code=403, detail="Operação não permitida.")
+
+        nova_hash = get_password_hash(body.nova_senha)
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                "UPDATE Usuarios SET senha = %s, primeiro_acesso = FALSE WHERE usuario_id = %s",
+                (nova_hash, usuario_id),
+            )
+        audit_logger.info("Senha primeiro acesso alterada usuario=%s", usuario_id)
+        return {"mensagem": "Senha alterada com sucesso."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "alterar_senha_primeiro_acesso")
 
 
 @router.post("/esqueci-senha")

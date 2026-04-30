@@ -33,6 +33,10 @@ class AlterarSenhaBody(BaseModel):
     nova_senha: str = Field(..., min_length=8, max_length=128)
 
 
+class PrimeiroAcessoSenhaBody(BaseModel):
+    nova_senha: str = Field(..., min_length=8, max_length=128)
+
+
 class RegisterTokenBody(BaseModel):
     expo_token: str = Field(..., min_length=10, max_length=256)
 

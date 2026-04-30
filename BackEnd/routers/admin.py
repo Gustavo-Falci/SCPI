@@ -4,7 +4,7 @@ import logging
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from psycopg2.extras import execute_values
 from pydantic import BaseModel
 
@@ -14,6 +14,7 @@ from core.helpers import gerar_senha_temporaria, internal_error
 from core.security import require_role
 from infra.aws_clientes import rekognition_client, s3_client
 from infra.database import get_db_cursor
+from infra.notificacoes import send_email_senha_temporaria
 from repositories.usuarios import buscar_usuario_por_email
 from schemas.admin import (
     AtribuirProfessor,
@@ -363,7 +364,7 @@ async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...))
 
 
 @router.post("/usuarios/professor")
-def admin_criar_professor(dados: CriarProfessorAdmin, current_user: dict = Depends(require_role("Admin"))):
+def admin_criar_professor(dados: CriarProfessorAdmin, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Admin"))):
     email_limpo = dados.email.strip()
     try:
         if buscar_usuario_por_email(email_limpo):
@@ -390,11 +391,13 @@ def admin_criar_professor(dados: CriarProfessorAdmin, current_user: dict = Depen
                 (professor_id, usuario_id, dados.departamento),
             )
 
+        background_tasks.add_task(send_email_senha_temporaria, email_limpo, dados.nome, senha_temporaria, "Professor")
+
         audit_logger.info("Professor criado admin=%s professor_id=%s", current_user.get("sub"), professor_id)
         return {
             "mensagem": "Professor criado com sucesso!",
             "usuario_id": usuario_id,
-            "senha_temporaria": senha_temporaria,
+            "email": email_limpo,
         }
     except HTTPException:
         raise
@@ -403,7 +406,7 @@ def admin_criar_professor(dados: CriarProfessorAdmin, current_user: dict = Depen
 
 
 @router.post("/usuarios/aluno")
-def admin_criar_aluno(dados: CriarAlunoAdmin, current_user: dict = Depends(require_role("Admin"))):
+def admin_criar_aluno(dados: CriarAlunoAdmin, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Admin"))):
     email_limpo = dados.email.strip()
     try:
         if buscar_usuario_por_email(email_limpo):
@@ -435,12 +438,14 @@ def admin_criar_aluno(dados: CriarAlunoAdmin, current_user: dict = Depends(requi
                 (aluno_id, usuario_id, dados.ra, dados.turno),
             )
 
+        background_tasks.add_task(send_email_senha_temporaria, email_limpo, dados.nome, senha_temporaria, "Aluno")
+
         audit_logger.info("Aluno criado admin=%s aluno_id=%s", current_user.get("sub"), aluno_id)
         return {
             "mensagem": "Aluno criado com sucesso!",
             "usuario_id": usuario_id,
             "aluno_id": aluno_id,
-            "senha_temporaria": senha_temporaria,
+            "email": email_limpo,
         }
     except HTTPException:
         raise

@@ -368,7 +368,7 @@ export function RostosTab({ showToast, showConfirm }) {
                     <th className="px-4 py-3">Arquivo</th>
                     <th className="px-4 py-3 w-[18%]">Tamanho</th>
                     <th className="px-4 py-3 w-[18%]">Data</th>
-                    <th className="px-4 py-3 w-[10%] rounded-r-xl text-right">Ações</th>
+                    <th className="px-4 py-3 w-[14%] rounded-r-xl text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">

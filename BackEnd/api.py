@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import sys
@@ -15,6 +16,7 @@ from slowapi.errors import RateLimitExceeded
 from core.limiter import limiter
 from infra import migrations as _migrations
 from infra.database import close_pool
+from services.agendador import iniciar_agendador
 from routers import (
     admin,
     alunos,
@@ -54,13 +56,21 @@ app.add_middleware(
 )
 
 
+_agendador_task: asyncio.Task | None = None
+
+
 @app.on_event("startup")
-def _on_startup():
+async def _on_startup():
+    global _agendador_task
     _migrations.run_all()
+    _agendador_task = asyncio.create_task(iniciar_agendador())
 
 
 @app.on_event("shutdown")
-def _on_shutdown():
+async def _on_shutdown():
+    global _agendador_task
+    if _agendador_task:
+        _agendador_task.cancel()
     close_pool()
 
 

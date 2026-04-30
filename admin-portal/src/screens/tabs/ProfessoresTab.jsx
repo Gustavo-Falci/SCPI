@@ -29,8 +29,8 @@ export function ProfessoresTab({ showToast, showConfirm, onCreatedComSenha }) {
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
-      const res = await criarProfessor(novoProfessor);
-      onCreatedComSenha({ nome: novoProfessor.nome, senha: res.senha_temporaria, tipo: 'Professor' });
+      await criarProfessor(novoProfessor);
+      onCreatedComSenha({ nome: novoProfessor.nome, email: novoProfessor.email, tipo: 'Professor' });
       setNovoProfessor({ nome: '', email: '', departamento: '' });
       refetchTurmasProfsGrade();
     } catch (err) {

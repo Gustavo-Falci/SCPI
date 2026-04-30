@@ -32,8 +32,8 @@ export function AlunosTab({ showToast, showConfirm, onCreatedComSenha }) {
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
-      const res = await criarAluno(novoAluno);
-      onCreatedComSenha({ nome: novoAluno.nome, senha: res.senha_temporaria, tipo: 'Aluno' });
+      await criarAluno(novoAluno);
+      onCreatedComSenha({ nome: novoAluno.nome, email: novoAluno.email, tipo: 'Aluno' });
       setNovoAluno({ nome: '', email: '', ra: '', turno: 'Matutino' });
       refetchAlunos();
     } catch (err) {
