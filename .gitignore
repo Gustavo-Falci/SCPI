@@ -9,4 +9,5 @@ venv/
 .openclaude/
 .claude
 .devcontainer
-.openclaude
+node_modules/
+admin-portal/dist/
