@@ -19,8 +19,6 @@ class SistemaReconhecimento:
     def __init__(self):
         self.rodando = False
         self.frame_atual = None
-        self.texto_na_tela = "Aguardando..."
-        self.cor_texto = (0, 255, 255) # Amarelo (BGR)
 
         # Configurações
         self.INTERVALO_ENVIO_AWS = 1.5  # Segundos entre envios para AWS
@@ -65,20 +63,9 @@ class SistemaReconhecimento:
             from repositories.usuarios import registrar_presenca_por_face
 
             sucesso = registrar_presenca_por_face(external_image_id)
-            if sucesso:
-                self.texto_na_tela = f"PRESENCA: {external_image_id}"
-                self.cor_texto = (0, 255, 0)
-            else:
-                self.texto_na_tela = f"Reconhecido (Sem chamada): {external_image_id}"
-                self.cor_texto = (0, 165, 255)
-
-            threading.Timer(3.0, self._resetar_texto).start()
+    
         except Exception as e:
             logger.error(f"Erro ao registrar presença: {e}")
-
-    def _resetar_texto(self):
-        self.texto_na_tela = "Monitorando..."
-        self.cor_texto = (255, 255, 255)
 
     def _thread_aws_rekognition(self):
         """Loop: pré-detecção local → AWS por rosto → skip se já presente na chamada."""
@@ -168,10 +155,8 @@ class SistemaReconhecimento:
                 except Exception as e:
                     logger.error(f"Erro AWS (face individual): {e}")
 
-    def iniciar(self, visualizar=False):
-        """Inicia a captura de vídeo e as threads.
-        visualizar: Se True, abre janela com o feed da câmera.
-        """
+    def iniciar(self):
+        """Inicia a captura de vídeo e as threads em modo Headless."""
         self.rodando = True
 
         # Inicia Câmera
@@ -191,10 +176,6 @@ class SistemaReconhecimento:
         t_aws.daemon = True # Morre se o programa principal fechar
         t_aws.start()
 
-        logger.info(f"🎥 Sistema iniciado (Headless: {not visualizar}).")
-        if visualizar:
-            logger.info("Pressione 'ESC' para sair.")
-
         try:
             while self.rodando:
                 ret, frame = cap.read()
@@ -205,41 +186,14 @@ class SistemaReconhecimento:
                 # Atualiza o frame global para a thread da AWS ler
                 with self.lock:
                     self.frame_atual = frame
-
-                if visualizar:
-                    # --- DESENHO NA TELA (UI) ---
-                    overlay = frame.copy()
-                    cv2.rectangle(overlay, (0, 0), (640, 50), (0, 0, 0), -1)
-                    alpha = 0.6
-                    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
-
-                    # Escreve o status
-                    cv2.putText(frame, self.texto_na_tela, (10, 35),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, self.cor_texto, 2)
-
-                    # Mostra janela
-                    cv2.imshow('SCPI - Reconhecimento Facial', frame)
-
-                    # Sai com ESC
-                    if cv2.waitKey(1) == 27:
-                        break
-                else:
-                    # Em modo headless, apenas um pequeno sleep para não fritar a CPU no loop de leitura
-                    # A thread da AWS já tem seu próprio controle de tempo
-                    time.sleep(0.01)
+                
+                time.sleep(0.01)  # Pequena pausa para evitar uso excessivo de CPU
 
         finally:
             self.rodando = False
             cap.release()
-            if visualizar:
-                cv2.destroyAllWindows()
             logger.info("Sistema de reconhecimento encerrado.")
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--visualizar", action="store_true", help="Abre a janela da câmera")
-    args = parser.parse_args()
-
     app = SistemaReconhecimento()
-    app.iniciar(visualizar=args.visualizar)
+    app.iniciar()
