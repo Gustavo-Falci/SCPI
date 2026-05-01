@@ -1,9 +1,8 @@
 # config.py
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
-# Carrega as variáveis do arquivo .env
-load_dotenv()
+load_dotenv(find_dotenv())
 
 # Configurações AWS
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")

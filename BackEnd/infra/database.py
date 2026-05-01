@@ -23,10 +23,10 @@ except ImportError:
             return dict(zip(col_names, row))
 
 from contextlib import contextmanager
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 import logging
 
-load_dotenv()
+load_dotenv(find_dotenv())
 
 logger = logging.getLogger(__name__)
 

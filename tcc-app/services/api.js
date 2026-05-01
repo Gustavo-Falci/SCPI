@@ -1,8 +1,7 @@
 // URL base da API vem de EXPO_PUBLIC_API_URL (definida em .env na raiz do app).
 // Em dev, copie `.env.example` para `.env` e ajuste o IP do backend.
-const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  "http://10.53.69.5:8000";
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+if (!API_URL) throw new Error("EXPO_PUBLIC_API_URL não definida. Execute 'npm run sync-env' na pasta tcc-app antes de iniciar.");
 
 import { storage } from "./storage";
 

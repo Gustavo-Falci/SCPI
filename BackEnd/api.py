@@ -3,9 +3,9 @@ import logging
 import os
 import sys
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(override=True)
+load_dotenv(find_dotenv(), override=True)
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI

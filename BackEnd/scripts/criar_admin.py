@@ -3,12 +3,12 @@ import sys
 import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from infra.database import get_db_connection, release_connection, close_pool
 from core.auth_utils import get_password_hash
 import uuid
 
-load_dotenv(override=True)
+load_dotenv(find_dotenv(), override=True)
 
 
 def criar_usuario_admin():

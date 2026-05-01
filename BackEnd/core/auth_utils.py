@@ -5,9 +5,9 @@ from passlib.context import CryptContext
 import os
 import secrets
 import hashlib
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
-load_dotenv()
+load_dotenv(find_dotenv())
 
 # Configurações de Segurança
 SECRET_KEY = os.getenv("SECRET_KEY")
