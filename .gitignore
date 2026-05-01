@@ -7,4 +7,6 @@ venv_new/
 .venv/
 venv/
 .openclaude/
-.claude/
+.claude
+.devcontainer
+.openclaude
