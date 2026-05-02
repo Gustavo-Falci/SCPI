@@ -1,4 +1,5 @@
 import datetime
+import zoneinfo
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -14,7 +15,7 @@ def get_turmas(usuario_id: str, current_user: dict = Depends(get_current_user)):
     """Retorna as turmas de um professor com flag indicando se está no horário de aula."""
     require_self_or_admin(usuario_id, current_user)
     try:
-        agora = datetime.datetime.now()
+        agora = datetime.datetime.now(zoneinfo.ZoneInfo("America/Sao_Paulo"))
         dia_semana = agora.weekday()
         hora_atual = agora.time()
 
