@@ -6,11 +6,12 @@ import subprocess
 import sys
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 
 from core.config import COLLECTION_ID
 from core.helpers import internal_error, validate_image_upload
 from core.limiter import limiter
-from core.security import get_current_user, require_role
+from core.security import get_current_user, require_role, require_service_token
 from infra.aws_clientes import rekognition_client
 from infra.database import get_db_cursor
 from repositories.usuarios import obter_professor_id, registrar_presenca_por_face
@@ -254,3 +255,34 @@ async def registrar_rosto_aluno(
         raise
     except Exception as e:
         raise internal_error(e, "registrar_rosto_aluno")
+
+
+class PresencaCameraPayload(BaseModel):
+    external_image_id: str
+
+
+@router.post("/registrar_presenca_camera")
+async def registrar_presenca_camera(
+    payload: PresencaCameraPayload,
+    background_tasks: BackgroundTasks,
+    _: str = Depends(require_service_token),
+):
+    """Registra presença a partir do reconhecimento feito pela câmera local."""
+    result = registrar_presenca_por_face(payload.external_image_id)
+    if not result:
+        raise HTTPException(
+            status_code=400,
+            detail="Não foi possível registrar a presença. Verifique se há chamada aberta para a turma.",
+        )
+
+    audit_logger.info("Presença via câmera registrada aluno=%s", payload.external_image_id)
+
+    background_tasks.add_task(
+        enviar_notificacoes_presenca,
+        result.get("usuario_id"),
+        result.get("aluno_nome", payload.external_image_id),
+        result.get("aluno_email"),
+        result.get("turma_nome", "sua turma"),
+    )
+
+    return {"mensagem": "Presença confirmada.", "aluno": payload.external_image_id}

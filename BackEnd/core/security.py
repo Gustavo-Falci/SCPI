@@ -1,4 +1,6 @@
-from fastapi import Depends, HTTPException, status
+import os
+
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 from core.auth_utils import decode_access_token
@@ -24,6 +26,13 @@ def require_role(*roles: str):
             raise HTTPException(status_code=403, detail="Acesso negado para este perfil.")
         return current_user
     return _checker
+
+
+def require_service_token(x_service_token: str = Header(...)):
+    """Valida token estático de serviço interno (câmera local)."""
+    expected = os.getenv("CAMERA_SERVICE_TOKEN")
+    if not expected or x_service_token != expected:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token de serviço inválido.")
 
 
 def require_self_or_admin(usuario_id: str, current_user: dict) -> None:

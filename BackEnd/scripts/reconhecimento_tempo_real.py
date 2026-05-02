@@ -6,9 +6,16 @@ import cv2
 import time
 import threading
 import logging
+import os
+import requests
 import botocore.exceptions
+from dotenv import load_dotenv, find_dotenv
 from core.config import COLLECTION_ID, AWS_REGION
 from infra.aws_clientes import rekognition_client
+
+load_dotenv(find_dotenv())
+_API_URL = os.getenv("EXPO_PUBLIC_API_URL", "http://localhost:8000")
+_SERVICE_TOKEN = os.getenv("CAMERA_SERVICE_TOKEN", "")
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -58,14 +65,18 @@ class SistemaReconhecimento:
             logger.error(f"Erro ao sincronizar chamada: {e}")
 
     def _registrar_presenca(self, external_image_id, face_id):
-        """Registra no banco. Adiciona face_id ao set se bem-sucedido."""
+        """Registra presença via API remota."""
         try:
-            from repositories.usuarios import registrar_presenca_por_face
-
-            sucesso = registrar_presenca_por_face(external_image_id)
-    
+            resp = requests.post(
+                f"{_API_URL}/chamadas/registrar_presenca_camera",
+                json={"external_image_id": external_image_id},
+                headers={"x-service-token": _SERVICE_TOKEN},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                logger.warning(f"API retornou {resp.status_code} para {external_image_id}: {resp.text}")
         except Exception as e:
-            logger.error(f"Erro ao registrar presença: {e}")
+            logger.error(f"Erro ao registrar presença via API: {e}")
 
     def _thread_aws_rekognition(self):
         """Loop: pré-detecção local → AWS por rosto → skip se já presente na chamada."""
