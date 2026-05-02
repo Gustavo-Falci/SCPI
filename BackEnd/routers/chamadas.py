@@ -1,5 +1,4 @@
 import atexit
-import datetime
 import logging
 import os
 import subprocess
@@ -53,16 +52,15 @@ def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role
             if not cur.fetchone():
                 raise HTTPException(status_code=403, detail="Você não é o professor responsável por esta turma.")
 
-            agora = datetime.datetime.now()
             cur.execute(
                 """
                 SELECT 1 FROM horarios_aulas
                 WHERE turma_id = %s
-                  AND dia_semana = %s
-                  AND horario_inicio <= %s
-                  AND horario_fim   >= %s
+                  AND dia_semana = (EXTRACT(DOW FROM NOW() AT TIME ZONE 'America/Sao_Paulo')::int + 6) %% 7
+                  AND horario_inicio <= (NOW() AT TIME ZONE 'America/Sao_Paulo')::time
+                  AND horario_fim    >= (NOW() AT TIME ZONE 'America/Sao_Paulo')::time
                 """,
-                (dados.turma_id, agora.weekday(), agora.time(), agora.time()),
+                (dados.turma_id,),
             )
             if not cur.fetchone():
                 raise HTTPException(
