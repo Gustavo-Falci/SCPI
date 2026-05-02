@@ -18,7 +18,6 @@ _API_URL = os.getenv("EXPO_PUBLIC_API_URL", "http://localhost:8000")
 _SERVICE_TOKEN = os.getenv("CAMERA_SERVICE_TOKEN", "")
 _CAMERA_SALA = os.getenv("CAMERA_SALA", "")
 
-# Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -28,13 +27,11 @@ class SistemaReconhecimento:
         self.rodando = False
         self.frame_atual = None
 
-        # Configurações
-        self.INTERVALO_ENVIO_AWS = 1.5  # Segundos entre envios para AWS
+        self.INTERVALO_ENVIO_AWS = 1.5
         self.CAM_INDEX = 0
 
-        # Rastreamento por chamada — substituiu cooldown por tempo
-        self.chamada_id_atual = None          # ID da chamada aberta monitorada
-        self.presentes_chamada: set = set()   # face_ids já registrados nessa chamada
+        self.chamada_id_atual = None
+        self.presentes_chamada: set = set()
 
         self.lock = threading.Lock()
         self.face_cascade = cv2.CascadeClassifier(
@@ -42,7 +39,6 @@ class SistemaReconhecimento:
         )
 
     def _sincronizar_chamada(self):
-        """Verifica chamada aberta para a sala configurada via API."""
         try:
             resp = requests.get(
                 f"{_API_URL}/chamadas/aberta/sala/{_CAMERA_SALA}",
@@ -64,7 +60,6 @@ class SistemaReconhecimento:
                 logger.info(f"📋 Nenhuma chamada aberta em {_CAMERA_SALA} — {anteriores} presentes resetados.")
 
     def _registrar_presenca(self, external_image_id, face_id):
-        """Registra presença via API remota."""
         try:
             resp = requests.post(
                 f"{_API_URL}/chamadas/registrar_presenca_camera",
@@ -78,31 +73,25 @@ class SistemaReconhecimento:
             logger.error(f"Erro ao registrar presença via API: {e}")
 
     def _thread_aws_rekognition(self):
-        """Loop: pré-detecção local → AWS por rosto → skip se já presente na chamada."""
         ultimo_envio = 0
-        ultima_sync_chamada = 0
-        INTERVALO_SYNC_CHAMADA = 5  # Verifica chamada aberta a cada 5s
 
         while self.rodando:
+            # Sem chamada aberta → aguarda sem custo AWS
+            if self.chamada_id_atual is None:
+                time.sleep(0.5)
+                continue
+
             agora = time.time()
-
-            # Sincroniza chamada aberta periodicamente
-            if agora - ultima_sync_chamada >= INTERVALO_SYNC_CHAMADA:
-                self._sincronizar_chamada()
-                ultima_sync_chamada = agora
-
-            # Controle de intervalo entre envios AWS
             if agora - ultimo_envio < self.INTERVALO_ENVIO_AWS:
                 time.sleep(0.1)
                 continue
 
-            # Obter frame
             with self.lock:
                 if self.frame_atual is None:
+                    time.sleep(0.1)
                     continue
                 img_para_processar = self.frame_atual.copy()
 
-            # PRÉ-DETECÇÃO LOCAL (custo zero) — filtra frames sem rosto
             gray = cv2.cvtColor(img_para_processar, cv2.COLOR_BGR2GRAY)
             rostos_detectados = self.face_cascade.detectMultiScale(gray, 1.1, 5)
 
@@ -112,7 +101,6 @@ class SistemaReconhecimento:
 
             ultimo_envio = agora
 
-            # MÚLTIPLOS ROSTOS — crop por rosto, 1 chamada AWS cada
             h_img, w_img = img_para_processar.shape[:2]
             for (x, y, w, h) in rostos_detectados:
                 margin = int(0.2 * max(w, h))
@@ -142,11 +130,9 @@ class SistemaReconhecimento:
                     face_id = match['Face']['FaceId']
                     aluno_external_id = match['Face']['ExternalImageId']
 
-                    # Já registrado nesta chamada → skip
                     if face_id in self.presentes_chamada:
                         continue
 
-                    # Add otimista: bloqueia duplicata mesmo antes da thread confirmar
                     self.presentes_chamada.add(face_id)
                     logger.info(f"🎯 Reconhecido: {aluno_external_id}")
                     threading.Thread(
@@ -166,43 +152,66 @@ class SistemaReconhecimento:
                     logger.error(f"Erro AWS (face individual): {e}")
 
     def iniciar(self):
-        """Inicia a captura de vídeo e as threads em modo Headless."""
         self.rodando = True
+        cap = None
+        t_aws = None
+        ultima_sync = 0
+        INTERVALO_SYNC = 5
 
-        # Inicia Câmera
-        # CAP_DSHOW ajuda no Windows a iniciar a câmera mais rápido
-        cap = cv2.VideoCapture(self.CAM_INDEX, cv2.CAP_DSHOW)
-
-        if not cap.isOpened():
-            logger.error("❌ Não foi possível abrir a câmera.")
-            return
-
-        # Configura resolução (Opcional, mas ajuda performance)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-        # Inicia Thread da AWS
-        t_aws = threading.Thread(target=self._thread_aws_rekognition)
-        t_aws.daemon = True # Morre se o programa principal fechar
-        t_aws.start()
+        logger.info(f"🔍 Monitorando chamadas em {_CAMERA_SALA}. Câmera desligada até chamada aberta.")
 
         try:
             while self.rodando:
-                ret, frame = cap.read()
-                if not ret:
-                    logger.error("Falha ao receber frame da câmera.")
-                    break
+                agora = time.time()
 
-                # Atualiza o frame global para a thread da AWS ler
-                with self.lock:
-                    self.frame_atual = frame
-                
-                time.sleep(0.01)  # Pequena pausa para evitar uso excessivo de CPU
+                if agora - ultima_sync >= INTERVALO_SYNC:
+                    self._sincronizar_chamada()
+                    ultima_sync = agora
+
+                if self.chamada_id_atual is not None:
+                    # Câmera deve estar ligada
+                    if cap is None or not cap.isOpened():
+                        cap = cv2.VideoCapture(self.CAM_INDEX, cv2.CAP_DSHOW)
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                        if not cap.isOpened():
+                            logger.error("❌ Não foi possível abrir a câmera.")
+                            time.sleep(5)
+                            continue
+                        logger.info("📷 Câmera ligada.")
+
+                    if t_aws is None or not t_aws.is_alive():
+                        t_aws = threading.Thread(target=self._thread_aws_rekognition)
+                        t_aws.daemon = True
+                        t_aws.start()
+
+                    ret, frame = cap.read()
+                    if not ret:
+                        logger.error("Falha ao receber frame da câmera.")
+                        time.sleep(1)
+                        continue
+
+                    with self.lock:
+                        self.frame_atual = frame
+
+                    time.sleep(0.01)
+                else:
+                    # Câmera deve estar desligada
+                    if cap is not None and cap.isOpened():
+                        cap.release()
+                        cap = None
+                        with self.lock:
+                            self.frame_atual = None
+                        logger.info("📷 Câmera desligada — sem chamada aberta.")
+
+                    time.sleep(1)
 
         finally:
             self.rodando = False
-            cap.release()
+            if cap is not None:
+                cap.release()
             logger.info("Sistema de reconhecimento encerrado.")
+
 
 if __name__ == "__main__":
     app = SistemaReconhecimento()
