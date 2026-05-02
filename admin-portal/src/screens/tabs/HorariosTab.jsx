@@ -25,8 +25,8 @@ export function HorariosTab({ showToast, showConfirm, onOpenHorarioModal }) {
   return (
     <div className="flex-1 overflow-hidden min-h-0">
       <div className="bg-[#151718] p-6 rounded-3xl border border-white/5 shadow-2xl shadow-black/40 h-full overflow-y-auto">
-        <div className="grid grid-cols-5 gap-4">
-          {DIAS_SEMANA.slice(0, 5).map((dia, idx) => (
+        <div className="grid grid-cols-6 gap-4">
+          {DIAS_SEMANA.slice(0, 6).map((dia, idx) => (
             <div key={dia} className="space-y-3">
               <div className="text-center font-black text-gray-600 text-xs uppercase tracking-[0.3em] mb-2">{dia}</div>
               <div className="space-y-3">
