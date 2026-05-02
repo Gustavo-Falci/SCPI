@@ -90,12 +90,6 @@ def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role
             nova_chamada = cur.fetchone()
             audit_logger.info("Chamada aberta turma=%s professor=%s", dados.turma_id, professor_id)
 
-            global processo_camera
-            if processo_camera is None or processo_camera.poll() is not None:
-                script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts", "reconhecimento_tempo_real.py")
-                processo_camera = subprocess.Popen([sys.executable, script_path])
-                logger.info("Processo de reconhecimento iniciado (PID: %s)", processo_camera.pid)
-
             return {"mensagem": "Chamada aberta com sucesso!", "chamada_id": nova_chamada['chamada_id']}
     except HTTPException:
         raise
@@ -126,12 +120,6 @@ def fechar_chamada(turma_id: str, background_tasks: BackgroundTasks, current_use
                 """,
                 (turma_id,),
             )
-
-            global processo_camera
-            if processo_camera and processo_camera.poll() is None:
-                processo_camera.terminate()
-                logger.info("Processo de reconhecimento (PID: %s) encerrado.", processo_camera.pid)
-                processo_camera = None
 
         if chamada:
             background_tasks.add_task(
