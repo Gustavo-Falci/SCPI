@@ -10,7 +10,6 @@ import {
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 
@@ -95,12 +94,7 @@ export default function HomeProfessor() {
           activeOpacity={0.9}
           onPress={() => router.push("/professor/iniciar-chamada")}
         >
-          <LinearGradient
-            colors={[Colors.brand.primary, Colors.brand.secondary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.mainActionCard}
-          >
+          <View style={[styles.mainActionCard, { backgroundColor: Colors.brand.primary }]}>
             <View style={styles.actionCardContent}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.actionCardTitle}>Iniciar Chamada</Text>
@@ -112,7 +106,7 @@ export default function HomeProfessor() {
                 <MaterialCommunityIcons name="face-recognition" size={32} color="#fff" />
               </View>
             </View>
-          </LinearGradient>
+          </View>
         </TouchableOpacity>
 
         <View style={styles.sectionContainer}>

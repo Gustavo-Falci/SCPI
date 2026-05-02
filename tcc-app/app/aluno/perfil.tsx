@@ -10,7 +10,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
 import { storage } from "../../services/storage";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
@@ -69,12 +68,9 @@ export default function PerfilAluno() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.profileCard}>
-          <LinearGradient
-            colors={[Colors.brand.primary, Colors.brand.secondary]}
-            style={styles.avatarGradient}
-          >
+          <View style={[styles.avatarGradient, { backgroundColor: Colors.brand.primary }]}>
             <Ionicons name="school" size={50} color="#fff" />
-          </LinearGradient>
+          </View>
           
           <Text style={styles.nameText}>{nome}</Text>
           <Text style={styles.emailText}>{email}</Text>

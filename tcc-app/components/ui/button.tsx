@@ -1,13 +1,13 @@
 import React from 'react';
-import { 
-  TouchableOpacity, 
-  Text, 
-  StyleSheet, 
-  ActivityIndicator, 
-  ViewStyle, 
-  TextStyle 
+import {
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  View,
+  ViewStyle,
+  TextStyle
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
 interface ButtonProps {
   onPress: () => void;
@@ -60,18 +60,13 @@ export const Button = ({
       accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
       style={[styles.base, style]}
     >
-      <LinearGradient
-        colors={isDisabled ? ['#2A2A3A', '#1F1F2E'] : ['#4B39EF', '#5E47FF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={[styles.gradient, isDisabled && styles.disabled]}
-      >
+      <View style={[styles.gradient, isDisabled && styles.disabled]}>
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={[styles.text, textStyle]}>{title}</Text>
         )}
-      </LinearGradient>
+      </View>
     </TouchableOpacity>
   );
 };
@@ -88,6 +83,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#4B39EF',
+    borderRadius: 14,
   },
   outline: {
     backgroundColor: 'transparent',

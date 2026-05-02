@@ -10,7 +10,6 @@ import {
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 
@@ -116,12 +115,7 @@ export default function HomeAluno() {
           activeOpacity={0.9}
           onPress={() => router.push("/aluno/cadastro-facial")}
         >
-          <LinearGradient
-            colors={[Colors.brand.primary, Colors.brand.secondary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.faceCard}
-          >
+          <View style={[styles.faceCard, { backgroundColor: Colors.brand.primary }]}>
             <View style={styles.faceCardContent}>
               <View>
                 <Text style={styles.faceCardTitle}>Biometria Facial</Text>
@@ -131,7 +125,7 @@ export default function HomeAluno() {
               </View>
               <MaterialCommunityIcons name="face-recognition" size={40} color="#fff" />
             </View>
-          </LinearGradient>
+          </View>
         </TouchableOpacity>
 
         <View style={styles.statsRow}>
