@@ -16,6 +16,7 @@ from infra.aws_clientes import rekognition_client
 load_dotenv(find_dotenv())
 _API_URL = os.getenv("EXPO_PUBLIC_API_URL", "http://localhost:8000")
 _SERVICE_TOKEN = os.getenv("CAMERA_SERVICE_TOKEN", "")
+_CAMERA_SALA = os.getenv("CAMERA_SALA", "")
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,28 +42,26 @@ class SistemaReconhecimento:
         )
 
     def _sincronizar_chamada(self):
-        """Verifica chamada aberta no banco. Se mudou, limpa o set de presentes."""
+        """Verifica chamada aberta para a sala configurada via API."""
         try:
-            from infra.database import get_db_cursor
-            with get_db_cursor() as cur:
-                if not cur:
-                    return
-                cur.execute(
-                    "SELECT chamada_id FROM Chamadas WHERE status = 'Aberta' ORDER BY data_criacao DESC LIMIT 1"
-                )
-                row = cur.fetchone()
-                chamada_id = row["chamada_id"] if row else None
-
-            if chamada_id != self.chamada_id_atual:
-                anteriores = len(self.presentes_chamada)
-                self.chamada_id_atual = chamada_id
-                self.presentes_chamada.clear()
-                if chamada_id:
-                    logger.info(f"📋 Nova chamada detectada: {chamada_id} — {anteriores} presentes resetados.")
-                else:
-                    logger.info(f"📋 Nenhuma chamada aberta — {anteriores} presentes resetados.")
+            resp = requests.get(
+                f"{_API_URL}/chamadas/aberta/sala/{_CAMERA_SALA}",
+                headers={"x-service-token": _SERVICE_TOKEN},
+                timeout=5,
+            )
+            chamada_id = resp.json().get("chamada_id") if resp.status_code == 200 else None
         except Exception as e:
             logger.error(f"Erro ao sincronizar chamada: {e}")
+            return
+
+        if chamada_id != self.chamada_id_atual:
+            anteriores = len(self.presentes_chamada)
+            self.chamada_id_atual = chamada_id
+            self.presentes_chamada.clear()
+            if chamada_id:
+                logger.info(f"📋 Nova chamada detectada: {chamada_id} — {anteriores} presentes resetados.")
+            else:
+                logger.info(f"📋 Nenhuma chamada aberta em {_CAMERA_SALA} — {anteriores} presentes resetados.")
 
     def _registrar_presenca(self, external_image_id, face_id):
         """Registra presença via API remota."""

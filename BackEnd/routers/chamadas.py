@@ -245,6 +245,32 @@ async def registrar_rosto_aluno(
         raise internal_error(e, "registrar_rosto_aluno")
 
 
+@router.get("/aberta/sala/{sala}")
+def chamada_aberta_por_sala(
+    sala: str,
+    _: str = Depends(require_service_token),
+):
+    """Retorna chamada aberta para a sala informada no dia atual."""
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT c.chamada_id
+                FROM Chamadas c
+                JOIN horarios_aulas h ON h.turma_id = c.turma_id
+                WHERE c.status = 'Aberta'
+                AND h.sala = %s
+                AND h.dia_semana = (EXTRACT(DOW FROM CURRENT_DATE)::int + 6) %% 7
+                LIMIT 1
+                """,
+                (sala,),
+            )
+            row = cur.fetchone()
+        return {"chamada_id": row["chamada_id"] if row else None}
+    except Exception as e:
+        raise internal_error(e, "chamada_aberta_por_sala")
+
+
 class PresencaCameraPayload(BaseModel):
     external_image_id: str
 
