@@ -50,14 +50,15 @@ class SistemaReconhecimento:
             logger.error(f"Erro ao sincronizar chamada: {e}")
             return
 
-        if chamada_id != self.chamada_id_atual:
-            anteriores = len(self.presentes_chamada)
-            self.chamada_id_atual = chamada_id
-            self.presentes_chamada.clear()
-            if chamada_id:
-                logger.info(f"📋 Nova chamada detectada: {chamada_id} — {anteriores} presentes resetados.")
-            else:
-                logger.info(f"📋 Nenhuma chamada aberta em {_CAMERA_SALA} — {anteriores} presentes resetados.")
+        with self.lock:
+            if chamada_id != self.chamada_id_atual:
+                anteriores = len(self.presentes_chamada)
+                self.chamada_id_atual = chamada_id
+                self.presentes_chamada.clear()
+                if chamada_id:
+                    logger.info(f"📋 Nova chamada detectada: {chamada_id} — {anteriores} presentes resetados.")
+                else:
+                    logger.info(f"📋 Nenhuma chamada aberta em {_CAMERA_SALA} — {anteriores} presentes resetados.")
 
     def _registrar_presenca(self, external_image_id, face_id):
         try:
@@ -130,10 +131,13 @@ class SistemaReconhecimento:
                     face_id = match['Face']['FaceId']
                     aluno_external_id = match['Face']['ExternalImageId']
 
-                    if face_id in self.presentes_chamada:
-                        continue
+                    with self.lock:
+                        if self.chamada_id_atual is None:
+                            continue
+                        if face_id in self.presentes_chamada:
+                            continue
+                        self.presentes_chamada.add(face_id)
 
-                    self.presentes_chamada.add(face_id)
                     logger.info(f"🎯 Reconhecido: {aluno_external_id}")
                     threading.Thread(
                         target=self._registrar_presenca,
