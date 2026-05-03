@@ -1,15 +1,18 @@
 import asyncio
 import datetime
 import logging
+import zoneinfo
 
 logger = logging.getLogger("scpi.agendador")
+
+_TZ_SP = zoneinfo.ZoneInfo("America/Sao_Paulo")
 
 
 def _fechar_chamadas_expiradas() -> list[dict]:
     """Fecha chamadas abertas cujo horario_fim do horario_aula já passou."""
     from infra.database import get_db_cursor
 
-    agora = datetime.datetime.now()
+    agora = datetime.datetime.now(_TZ_SP)
     fechadas = []
 
     try:
