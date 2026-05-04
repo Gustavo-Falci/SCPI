@@ -242,7 +242,10 @@ def importar_aluno_csv(turma_id, nome, email, ra, turno, senha_hash):
 
         if not usuario_id:
             cur.execute("SELECT usuario_id FROM Usuarios WHERE email = %s", (email,))
-            usuario_id = cur.fetchone()["usuario_id"]
+            row = cur.fetchone()
+            if not row:
+                return None
+            usuario_id = row["usuario_id"]
 
         aluno_uuid = str(uuid.uuid4())
         cur.execute(
@@ -259,7 +262,10 @@ def importar_aluno_csv(turma_id, nome, email, ra, turno, senha_hash):
 
         if not aluno_id:
             cur.execute("SELECT aluno_id FROM Alunos WHERE ra = %s", (ra,))
-            aluno_id = cur.fetchone()["aluno_id"]
+            row = cur.fetchone()
+            if not row:
+                return None
+            aluno_id = row["aluno_id"]
 
         cur.execute(
             """

@@ -5,7 +5,6 @@ logger = logging.getLogger("scpi.agendador")
 
 
 async def _ciclo_agendador() -> None:
-    import routers.chamadas as mod_chamadas
     from repositories.chamadas import fechar_chamadas_expiradas
     from services.notificacoes import notificar_alunos_presentes
 
@@ -14,11 +13,6 @@ async def _ciclo_agendador() -> None:
 
     if not fechadas:
         return
-
-    if mod_chamadas.processo_camera and mod_chamadas.processo_camera.poll() is None:
-        mod_chamadas.processo_camera.terminate()
-        logger.info("Processo da câmera encerrado pelo agendador.")
-        mod_chamadas.processo_camera = None
 
     for row in fechadas:
         loop.run_in_executor(

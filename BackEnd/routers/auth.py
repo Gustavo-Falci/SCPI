@@ -44,7 +44,6 @@ from schemas.auth import (
     PrimeiroAcessoSenhaBody,
     RedefinirSenhaBody,
     RefreshRequest,
-    RegisterTokenBody,
     Token,
     UsuarioRegistro,
     VerificarCodigoBody,

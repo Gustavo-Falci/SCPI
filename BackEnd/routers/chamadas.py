@@ -1,8 +1,4 @@
-import atexit
 import logging
-import os
-import subprocess
-import sys
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
@@ -31,18 +27,6 @@ logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("scpi.audit")
 
 router = APIRouter(prefix="/chamadas", tags=["chamadas"])
-
-processo_camera = None
-
-
-def _encerrar_camera_no_exit():
-    global processo_camera
-    if processo_camera:
-        print("Encerrando processo da câmera...")
-        processo_camera.terminate()
-
-
-atexit.register(_encerrar_camera_no_exit)
 
 
 @router.post("/abrir")

@@ -15,6 +15,7 @@ from slowapi.errors import RateLimitExceeded
 
 from core.limiter import limiter
 from infra import migrations as _migrations
+from infra.aws_clientes import rekognition_client, s3_client
 from infra.database import close_pool
 from services.agendador import iniciar_agendador
 from routers import (
@@ -31,6 +32,25 @@ from routers import (
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("scpi.api")
+
+
+def _check_aws_connectivity():
+    try:
+        if rekognition_client:
+            rekognition_client.list_collections(MaxResults=1)
+            logger.info("AWS Rekognition: conectado.")
+        else:
+            logger.warning("AWS Rekognition: cliente não inicializado.")
+    except Exception as e:
+        logger.warning("AWS Rekognition: falha na verificação de conectividade: %s", e)
+    try:
+        if s3_client:
+            s3_client.list_buckets()
+            logger.info("AWS S3: conectado.")
+        else:
+            logger.warning("AWS S3: cliente não inicializado.")
+    except Exception as e:
+        logger.warning("AWS S3: falha na verificação de conectividade: %s", e)
 
 app = FastAPI(title="SCPI API")
 
@@ -64,6 +84,7 @@ async def _on_startup():
     global _agendador_task
     _migrations.run_all()
     _agendador_task = asyncio.create_task(iniciar_agendador())
+    _check_aws_connectivity()
 
 
 @app.on_event("shutdown")

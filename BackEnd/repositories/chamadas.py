@@ -186,6 +186,9 @@ def fechar_chamadas_expiradas(agora=None):
                 )
     except Exception as e:
         logger.error("Erro ao fechar chamadas expiradas: %s", e)
+        return []
+
+    return fechadas
 
     return fechadas
 
