@@ -13,6 +13,79 @@ def buscar_usuario_por_email(email):
         return cur.fetchone()
 
 
+def buscar_usuario_login_por_email(email):
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute(
+            "SELECT usuario_id, nome, email, senha, tipo_usuario, primeiro_acesso FROM Usuarios WHERE LOWER(email) = LOWER(%s)",
+            (email,),
+        )
+        return cur.fetchone()
+
+
+def buscar_usuario_id_por_email_lower(email):
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute("SELECT usuario_id FROM Usuarios WHERE LOWER(email) = %s", (email,))
+        return cur.fetchone()
+
+
+def buscar_usuario_id_por_id(usuario_id):
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute("SELECT u.usuario_id FROM Usuarios u WHERE u.usuario_id = %s", (usuario_id,))
+        return cur.fetchone()
+
+
+def buscar_usuario_id_por_email_simples(email):
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute("SELECT u.usuario_id FROM Usuarios u WHERE u.email = %s", (email,))
+        return cur.fetchone()
+
+
+def buscar_senha_por_usuario_id(usuario_id):
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute("SELECT senha FROM Usuarios WHERE usuario_id = %s", (usuario_id,))
+        return cur.fetchone()
+
+
+def buscar_primeiro_acesso_por_usuario_id(usuario_id):
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute("SELECT primeiro_acesso FROM Usuarios WHERE usuario_id = %s", (usuario_id,))
+        return cur.fetchone()
+
+
+def atualizar_senha_por_usuario_id(usuario_id, nova_senha_hash):
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return 0
+        cur.execute(
+            "UPDATE Usuarios SET senha = %s, primeiro_acesso = FALSE WHERE usuario_id = %s",
+            (nova_senha_hash, usuario_id),
+        )
+        return cur.rowcount
+
+
+def atualizar_senha_por_email(email_lower, nova_senha_hash):
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return 0
+        cur.execute(
+            "UPDATE Usuarios SET senha = %s, primeiro_acesso = FALSE WHERE LOWER(email) = %s",
+            (nova_senha_hash, email_lower),
+        )
+        return cur.rowcount
+
+
 def obter_professor_id(usuario_id):
     with get_db_cursor() as cur:
         if not cur:

@@ -13,8 +13,27 @@ from core.limiter import limiter
 from core.security import get_current_user, require_self_or_admin
 from core.utils import formatar_nome_para_external_id
 from infra.aws_clientes import s3_client
-from infra.database import get_db_cursor
 from infra.rekognition_aws import deletar_rosto, indexar_rosto_da_imagem_s3
+from repositories.alunos import (
+    aluno_pertence_turma,
+    buscar_aluno_por_usuario_id,
+    listar_frequencias_por_aluno,
+    obter_dashboard_aluno,
+)
+from repositories.chamadas import listar_historico_chamadas_aluno
+from repositories.horarios import listar_aulas_hoje_por_aluno
+from repositories.rostos import (
+    existe_qualquer_rosto_por_aluno,
+    obter_path_biometria_por_usuario,
+    obter_rosto_ativo_por_aluno,
+    revogar_rosto_por_aluno,
+    upsert_rosto,
+)
+from repositories.turmas import obter_turma_basica
+from repositories.usuarios import (
+    buscar_usuario_id_por_email_simples,
+    buscar_usuario_id_por_id,
+)
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("scpi.audit")
@@ -26,67 +45,23 @@ router = APIRouter(tags=["alunos"])
 def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_current_user)):
     require_self_or_admin(usuario_id, current_user)
     try:
-        with get_db_cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    u.nome AS user_nome,
-                    a.aluno_id,
-                    a.turno,
-                    (SELECT COUNT(*) FROM Presencas WHERE aluno_id = a.aluno_id) AS total_presencas,
-                    (SELECT COUNT(*) FROM Chamadas ch
-                     JOIN Turma_Alunos ta ON ch.turma_id = ta.turma_id
-                     WHERE ta.aluno_id = a.aluno_id) AS total_chamadas
-                FROM Usuarios u
-                LEFT JOIN Alunos a ON a.usuario_id = u.usuario_id
-                WHERE u.usuario_id = %s
-                """,
-                (usuario_id,),
-            )
-            row = cur.fetchone()
-            if not row or not row.get('aluno_id'):
-                raise HTTPException(status_code=404, detail="Aluno não encontrado")
+        row = obter_dashboard_aluno(usuario_id)
+        if not row or not row.get('aluno_id'):
+            raise HTTPException(status_code=404, detail="Aluno não encontrado")
 
-            nome = row['user_nome'] or "Aluno"
-            aluno_id = row['aluno_id']
-            aluno_turno = row['turno']
-            total_presencas = row['total_presencas'] or 0
-            total_chamadas = row['total_chamadas'] or 0
-            frequencia = round((total_presencas / total_chamadas) * 100) if total_chamadas > 0 else 0
+        nome = row['user_nome'] or "Aluno"
+        aluno_id = row['aluno_id']
+        aluno_turno = row['turno']
+        total_presencas = row['total_presencas'] or 0
+        total_chamadas = row['total_chamadas'] or 0
+        frequencia = round((total_presencas / total_chamadas) * 100) if total_chamadas > 0 else 0
 
-            dia_hoje = datetime.datetime.now().weekday()
-            if aluno_turno:
-                cur.execute(
-                    """
-                    SELECT h.horario_id as id, t.nome_disciplina as nome,
-                           to_char(h.horario_inicio, 'HH24:MI') || ' - ' || to_char(h.horario_fim, 'HH24:MI') as horario,
-                           h.sala
-                    FROM horarios_aulas h
-                    JOIN turmas t ON h.turma_id = t.turma_id
-                    JOIN turma_alunos ta ON t.turma_id = ta.turma_id
-                    WHERE ta.aluno_id = %s
-                    AND h.dia_semana = %s
-                    AND t.turno = %s
-                    """,
-                    (aluno_id, dia_hoje, aluno_turno),
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT h.horario_id as id, t.nome_disciplina as nome,
-                           to_char(h.horario_inicio, 'HH24:MI') || ' - ' || to_char(h.horario_fim, 'HH24:MI') as horario,
-                           h.sala
-                    FROM horarios_aulas h
-                    JOIN turmas t ON h.turma_id = t.turma_id
-                    JOIN turma_alunos ta ON t.turma_id = ta.turma_id
-                    WHERE ta.aluno_id = %s
-                    AND h.dia_semana = %s
-                    """,
-                    (aluno_id, dia_hoje),
-                )
-            aulas_hoje = cur.fetchall()
+        dia_hoje = datetime.datetime.now().weekday()
+        aulas_hoje = listar_aulas_hoje_por_aluno(aluno_id, dia_hoje, aluno_turno)
 
-            return {"nome": nome, "frequencia_geral": frequencia, "aulas_hoje": aulas_hoje}
+        return {"nome": nome, "frequencia_geral": frequencia, "aulas_hoje": aulas_hoje}
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e)
 
@@ -95,59 +70,40 @@ def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_curren
 def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get_current_user)):
     require_self_or_admin(usuario_id, current_user)
     try:
-        with get_db_cursor() as cur:
-            cur.execute("SELECT aluno_id FROM Alunos WHERE usuario_id = %s", (usuario_id,))
-            aluno = cur.fetchone()
-            if not aluno:
-                raise HTTPException(status_code=404, detail="Aluno não encontrado")
+        aluno = buscar_aluno_por_usuario_id(usuario_id)
+        if not aluno:
+            raise HTTPException(status_code=404, detail="Aluno não encontrado")
 
-            aluno_id = aluno['aluno_id']
+        aluno_id = aluno['aluno_id']
+        rows = listar_frequencias_por_aluno(aluno_id)
 
-            cur.execute(
-                """
-                SELECT
-                    t.turma_id,
-                    t.nome_disciplina AS nome,
-                    t.codigo_turma,
-                    COUNT(DISTINCT ch.chamada_id) FILTER (WHERE ch.status = 'Fechada') AS total_aulas,
-                    COUNT(DISTINCT p.presenca_id) AS presencas
-                FROM Turma_Alunos ta
-                JOIN Turmas t ON ta.turma_id = t.turma_id
-                LEFT JOIN Chamadas ch ON ch.turma_id = t.turma_id AND ch.status = 'Fechada'
-                LEFT JOIN Presencas p ON p.chamada_id = ch.chamada_id AND p.aluno_id = ta.aluno_id
-                WHERE ta.aluno_id = %s
-                GROUP BY t.turma_id, t.nome_disciplina, t.codigo_turma
-                """,
-                (aluno_id,),
-            )
+        frequencias = []
+        total_presencas_global = 0
+        total_chamadas_global = 0
 
-            rows = cur.fetchall()
+        for row in rows:
+            presencas = row['presencas']
+            total = row['total_aulas']
+            percentual = round((presencas / total * 100)) if total > 0 else 0
 
-            frequencias = []
-            total_presencas_global = 0
-            total_chamadas_global = 0
+            frequencias.append({
+                "turma_id": row['turma_id'],
+                "codigo_turma": row['codigo_turma'],
+                "nome": row['nome'],
+                "presenca": percentual,
+                "total": total,
+                "presencas_count": presencas,
+                "faltas_count": total - presencas,
+            })
 
-            for row in rows:
-                presencas = row['presencas']
-                total = row['total_aulas']
-                percentual = round((presencas / total * 100)) if total > 0 else 0
+            total_presencas_global += presencas
+            total_chamadas_global += total
 
-                frequencias.append({
-                    "turma_id": row['turma_id'],
-                    "codigo_turma": row['codigo_turma'],
-                    "nome": row['nome'],
-                    "presenca": percentual,
-                    "total": total,
-                    "presencas_count": presencas,
-                    "faltas_count": total - presencas,
-                })
+        media_geral = round((total_presencas_global / total_chamadas_global * 100)) if total_chamadas_global > 0 else 0
 
-                total_presencas_global += presencas
-                total_chamadas_global += total
-
-            media_geral = round((total_presencas_global / total_chamadas_global * 100)) if total_chamadas_global > 0 else 0
-
-            return {"media_geral": media_geral, "frequencias": frequencias}
+        return {"media_geral": media_geral, "frequencias": frequencias}
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e)
 
@@ -160,44 +116,16 @@ def get_historico_chamadas_aluno(
 ):
     require_self_or_admin(usuario_id, current_user)
     try:
-        with get_db_cursor() as cur:
-            cur.execute("SELECT aluno_id FROM Alunos WHERE usuario_id = %s", (usuario_id,))
-            aluno = cur.fetchone()
-            if not aluno:
-                raise HTTPException(status_code=404, detail="Aluno não encontrado.")
-            aluno_id = aluno["aluno_id"]
+        aluno = buscar_aluno_por_usuario_id(usuario_id)
+        if not aluno:
+            raise HTTPException(status_code=404, detail="Aluno não encontrado.")
+        aluno_id = aluno["aluno_id"]
 
-            cur.execute(
-                "SELECT 1 FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = %s",
-                (turma_id, aluno_id),
-            )
-            if not cur.fetchone():
-                raise HTTPException(status_code=403, detail="Você não está matriculado nesta turma.")
+        if not aluno_pertence_turma(turma_id, aluno_id):
+            raise HTTPException(status_code=403, detail="Você não está matriculado nesta turma.")
 
-            cur.execute(
-                "SELECT nome_disciplina, codigo_turma FROM Turmas WHERE turma_id = %s",
-                (turma_id,),
-            )
-            turma = cur.fetchone()
-
-            cur.execute(
-                """
-                SELECT
-                    c.chamada_id,
-                    to_char(c.data_chamada,   'DD/MM/YYYY') AS data_chamada,
-                    EXTRACT(ISODOW FROM c.data_chamada)::int AS dia_iso,
-                    to_char(c.horario_inicio, 'HH24:MI')    AS horario_inicio,
-                    to_char(c.horario_fim,    'HH24:MI')    AS horario_fim,
-                    CASE WHEN p.presenca_id IS NOT NULL THEN true ELSE false END AS presente,
-                    COALESCE(p.tipo_registro, '—') AS tipo_registro
-                FROM Chamadas c
-                LEFT JOIN Presencas p ON p.chamada_id = c.chamada_id AND p.aluno_id = %s
-                WHERE c.turma_id = %s AND c.status = 'Fechada'
-                ORDER BY c.data_chamada DESC, c.horario_inicio DESC
-                """,
-                (aluno_id, turma_id),
-            )
-            rows = cur.fetchall()
+        turma = obter_turma_basica(turma_id)
+        rows = listar_historico_chamadas_aluno(aluno_id, turma_id)
 
         DIAS = {1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb", 7: "Dom"}
         chamadas = [
@@ -249,17 +177,15 @@ async def cadastrar_aluno_api(
     temp_file = f"temp_{safe_basename}"
 
     try:
-        with get_db_cursor() as cur:
-            if user_id:
-                cur.execute("SELECT u.usuario_id FROM Usuarios u WHERE u.usuario_id = %s", (user_id,))
-            else:
-                cur.execute("SELECT u.usuario_id FROM Usuarios u WHERE u.email = %s", (email,))
+        if user_id:
+            user = buscar_usuario_id_por_id(user_id)
+        else:
+            user = buscar_usuario_id_por_email_simples(email)
 
-            user = cur.fetchone()
-            if not user:
-                raise HTTPException(status_code=404, detail="Usuário não localizado para vincular face.")
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuário não localizado para vincular face.")
 
-            target_user_id = user['usuario_id']
+        target_user_id = user['usuario_id']
 
         if current_user.get("role") == "Aluno" and str(target_user_id) != current_user.get("sub"):
             raise HTTPException(status_code=403, detail="Aluno só pode cadastrar a própria face.")
@@ -282,45 +208,15 @@ async def cadastrar_aluno_api(
 
         face_id = resultado_rekognition["FaceRecords"][0]["Face"]["FaceId"]
 
-        with get_db_cursor(commit=True) as cur:
-            cur.execute("SELECT aluno_id FROM Alunos WHERE usuario_id = %s", (target_user_id,))
-            aluno = cur.fetchone()
-            if not aluno:
-                raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado para este usuário.")
+        aluno = buscar_aluno_por_usuario_id(target_user_id)
+        if not aluno:
+            raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado para este usuário.")
 
-            aluno_id = aluno['aluno_id']
+        aluno_id = aluno['aluno_id']
+        upsert_rosto(aluno_id, external_id, face_id, filename)
 
-            cur.execute("SELECT 1 FROM Colecao_Rostos WHERE aluno_id = %s", (aluno_id,))
-            exists = cur.fetchone()
-
-            if exists:
-                cur.execute(
-                    """
-                    UPDATE Colecao_Rostos
-                    SET external_image_id = %s,
-                        face_id_rekognition = %s,
-                        s3_path_cadastro = %s,
-                        consentimento_biometrico = TRUE,
-                        consentimento_data = CURRENT_TIMESTAMP,
-                        revogado_em = NULL
-                    WHERE aluno_id = %s
-                    """,
-                    (external_id, face_id, filename, aluno_id),
-                )
-            else:
-                cur.execute(
-                    """
-                    INSERT INTO Colecao_Rostos (
-                        aluno_id, external_image_id, face_id_rekognition, s3_path_cadastro,
-                        consentimento_biometrico, consentimento_data
-                    )
-                    VALUES (%s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
-                    """,
-                    (aluno_id, external_id, face_id, filename),
-                )
-
-            os.remove(temp_file)
-            return {"status": "sucesso", "face_id": face_id, "external_id": external_id}
+        os.remove(temp_file)
+        return {"status": "sucesso", "face_id": face_id, "external_id": external_id}
 
     except HTTPException:
         if os.path.exists(temp_file):
@@ -337,23 +233,13 @@ def obter_foto_biometria(usuario_id: str, current_user: dict = Depends(get_curre
     """Retorna URL temporária (presigned) da foto cadastrada — só dono ou Admin."""
     require_self_or_admin(usuario_id, current_user)
     try:
-        with get_db_cursor() as cur:
-            cur.execute(
-                """
-                SELECT cr.s3_path_cadastro
-                FROM Colecao_Rostos cr
-                JOIN Alunos a ON cr.aluno_id = a.aluno_id
-                WHERE a.usuario_id = %s AND cr.revogado_em IS NULL
-                """,
-                (usuario_id,),
-            )
-            row = cur.fetchone()
-            if not row or not row.get("s3_path_cadastro"):
-                raise HTTPException(status_code=404, detail="Biometria não encontrada.")
-            url = gerar_url_presigned(row["s3_path_cadastro"])
-            if not url:
-                raise HTTPException(status_code=500, detail="Falha ao gerar URL temporária.")
-            return {"url": url, "expira_em_segundos": 300}
+        row = obter_path_biometria_por_usuario(usuario_id)
+        if not row or not row.get("s3_path_cadastro"):
+            raise HTTPException(status_code=404, detail="Biometria não encontrada.")
+        url = gerar_url_presigned(row["s3_path_cadastro"])
+        if not url:
+            raise HTTPException(status_code=500, detail="Falha ao gerar URL temporária.")
+        return {"url": url, "expira_em_segundos": 300}
     except HTTPException:
         raise
     except Exception as e:
@@ -365,46 +251,26 @@ def revogar_biometria(usuario_id: str, current_user: dict = Depends(get_current_
     """Permite ao aluno (ou Admin) revogar consentimento e apagar biometria."""
     require_self_or_admin(usuario_id, current_user)
     try:
-        with get_db_cursor(commit=True) as cur:
-            cur.execute("SELECT aluno_id FROM Alunos WHERE usuario_id = %s", (usuario_id,))
-            aluno = cur.fetchone()
-            if not aluno:
-                raise HTTPException(status_code=404, detail="Aluno não encontrado.")
+        aluno = buscar_aluno_por_usuario_id(usuario_id)
+        if not aluno:
+            raise HTTPException(status_code=404, detail="Aluno não encontrado.")
 
-            cur.execute(
-                """
-                SELECT face_id_rekognition, s3_path_cadastro
-                FROM Colecao_Rostos
-                WHERE aluno_id = %s AND revogado_em IS NULL
-                """,
-                (aluno["aluno_id"],),
-            )
-            rosto = cur.fetchone()
-            if not rosto:
-                raise HTTPException(status_code=404, detail="Nenhuma biometria ativa para este aluno.")
+        rosto = obter_rosto_ativo_por_aluno(aluno["aluno_id"])
+        if not rosto:
+            raise HTTPException(status_code=404, detail="Nenhuma biometria ativa para este aluno.")
 
-            try:
-                deletar_rosto(rosto["face_id_rekognition"])
-            except Exception as e:
-                logger.warning("Falha ao deletar face no Rekognition: %s", e)
+        try:
+            deletar_rosto(rosto["face_id_rekognition"])
+        except Exception as e:
+            logger.warning("Falha ao deletar face no Rekognition: %s", e)
 
-            try:
-                if rosto.get("s3_path_cadastro"):
-                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=rosto["s3_path_cadastro"])
-            except Exception as e:
-                logger.warning("Falha ao deletar objeto no S3: %s", e)
+        try:
+            if rosto.get("s3_path_cadastro"):
+                s3_client.delete_object(Bucket=BUCKET_NAME, Key=rosto["s3_path_cadastro"])
+        except Exception as e:
+            logger.warning("Falha ao deletar objeto no S3: %s", e)
 
-            cur.execute(
-                """
-                UPDATE Colecao_Rostos
-                SET revogado_em = CURRENT_TIMESTAMP,
-                    consentimento_biometrico = FALSE,
-                    face_id_rekognition = NULL,
-                    s3_path_cadastro = NULL
-                WHERE aluno_id = %s
-                """,
-                (aluno["aluno_id"],),
-            )
+        revogar_rosto_por_aluno(aluno["aluno_id"])
 
         audit_logger.info("Biometria revogada usuario=%s por=%s", usuario_id, current_user.get("sub"))
         return {"mensagem": "Biometria revogada e removida com sucesso."}

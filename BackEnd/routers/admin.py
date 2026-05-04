@@ -5,7 +5,6 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from psycopg2.extras import execute_values
 from pydantic import BaseModel
 
 from core.auth_utils import get_password_hash
@@ -13,8 +12,33 @@ from core.config import BUCKET_NAME, COLLECTION_ID
 from core.helpers import gerar_senha_temporaria, internal_error
 from core.security import require_role
 from infra.aws_clientes import rekognition_client, s3_client
-from infra.database import get_db_cursor
 from infra.notificacoes import send_email_senha_temporaria
+from repositories.alunos import (
+    criar_aluno_com_usuario,
+    excluir_aluno_em_cascata,
+    existe_aluno_por_ra,
+    importar_aluno_csv,
+    listar_alunos_para_admin,
+    listar_alunos_por_ids,
+)
+from repositories.horarios import (
+    excluir_horario,
+    inserir_horario,
+    listar_horarios_completos,
+)
+from repositories.professores import (
+    criar_professor_com_usuario,
+    excluir_professor_em_cascata,
+    listar_professores_para_admin,
+)
+from repositories.turmas import (
+    atribuir_professor_turma,
+    criar_turma,
+    excluir_turma_em_cascata,
+    listar_turmas_completas,
+    matricular_alunos_em_turma,
+    obter_turno_turma,
+)
 from repositories.usuarios import buscar_usuario_por_email
 from schemas.admin import (
     AtribuirProfessor,
@@ -34,16 +58,7 @@ router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(requir
 @router.get("/professores")
 def admin_listar_professores():
     try:
-        with get_db_cursor() as cur:
-            cur.execute(
-                """
-                SELECT p.professor_id, u.nome, u.email, p.departamento
-                FROM Professores p
-                JOIN Usuarios u ON p.usuario_id = u.usuario_id
-                ORDER BY u.nome ASC
-                """
-            )
-            return cur.fetchall()
+        return listar_professores_para_admin()
     except Exception as e:
         raise internal_error(e)
 
@@ -51,19 +66,7 @@ def admin_listar_professores():
 @router.get("/turmas-completas")
 def admin_listar_turmas():
     try:
-        with get_db_cursor() as cur:
-            cur.execute(
-                """
-                SELECT t.turma_id, t.nome_disciplina, t.codigo_turma, t.turno, t.semestre,
-                COALESCE(u.nome, 'Sem professor') as professor_nome,
-                (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = t.turma_id) as total_alunos
-                FROM Turmas t
-                LEFT JOIN Professores p ON t.professor_id = p.professor_id
-                LEFT JOIN Usuarios u ON p.usuario_id = u.usuario_id
-                ORDER BY t.semestre ASC, t.nome_disciplina ASC
-                """
-            )
-            return cur.fetchall()
+        return listar_turmas_completas()
     except Exception as e:
         raise internal_error(e)
 
@@ -73,16 +76,17 @@ def admin_criar_turma(turma: TurmaCreate):
     try:
         turma_id = str(uuid.uuid4())
         professor_id = turma.professor_id if turma.professor_id else None
-        with get_db_cursor(commit=True) as cur:
-            cur.execute(
-                """
-                INSERT INTO Turmas (turma_id, professor_id, codigo_turma, nome_disciplina, periodo_letivo, sala_padrao, turno, semestre)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING turma_id
-                """,
-                (turma_id, professor_id, turma.codigo_turma, turma.nome_disciplina, turma.periodo_letivo, turma.sala_padrao, turma.turno, turma.semestre),
-            )
-            return {"mensagem": "Turma criada com sucesso!", "turma_id": turma_id}
+        criar_turma(
+            turma_id,
+            professor_id,
+            turma.codigo_turma,
+            turma.nome_disciplina,
+            turma.periodo_letivo,
+            turma.sala_padrao,
+            turma.turno,
+            turma.semestre,
+        )
+        return {"mensagem": "Turma criada com sucesso!", "turma_id": turma_id}
     except Exception as e:
         raise internal_error(e)
 
@@ -91,10 +95,9 @@ def admin_criar_turma(turma: TurmaCreate):
 def admin_atribuir_professor(turma_id: str, dados: AtribuirProfessor):
     try:
         professor_id = dados.professor_id if dados.professor_id else None
-        with get_db_cursor(commit=True) as cur:
-            cur.execute("UPDATE Turmas SET professor_id = %s WHERE turma_id = %s", (professor_id, turma_id))
-            if cur.rowcount == 0:
-                raise HTTPException(status_code=404, detail="Turma não encontrada.")
+        rowcount = atribuir_professor_turma(turma_id, professor_id)
+        if rowcount == 0:
+            raise HTTPException(status_code=404, detail="Turma não encontrada.")
         return {"mensagem": "Professor atribuído com sucesso."}
     except HTTPException:
         raise
@@ -105,15 +108,8 @@ def admin_atribuir_professor(turma_id: str, dados: AtribuirProfessor):
 @router.post("/horarios")
 def admin_adicionar_horario(h: HorarioCreate):
     try:
-        with get_db_cursor(commit=True) as cur:
-            cur.execute(
-                """
-                INSERT INTO horarios_aulas (turma_id, dia_semana, horario_inicio, horario_fim, sala)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (h.turma_id, h.dia_semana, h.horario_inicio, h.horario_fim, h.sala),
-            )
-            return {"mensagem": "Horário adicionado com sucesso!"}
+        inserir_horario(h.turma_id, h.dia_semana, h.horario_inicio, h.horario_fim, h.sala)
+        return {"mensagem": "Horário adicionado com sucesso!"}
     except Exception as e:
         raise internal_error(e)
 
@@ -121,11 +117,8 @@ def admin_adicionar_horario(h: HorarioCreate):
 @router.delete("/turmas/{turma_id}")
 def admin_excluir_turma(turma_id: str):
     try:
-        with get_db_cursor(commit=True) as cur:
-            cur.execute("DELETE FROM horarios_aulas WHERE turma_id = %s", (turma_id,))
-            cur.execute("DELETE FROM Turma_Alunos WHERE turma_id = %s", (turma_id,))
-            cur.execute("DELETE FROM Turmas WHERE turma_id = %s", (turma_id,))
-            return {"mensagem": "Turma e dependências excluídas com sucesso!"}
+        excluir_turma_em_cascata(turma_id)
+        return {"mensagem": "Turma e dependências excluídas com sucesso!"}
     except Exception as e:
         raise internal_error(e)
 
@@ -133,18 +126,10 @@ def admin_excluir_turma(turma_id: str):
 @router.delete("/alunos/{aluno_id}")
 def admin_excluir_aluno(aluno_id: str):
     try:
-        with get_db_cursor(commit=True) as cur:
-            cur.execute("SELECT usuario_id FROM Alunos WHERE aluno_id = %s", (aluno_id,))
-            row = cur.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="Aluno não encontrado")
-            usuario_id = row["usuario_id"]
-            cur.execute("DELETE FROM Colecao_Rostos WHERE aluno_id = %s", (aluno_id,))
-            cur.execute("DELETE FROM Turma_Alunos WHERE aluno_id = %s", (aluno_id,))
-            cur.execute("DELETE FROM Presencas WHERE aluno_id = %s", (aluno_id,))
-            cur.execute("DELETE FROM Alunos WHERE aluno_id = %s", (aluno_id,))
-            cur.execute("DELETE FROM Usuarios WHERE usuario_id = %s", (usuario_id,))
-            return {"mensagem": "Aluno excluído com sucesso"}
+        usuario_id = excluir_aluno_em_cascata(aluno_id)
+        if not usuario_id:
+            raise HTTPException(status_code=404, detail="Aluno não encontrado")
+        return {"mensagem": "Aluno excluído com sucesso"}
     except HTTPException:
         raise
     except Exception as e:
@@ -154,17 +139,10 @@ def admin_excluir_aluno(aluno_id: str):
 @router.delete("/professores/{professor_id}")
 def admin_excluir_professor(professor_id: str):
     try:
-        with get_db_cursor(commit=True) as cur:
-            cur.execute("SELECT usuario_id FROM Professores WHERE professor_id = %s", (professor_id,))
-            row = cur.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="Professor não encontrado")
-            usuario_id = row["usuario_id"]
-            cur.execute("UPDATE Turmas SET professor_id = NULL WHERE professor_id = %s", (professor_id,))
-            cur.execute("UPDATE Chamadas SET professor_id = NULL WHERE professor_id = %s", (professor_id,))
-            cur.execute("DELETE FROM Professores WHERE professor_id = %s", (professor_id,))
-            cur.execute("DELETE FROM Usuarios WHERE usuario_id = %s", (usuario_id,))
-            return {"mensagem": "Professor excluído com sucesso"}
+        usuario_id = excluir_professor_em_cascata(professor_id)
+        if not usuario_id:
+            raise HTTPException(status_code=404, detail="Professor não encontrado")
+        return {"mensagem": "Professor excluído com sucesso"}
     except HTTPException:
         raise
     except Exception as e:
@@ -174,18 +152,7 @@ def admin_excluir_professor(professor_id: str):
 @router.get("/horarios-todos")
 def admin_listar_todos_horarios():
     try:
-        with get_db_cursor() as cur:
-            cur.execute(
-                """
-                SELECT h.horario_id, h.turma_id, h.dia_semana,
-                       to_char(h.horario_inicio, 'HH24:MI') as inicio,
-                       to_char(h.horario_fim, 'HH24:MI') as fim,
-                       h.sala, t.nome_disciplina, t.turno, t.semestre
-                FROM horarios_aulas h
-                JOIN Turmas t ON h.turma_id = t.turma_id
-                """
-            )
-            return cur.fetchall()
+        return listar_horarios_completos()
     except Exception as e:
         raise internal_error(e)
 
@@ -193,9 +160,8 @@ def admin_listar_todos_horarios():
 @router.delete("/horarios/{horario_id}")
 def admin_excluir_horario(horario_id: str):
     try:
-        with get_db_cursor(commit=True) as cur:
-            cur.execute("DELETE FROM horarios_aulas WHERE horario_id = %s", (horario_id,))
-            return {"mensagem": "Horário removido!"}
+        excluir_horario(horario_id)
+        return {"mensagem": "Horário removido!"}
     except Exception as e:
         raise internal_error(e)
 
@@ -203,32 +169,7 @@ def admin_excluir_horario(horario_id: str):
 @router.get("/alunos")
 def admin_listar_alunos(turma_id: Optional[str] = None):
     try:
-        with get_db_cursor() as cur:
-            if turma_id:
-                cur.execute(
-                    """
-                    SELECT
-                        a.aluno_id, a.ra, u.nome, u.email, a.turno,
-                        EXISTS(
-                            SELECT 1 FROM Turma_Alunos ta
-                            WHERE ta.aluno_id = a.aluno_id AND ta.turma_id = %s
-                        ) as ja_matriculado
-                    FROM Alunos a
-                    JOIN Usuarios u ON a.usuario_id = u.usuario_id
-                    ORDER BY u.nome
-                    """,
-                    (turma_id,),
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT a.aluno_id, a.ra, u.nome, u.email, a.turno, FALSE as ja_matriculado
-                    FROM Alunos a
-                    JOIN Usuarios u ON a.usuario_id = u.usuario_id
-                    ORDER BY u.nome
-                    """
-                )
-            return cur.fetchall()
+        return listar_alunos_para_admin(turma_id)
     except Exception as e:
         raise internal_error(e)
 
@@ -238,35 +179,20 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos):
     if not dados.aluno_ids:
         raise HTTPException(status_code=400, detail="Nenhum aluno selecionado.")
     try:
-        with get_db_cursor(commit=True) as cur:
-            cur.execute("SELECT turno FROM Turmas WHERE turma_id = %s", (turma_id,))
-            turma = cur.fetchone()
-            if not turma:
-                raise HTTPException(status_code=404, detail="Turma não encontrada.")
-            turma_turno = turma['turno']
+        turma = obter_turno_turma(turma_id)
+        if not turma:
+            raise HTTPException(status_code=404, detail="Turma não encontrada.")
+        turma_turno = turma['turno']
 
-            placeholders = ",".join(["%s"] * len(dados.aluno_ids))
-            cur.execute(
-                f"SELECT aluno_id, turno FROM Alunos WHERE aluno_id IN ({placeholders})",
-                dados.aluno_ids,
-            )
-            alunos_rows = cur.fetchall()
+        alunos_rows = listar_alunos_por_ids(dados.aluno_ids)
+        for row in alunos_rows:
+            if row['turno'] and row['turno'] != turma_turno:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Aluno não pode ser matriculado: turno do aluno ({row['turno']}) é diferente do turno da turma ({turma_turno}).",
+                )
 
-            for row in alunos_rows:
-                if row['turno'] and row['turno'] != turma_turno:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Aluno não pode ser matriculado: turno do aluno ({row['turno']}) é diferente do turno da turma ({turma_turno}).",
-                    )
-
-            execute_values(
-                cur,
-                "INSERT INTO Turma_Alunos (turma_id, aluno_id, data_associacao) VALUES %s ON CONFLICT (turma_id, aluno_id) DO NOTHING",
-                [(turma_id, aid) for aid in dados.aluno_ids],
-                template="(%s, %s, NOW())",
-            )
-            matriculados = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
-
+        matriculados = matricular_alunos_em_turma(turma_id, dados.aluno_ids)
         return {"mensagem": f"{matriculados} aluno(s) matriculado(s) com sucesso.", "total_enviados": len(dados.aluno_ids)}
     except HTTPException:
         raise
@@ -285,74 +211,30 @@ async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...))
         erros = []
         senhas_geradas = []
 
-        with get_db_cursor(commit=True) as cur:
-            for row in csv_reader:
-                try:
-                    nome = row.get('nome')
-                    email = row.get('email')
-                    ra = row.get('ra')
-                    turno = row.get('turno')
+        for row in csv_reader:
+            try:
+                nome = row.get('nome')
+                email = row.get('email')
+                ra = row.get('ra')
+                turno = row.get('turno')
 
-                    if not nome or not email or not ra:
-                        continue
+                if not nome or not email or not ra:
+                    continue
 
-                    if turno not in ('Matutino', 'Noturno'):
-                        turno = None
+                if turno not in ('Matutino', 'Noturno'):
+                    turno = None
 
-                    user_uuid = str(uuid.uuid4())
-                    senha_temporaria = gerar_senha_temporaria()
-                    senha_hash = get_password_hash(senha_temporaria)
-                    cur.execute(
-                        """
-                        INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario, primeiro_acesso)
-                        VALUES (%s, %s, %s, %s, 'Aluno', TRUE)
-                        ON CONFLICT (email) DO NOTHING
-                        RETURNING usuario_id
-                        """,
-                        (user_uuid, nome, email, senha_hash),
-                    )
+                senha_temporaria = gerar_senha_temporaria()
+                senha_hash = get_password_hash(senha_temporaria)
 
-                    res_user = cur.fetchone()
-                    usuario_id = res_user['usuario_id'] if res_user else None
-                    novo_usuario = res_user is not None
+                novo_usuario, _ = importar_aluno_csv(turma_id, nome, email, ra, turno, senha_hash)
 
-                    if not usuario_id:
-                        cur.execute("SELECT usuario_id FROM Usuarios WHERE email = %s", (email,))
-                        usuario_id = cur.fetchone()['usuario_id']
+                if novo_usuario:
+                    senhas_geradas.append({"email": email, "senha_temporaria": senha_temporaria})
 
-                    if novo_usuario:
-                        senhas_geradas.append({"email": email, "senha_temporaria": senha_temporaria})
-
-                    aluno_uuid = str(uuid.uuid4())
-                    cur.execute(
-                        """
-                        INSERT INTO Alunos (aluno_id, usuario_id, ra, turno)
-                        VALUES (%s, %s, %s, %s)
-                        ON CONFLICT (ra) DO UPDATE SET turno = EXCLUDED.turno WHERE Alunos.turno IS NULL
-                        RETURNING aluno_id
-                        """,
-                        (aluno_uuid, usuario_id, ra, turno),
-                    )
-
-                    res_aluno = cur.fetchone()
-                    aluno_id = res_aluno['aluno_id'] if res_aluno else None
-
-                    if not aluno_id:
-                        cur.execute("SELECT aluno_id FROM Alunos WHERE ra = %s", (ra,))
-                        aluno_id = cur.fetchone()['aluno_id']
-
-                    cur.execute(
-                        """
-                        INSERT INTO Turma_Alunos (turma_id, aluno_id)
-                        VALUES (%s, %s)
-                        ON CONFLICT (turma_id, aluno_id) DO NOTHING
-                        """,
-                        (turma_id, aluno_id),
-                    )
-
-                    importados += 1
-                except Exception as e:
-                    erros.append(f"Erro na linha {row}: {str(e)}")
+                importados += 1
+            except Exception as e:
+                erros.append(f"Erro na linha {row}: {str(e)}")
 
         return {
             "mensagem": f"Importação concluída: {importados} alunos matriculados.",
@@ -375,21 +257,7 @@ def admin_criar_professor(dados: CriarProfessorAdmin, background_tasks: Backgrou
         usuario_id = str(uuid.uuid4())
         professor_id = str(uuid.uuid4())
 
-        with get_db_cursor(commit=True) as cur:
-            cur.execute(
-                """
-                INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario, primeiro_acesso)
-                VALUES (%s, %s, %s, %s, 'Professor', TRUE)
-                """,
-                (usuario_id, dados.nome, email_limpo, senha_hash),
-            )
-            cur.execute(
-                """
-                INSERT INTO Professores (professor_id, usuario_id, departamento)
-                VALUES (%s, %s, %s)
-                """,
-                (professor_id, usuario_id, dados.departamento),
-            )
+        criar_professor_com_usuario(usuario_id, professor_id, dados.nome, email_limpo, senha_hash, dados.departamento)
 
         background_tasks.add_task(send_email_senha_temporaria, email_limpo, dados.nome, senha_temporaria, "Professor")
 
@@ -412,31 +280,15 @@ def admin_criar_aluno(dados: CriarAlunoAdmin, background_tasks: BackgroundTasks,
         if buscar_usuario_por_email(email_limpo):
             raise HTTPException(status_code=400, detail="Email já cadastrado.")
 
-        with get_db_cursor() as cur:
-            cur.execute("SELECT 1 FROM Alunos WHERE ra = %s", (dados.ra,))
-            if cur.fetchone():
-                raise HTTPException(status_code=400, detail="RA já cadastrado.")
+        if existe_aluno_por_ra(dados.ra):
+            raise HTTPException(status_code=400, detail="RA já cadastrado.")
 
         senha_temporaria = gerar_senha_temporaria()
         senha_hash = get_password_hash(senha_temporaria)
         usuario_id = str(uuid.uuid4())
         aluno_id = str(uuid.uuid4())
 
-        with get_db_cursor(commit=True) as cur:
-            cur.execute(
-                """
-                INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario, primeiro_acesso)
-                VALUES (%s, %s, %s, %s, 'Aluno', TRUE)
-                """,
-                (usuario_id, dados.nome, email_limpo, senha_hash),
-            )
-            cur.execute(
-                """
-                INSERT INTO Alunos (aluno_id, usuario_id, ra, turno)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (aluno_id, usuario_id, dados.ra, dados.turno),
-            )
+        criar_aluno_com_usuario(usuario_id, aluno_id, dados.nome, email_limpo, senha_hash, dados.ra, dados.turno)
 
         background_tasks.add_task(send_email_senha_temporaria, email_limpo, dados.nome, senha_temporaria, "Aluno")
 

@@ -2,8 +2,12 @@ import datetime
 import logging
 import zoneinfo
 
-from infra.database import get_db_cursor
 from infra.notificacoes import send_expo_push, send_email_resend
+from repositories.notificacoes import obter_push_token_por_usuario
+from repositories.turmas import (
+    listar_alunos_com_push_token_da_turma,
+    obter_turma_id_por_chamada,
+)
 
 logger = logging.getLogger("scpi.services.notificacoes")
 
@@ -14,15 +18,13 @@ def enviar_notificacoes_presenca(usuario_id: str, aluno_nome: str, aluno_email: 
 
     if usuario_id:
         try:
-            with get_db_cursor() as cur:
-                cur.execute("SELECT expo_token FROM PushTokens WHERE usuario_id = %s", (usuario_id,))
-                row = cur.fetchone()
-                if row:
-                    send_expo_push(
-                        [row["expo_token"]],
-                        "Presença Confirmada ✓",
-                        f"Sua presença em {turma_nome} foi registrada às {hora}.",
-                    )
+            row = obter_push_token_por_usuario(usuario_id)
+            if row:
+                send_expo_push(
+                    [row["expo_token"]],
+                    "Presença Confirmada ✓",
+                    f"Sua presença em {turma_nome} foi registrada às {hora}.",
+                )
         except Exception as e:
             logger.error("Erro ao enviar push: %s", e)
 
@@ -35,25 +37,10 @@ def notificar_alunos_presentes(chamada_id: str, turma_nome: str) -> None:
     hora = datetime.datetime.now(zoneinfo.ZoneInfo("America/Sao_Paulo")).strftime("%H:%M")
 
     try:
-        with get_db_cursor() as cur:
-            cur.execute("SELECT turma_id FROM Chamadas WHERE chamada_id = %s", (chamada_id,))
-            row = cur.fetchone()
-            if not row:
-                return
-            turma_id = row["turma_id"]
-
-            cur.execute(
-                """
-                SELECT u.usuario_id, pt.expo_token
-                FROM Turma_Alunos ta
-                JOIN Alunos a ON a.aluno_id = ta.aluno_id
-                JOIN Usuarios u ON u.usuario_id = a.usuario_id
-                LEFT JOIN PushTokens pt ON pt.usuario_id = u.usuario_id::text
-                WHERE ta.turma_id = %s
-                """,
-                (turma_id,),
-            )
-            alunos = cur.fetchall()
+        turma_id = obter_turma_id_por_chamada(chamada_id)
+        if not turma_id:
+            return
+        alunos = listar_alunos_com_push_token_da_turma(turma_id)
     except Exception as e:
         logger.error("Erro ao buscar alunos para notificação de encerramento: %s", e)
         return

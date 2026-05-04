@@ -12,7 +12,17 @@ from core.helpers import internal_error, validate_image_upload
 from core.limiter import limiter
 from core.security import get_current_user, require_role, require_service_token
 from infra.aws_clientes import rekognition_client
-from infra.database import get_db_cursor
+from repositories.chamadas import (
+    abrir_chamada_para_turma,
+    fechar_chamadas_abertas_por_turma,
+    listar_alunos_da_chamada,
+    obter_chamada_aberta_com_disciplina,
+    obter_chamada_aberta_por_sala,
+    obter_chamada_aberta_por_turma,
+)
+from repositories.horarios import existe_aula_no_horario_atual_para_turma
+from repositories.presencas import contar_alunos_da_turma, contar_presentes_por_chamada
+from repositories.turmas import professor_responsavel_pela_turma
 from repositories.usuarios import obter_professor_id, registrar_presenca_por_face
 from schemas.chamada import ChamadaAbrir
 from services.notificacoes import enviar_notificacoes_presenca, notificar_alunos_presentes
@@ -44,51 +54,19 @@ def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role
         raise HTTPException(status_code=404, detail="Professor não encontrado no banco.")
 
     try:
-        with get_db_cursor(commit=True) as cur:
-            cur.execute(
-                "SELECT 1 FROM Turmas WHERE turma_id = %s AND professor_id = %s",
-                (dados.turma_id, professor_id),
-            )
-            if not cur.fetchone():
-                raise HTTPException(status_code=403, detail="Você não é o professor responsável por esta turma.")
+        if not professor_responsavel_pela_turma(dados.turma_id, professor_id):
+            raise HTTPException(status_code=403, detail="Você não é o professor responsável por esta turma.")
 
-            cur.execute(
-                """
-                SELECT 1 FROM horarios_aulas
-                WHERE turma_id = %s
-                  AND dia_semana = (EXTRACT(DOW FROM NOW() AT TIME ZONE 'America/Sao_Paulo')::int + 6) %% 7
-                  AND horario_inicio <= (NOW() AT TIME ZONE 'America/Sao_Paulo')::time
-                  AND horario_fim    >= (NOW() AT TIME ZONE 'America/Sao_Paulo')::time
-                """,
-                (dados.turma_id,),
-            )
-            if not cur.fetchone():
-                raise HTTPException(
-                    status_code=403,
-                    detail="Fora do horário de aula. A chamada só pode ser aberta durante o período letivo desta turma.",
-                )
-
-            cur.execute(
-                """
-                UPDATE Chamadas SET status='Fechada', horario_fim=CURRENT_TIME
-                WHERE turma_id=%s AND status='Aberta'
-                """,
-                (dados.turma_id,),
+        if not existe_aula_no_horario_atual_para_turma(dados.turma_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Fora do horário de aula. A chamada só pode ser aberta durante o período letivo desta turma.",
             )
 
-            cur.execute(
-                """
-                INSERT INTO Chamadas (turma_id, professor_id, data_chamada, horario_inicio, status)
-                VALUES (%s, %s, CURRENT_DATE, CURRENT_TIME, 'Aberta')
-                RETURNING chamada_id
-                """,
-                (dados.turma_id, professor_id),
-            )
+        chamada_id = abrir_chamada_para_turma(dados.turma_id, professor_id)
+        audit_logger.info("Chamada aberta turma=%s professor=%s", dados.turma_id, professor_id)
 
-            nova_chamada = cur.fetchone()
-            audit_logger.info("Chamada aberta turma=%s professor=%s", dados.turma_id, professor_id)
-
-            return {"mensagem": "Chamada aberta com sucesso!", "chamada_id": nova_chamada['chamada_id']}
+        return {"mensagem": "Chamada aberta com sucesso!", "chamada_id": chamada_id}
     except HTTPException:
         raise
     except Exception as e:
@@ -98,26 +76,8 @@ def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role
 @router.post("/fechar/{turma_id}")
 def fechar_chamada(turma_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Professor"))):
     try:
-        with get_db_cursor(commit=True) as cur:
-            cur.execute(
-                """
-                SELECT c.chamada_id, t.nome_disciplina
-                FROM Chamadas c
-                JOIN Turmas t ON t.turma_id = c.turma_id
-                WHERE c.turma_id = %s AND c.status = 'Aberta'
-                LIMIT 1
-                """,
-                (turma_id,),
-            )
-            chamada = cur.fetchone()
-
-            cur.execute(
-                """
-                UPDATE Chamadas SET status='Fechada', horario_fim=CURRENT_TIME
-                WHERE turma_id=%s AND status='Aberta'
-                """,
-                (turma_id,),
-            )
+        chamada = obter_chamada_aberta_com_disciplina(turma_id)
+        fechar_chamadas_abertas_por_turma(turma_id)
 
         if chamada:
             background_tasks.add_task(
@@ -134,37 +94,25 @@ def fechar_chamada(turma_id: str, background_tasks: BackgroundTasks, current_use
 @router.get("/status/{turma_id}")
 def status_chamada(turma_id: str, current_user: dict = Depends(get_current_user)):
     try:
-        with get_db_cursor() as cur:
-            cur.execute(
-                """
-                SELECT chamada_id, horario_inicio FROM Chamadas
-                WHERE turma_id=%s AND status='Aberta' ORDER BY data_criacao DESC LIMIT 1
-                """,
-                (turma_id,),
-            )
-            chamada = cur.fetchone()
+        chamada = obter_chamada_aberta_por_turma(turma_id)
 
-            if not chamada:
-                return {"status": "Fechada", "total_alunos": 0, "presentes": 0, "ausentes": 0}
+        if not chamada:
+            return {"status": "Fechada", "total_alunos": 0, "presentes": 0, "ausentes": 0}
 
-            chamada_id = chamada['chamada_id']
+        chamada_id = chamada['chamada_id']
 
-            cur.execute("SELECT COUNT(*) as total FROM Turma_Alunos WHERE turma_id=%s", (turma_id,))
-            total_alunos = cur.fetchone()['total']
+        total_alunos = contar_alunos_da_turma(turma_id)
+        presentes = contar_presentes_por_chamada(chamada_id)
+        ausentes = total_alunos - presentes
 
-            cur.execute("SELECT COUNT(*) as presentes FROM Presencas WHERE chamada_id=%s", (chamada_id,))
-            presentes = cur.fetchone()['presentes']
-
-            ausentes = total_alunos - presentes
-
-            return {
-                "status": "Aberta",
-                "chamada_id": chamada_id,
-                "horario_inicio": chamada['horario_inicio'],
-                "total_alunos": total_alunos,
-                "presentes": presentes,
-                "ausentes": ausentes,
-            }
+        return {
+            "status": "Aberta",
+            "chamada_id": chamada_id,
+            "horario_inicio": chamada['horario_inicio'],
+            "total_alunos": total_alunos,
+            "presentes": presentes,
+            "ausentes": ausentes,
+        }
     except Exception as e:
         raise internal_error(e, "status_chamada")
 
@@ -172,26 +120,8 @@ def status_chamada(turma_id: str, current_user: dict = Depends(get_current_user)
 @router.get("/{chamada_id}/alunos")
 def listar_alunos_chamada(chamada_id: str, current_user: dict = Depends(get_current_user)):
     try:
-        with get_db_cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    a.aluno_id as id,
-                    u.nome,
-                    CASE WHEN p.presenca_id IS NOT NULL THEN true ELSE false END as presente
-                FROM Chamadas c
-                JOIN Turma_Alunos ta ON c.turma_id = ta.turma_id
-                JOIN Alunos a ON ta.aluno_id = a.aluno_id
-                JOIN Usuarios u ON a.usuario_id = u.usuario_id
-                LEFT JOIN Presencas p ON a.aluno_id = p.aluno_id AND p.chamada_id = c.chamada_id
-                WHERE c.chamada_id = %s
-                ORDER BY u.nome ASC
-                """,
-                (chamada_id,),
-            )
-
-            alunos = cur.fetchall()
-            return {"alunos": alunos}
+        alunos = listar_alunos_da_chamada(chamada_id)
+        return {"alunos": alunos}
     except Exception as e:
         raise internal_error(e, "listar_alunos_chamada")
 
@@ -250,20 +180,7 @@ def chamada_aberta_por_sala(
 ):
     """Retorna chamada aberta para a sala informada no dia atual."""
     try:
-        with get_db_cursor() as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT c.chamada_id
-                FROM Chamadas c
-                JOIN horarios_aulas h ON h.turma_id = c.turma_id
-                WHERE c.status = 'Aberta'
-                AND h.sala = %s
-                AND h.dia_semana = (EXTRACT(DOW FROM CURRENT_DATE)::int + 6) %% 7
-                LIMIT 1
-                """,
-                (sala,),
-            )
-            row = cur.fetchone()
+        row = obter_chamada_aberta_por_sala(sala)
         return {"chamada_id": row["chamada_id"] if row else None}
     except Exception as e:
         raise internal_error(e, "chamada_aberta_por_sala")
