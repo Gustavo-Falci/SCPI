@@ -8,46 +8,6 @@ from core.config import BUCKET_NAME, COLLECTION_ID
 logger = logging.getLogger(__name__)
 
 
-def criar_colecao():
-    """Cria a coleção no Rekognition, se não existir."""
-    if not rekognition_client:
-        logger.error("❌ Cliente Rekognition não inicializado. Criação de coleção cancelada.")
-        return None
-
-
-    try:
-        rekognition_client.describe_collection(CollectionId=COLLECTION_ID)  # Usa o rekognition_client importado
-        logger.info(f"A coleção '{COLLECTION_ID}' já existe.")
-
-    except rekognition_client.exceptions.ResourceNotFoundException:  # A exceção é do cliente
-
-        try:
-            response = rekognition_client.create_collection(
-                CollectionId=COLLECTION_ID
-            )  # Usa o rekognition_client importado
-            logger.info(f"✅ Coleção '{COLLECTION_ID}' criada com sucesso!")
-            return response
-
-        except botocore.exceptions.ClientError as e:
-            logger.error(f"❌ Erro ao criar a coleção: {e.response['Error']['Message']}")
-            return None
-
-    # Adicionar tratamento para ClientError em describe_collection também
-    except botocore.exceptions.ClientError as e:
-        logger.error(f"❌ Erro ao descrever a coleção: {e.response['Error']['Message']}")
-        return None
-
-
-def cadastrar_rosto(s3_path, aluno_id):
-    """
-    Wrapper para indexar_rosto_da_imagem_s3 com DetectionAttributes=['ALL'].
-    Usado pelo fluxo de `cadastrar_reconhecer_Face_aluno.py`.
-    """
-    logger.info(
-        f"Chamando indexar_rosto_da_imagem_s3 para '{aluno_id}' via wrapper 'cadastrar_rosto' (DetectionAttributes: ALL)."
-    )
-    return indexar_rosto_da_imagem_s3(s3_path, aluno_id, detection_attributes=["ALL"])
-
 
 def indexar_rosto_da_imagem_s3(
     s3_path: str,
@@ -208,33 +168,3 @@ def reconhecer_aluno_por_bytes(image_bytes: bytes, face_match_threshold: int = 8
         logger.error(f"❌ Erro inesperado ao reconhecer aluno: {e}", exc_info=True)
         return None
 
-
-# Exemplo de execução protegida
-if __name__ == "__main__":
-    if rekognition_client:
-        criar_colecao()
-        # Exemplo de teste para indexar_rosto_da_imagem_s3 (requer uma imagem no S3)
-        # test_s3_path_index = "alunos/imagem_teste_index.jpg"
-        # test_aluno_id_index = "aluno_de_teste_indexar"
-        # print(f"\nTestando indexar_rosto_da_imagem_s3 para {test_aluno_id_index}...")
-        # response_index = indexar_rosto_da_imagem_s3(test_s3_path_index, test_aluno_id_index, detection_attributes="DEFAULT")
-        # if response_index:
-        #     print("Resposta do teste de indexação:", response_index.get("FaceRecords"))
-
-        # Exemplo de teste para reconhecer_aluno_por_bytes (requer uma imagem local para ler os bytes)
-        # try:
-        #     with open("caminho/para/imagem_teste_reconhecer.jpg", "rb") as f:
-        #         test_image_bytes = f.read()
-        #     print(f"\nTestando reconhecer_aluno_por_bytes...")
-        #     aluno_reconhecido = reconhecer_aluno_por_bytes(test_image_bytes)
-        #     if aluno_reconhecido:
-        #         print(f"Aluno reconhecido no teste: {aluno_reconhecido}")
-        #     else:
-        #         print("Nenhum aluno reconhecido no teste.")
-        # except FileNotFoundError:
-        #     logger.warning("Arquivo de imagem de teste para reconhecimento não encontrado. Pule o teste de reconhecimento por bytes.")
-        # except Exception as e_test:
-        #     logger.error(f"Erro ao preparar teste para reconhecer_aluno_por_bytes: {e_test}")
-
-    else:
-        logger.error("Cliente Rekognition não disponível para teste em rekognition_aws.py.")
