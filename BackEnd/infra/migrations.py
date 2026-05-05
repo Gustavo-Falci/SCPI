@@ -100,9 +100,38 @@ def ensure_reset_codes_table():
         logger.error("Falha ao criar tabela PasswordResetCodes: %s", e)
 
 
+def ensure_multi_angle_faces():
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("""
+                ALTER TABLE Colecao_Rostos
+                ADD COLUMN IF NOT EXISTS angulo VARCHAR(50) NOT NULL DEFAULT 'frontal'
+            """)
+            cur.execute("""
+                ALTER TABLE Colecao_Rostos
+                DROP CONSTRAINT IF EXISTS colecao_rostos_external_image_id_key
+            """)
+            cur.execute("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'uq_colecao_rostos_aluno_angulo'
+                    ) THEN
+                        ALTER TABLE Colecao_Rostos
+                        ADD CONSTRAINT uq_colecao_rostos_aluno_angulo
+                        UNIQUE (aluno_id, angulo);
+                    END IF;
+                END $$;
+            """)
+    except Exception as e:
+        logger.error("Falha ao aplicar migração multi-angle: %s", e)
+
+
 def run_all():
     ensure_refresh_tokens_table()
     ensure_lgpd_columns()
+    ensure_multi_angle_faces()
     ensure_push_tokens_table()
     ensure_primeiro_acesso_column()
     ensure_reset_codes_table()

@@ -1,4 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import React, { useRef, useState, useEffect } from "react";
 import {
@@ -9,7 +9,6 @@ import {
   Alert,
   ActivityIndicator,
   StatusBar,
-  Dimensions,
   ScrollView,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -18,7 +17,32 @@ import { storage } from "../../services/storage";
 import { apiPostFormData } from "../../services/api";
 import { Colors } from "../../constants/theme";
 
-const { width, height } = Dimensions.get("window");
+const ETAPAS = [
+  {
+    angulo: "frontal",
+    titulo: "Frontal",
+    instrucao: "Olhe direto para a câmera",
+    icone: "face-recognition" as const,
+  },
+  {
+    angulo: "esquerda",
+    titulo: "Perfil Esquerdo",
+    instrucao: "Vire levemente para a esquerda (~30°)",
+    icone: "face-man" as const,
+  },
+  {
+    angulo: "direita",
+    titulo: "Perfil Direito",
+    instrucao: "Vire levemente para a direita (~30°)",
+    icone: "face-man" as const,
+  },
+  {
+    angulo: "baixo",
+    titulo: "Olhar para Baixo",
+    instrucao: "Olhe levemente para baixo (simule ler o celular)",
+    icone: "face-man" as const,
+  },
+];
 
 export default function CadastroFacial() {
   const router = useRouter();
@@ -31,6 +55,8 @@ export default function CadastroFacial() {
   const [loading, setLoading] = useState(false);
   const [userData, setUserData] = useState<any>(null);
   const [consentimento, setConsentimento] = useState(false);
+  const [etapaAtual, setEtapaAtual] = useState(0);
+  const [etapasConcluidas, setEtapasConcluidas] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const loadUser = async () => {
@@ -43,12 +69,22 @@ export default function CadastroFacial() {
     loadUser();
   }, []);
 
+  const etapa = ETAPAS[etapaAtual];
+
+  const concluir = async (totalConcluidas: number) => {
+    await storage.setItem("face_cadastrada", "true");
+    Alert.alert(
+      "Cadastro Concluído!",
+      `${totalConcluidas} ângulo${totalConcluidas > 1 ? "s" : ""} cadastrado${totalConcluidas > 1 ? "s" : ""}. O reconhecimento será mais preciso.`,
+      [{ text: "OK", onPress: () => (obrigatorio ? router.replace("/aluno/home") : router.back()) }]
+    );
+  };
+
   const tirarFoto = async () => {
     if (!cameraRef.current || loading) return;
-
     if (!userData?.email || !userData?.ra) {
-        Alert.alert("Erro de Dados", "Seus dados (Email/RA) não foram localizados. Por favor, faça logout e entre novamente.");
-        return;
+      Alert.alert("Erro de Dados", "Seus dados não foram localizados. Faça logout e entre novamente.");
+      return;
     }
 
     setLoading(true);
@@ -58,37 +94,35 @@ export default function CadastroFacial() {
         base64: false,
         shutterSound: false,
       });
-      
+
       const formData = new FormData();
       formData.append("user_id", userData?.id || "");
       formData.append("nome", userData?.nome || "Aluno");
       formData.append("email", userData?.email || "");
       formData.append("ra", userData?.ra || "");
+      formData.append("angulo", etapa.angulo);
 
       const localUri = photo.uri;
-      const filename = localUri.split('/').pop() || 'face.jpg';
+      const filename = localUri.split("/").pop() || "face.jpg";
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : `image/jpeg`;
 
-      formData.append("foto", {
-        uri: localUri,
-        name: filename,
-        type: type,
-      } as any);
+      formData.append("foto", { uri: localUri, name: filename, type } as any);
       formData.append("consentimento_biometrico", "true");
 
       await apiPostFormData("/alunos/cadastrar-face", formData);
 
-      await storage.setItem("face_cadastrada", "true");
-      if (obrigatorio) {
-        Alert.alert("Sucesso!", "Sua biometria facial foi cadastrada com sucesso!");
-        router.replace("/aluno/home");
+      const novasConcluidas = new Set(etapasConcluidas);
+      novasConcluidas.add(etapa.angulo);
+      setEtapasConcluidas(novasConcluidas);
+      setCameraOpen(false);
+
+      if (etapaAtual < ETAPAS.length - 1) {
+        setEtapaAtual(etapaAtual + 1);
       } else {
-        Alert.alert("Sucesso!", "Sua biometria facial foi atualizada com sucesso!");
-        router.back();
+        await concluir(novasConcluidas.size);
       }
     } catch (error: any) {
-      console.error("Erro no cadastro facial:", error);
       Alert.alert("Erro", error.message || "Não foi possível processar sua face. Tente novamente.");
     } finally {
       setLoading(false);
@@ -96,13 +130,13 @@ export default function CadastroFacial() {
   };
 
   if (!permission) return <View style={styles.container} />;
-  
+
   if (!permission.granted) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
           <Ionicons name="camera-outline" size={80} color={Colors.brand.textSecondary} />
-          <Text style={styles.permissionText}>Precisamos de acesso à sua câmera para realizar o cadastro facial.</Text>
+          <Text style={styles.permissionText}>Precisamos de acesso à câmera para realizar o cadastro facial.</Text>
           <TouchableOpacity style={styles.primaryButton} onPress={requestPermission}>
             <Text style={styles.buttonText}>Permitir Câmera</Text>
           </TouchableOpacity>
@@ -111,179 +145,195 @@ export default function CadastroFacial() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      
-      {cameraOpen ? (
-        <View style={styles.cameraWrapper}>
-          
-          {/* BOTÃO FECHAR (TOPO ESQUERDO) */}
+  if (cameraOpen) {
+    return (
+      <View style={styles.cameraWrapper}>
+        <StatusBar barStyle="light-content" />
+        <TouchableOpacity
+          style={[styles.closeBtnTop, { top: insets.top + 20 }]}
+          onPress={() => setCameraOpen(false)}
+          disabled={loading}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Fechar câmera"
+        >
+          <Ionicons name="close" size={30} color="#fff" />
+        </TouchableOpacity>
+
+        <View style={styles.scannerContainer}>
+          <Text style={styles.cameraHint}>{etapa.instrucao}</Text>
+          <View style={styles.faceFrameContainer}>
+            <View style={styles.ovalMask}>
+              <CameraView style={styles.cameraPreview} facing="front" ref={cameraRef} />
+            </View>
+            <View style={styles.faceFrameBorder} />
+          </View>
+        </View>
+
+        <View style={styles.cameraControls}>
           <TouchableOpacity
-            style={[styles.closeBtnTop, { top: insets.top + 20 }]}
-            onPress={() => setCameraOpen(false)}
+            style={styles.captureBtn}
+            onPress={tirarFoto}
             disabled={loading}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Fechar câmera"
+            accessibilityLabel="Capturar foto"
           >
-            <Ionicons name="close" size={30} color="#fff" />
+            <View style={styles.captureBtnInner} />
+          </TouchableOpacity>
+        </View>
+
+        {loading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={Colors.brand.primary} />
+            <Text style={styles.loadingText}>Processando...</Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      <SafeAreaView style={{ flex: 1 }}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Voltar"
+          >
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Biometria Facial</Text>
+          <View style={{ width: 44 }} />
+        </View>
+
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* PROGRESSO */}
+          <View style={styles.progressContainer}>
+            {ETAPAS.map((e, i) => (
+              <View key={e.angulo} style={styles.progressStep}>
+                <View style={[
+                  styles.progressDot,
+                  etapasConcluidas.has(e.angulo) && styles.progressDotDone,
+                  i === etapaAtual && !etapasConcluidas.has(e.angulo) && styles.progressDotActive,
+                ]}>
+                  {etapasConcluidas.has(e.angulo)
+                    ? <Ionicons name="checkmark" size={14} color="#fff" />
+                    : <Text style={styles.progressDotText}>{i + 1}</Text>
+                  }
+                </View>
+                <Text style={[
+                  styles.progressLabel,
+                  i === etapaAtual && styles.progressLabelActive,
+                ]}>{e.titulo}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* HERO */}
+          <View style={styles.heroSection}>
+            <View style={styles.heroIconBadge}>
+              <MaterialCommunityIcons name={etapa.icone} size={52} color={Colors.brand.primary} />
+            </View>
+            <Text style={styles.heroTitle}>{etapa.instrucao}</Text>
+            <Text style={styles.heroSubtitle}>
+              Ângulo {etapaAtual + 1} de {ETAPAS.length} — {etapaAtual === 0 ? "foto principal" : "ângulo adicional para maior precisão"}
+            </Text>
+          </View>
+
+          {/* LGPD — só na primeira etapa */}
+          {etapaAtual === 0 && (
+            <>
+              <Text style={styles.sectionLabel}>Privacidade</Text>
+              <View style={[styles.consentCard, consentimento && styles.consentCardActive]}>
+                <View style={styles.consentHeader}>
+                  <Ionicons name="shield-checkmark-outline" size={22} color={Colors.brand.primary} />
+                  <Text style={styles.consentTitle}>Consentimento LGPD</Text>
+                </View>
+                <Text style={styles.consentBody}>
+                  Autorizo o SCPI a coletar e processar minha imagem facial para{" "}
+                  <Text style={styles.consentBodyStrong}>controle de presença nas aulas</Text>. Os dados são armazenados de forma segura (AWS Rekognition + S3) e posso revogar este consentimento a qualquer momento pelo meu perfil. (LGPD art. 11)
+                </Text>
+                <TouchableOpacity
+                  style={styles.consentRow}
+                  onPress={() => setConsentimento((v) => !v)}
+                  activeOpacity={0.8}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <View style={[styles.checkbox, consentimento && styles.checkboxActive]}>
+                    {consentimento && <Ionicons name="checkmark" size={16} color="#fff" />}
+                  </View>
+                  <Text style={styles.consentCheckLabel}>Li e concordo com o tratamento dos meus dados biométricos.</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {/* BOTÃO PRINCIPAL */}
+          <TouchableOpacity
+            style={[styles.mainButton, etapaAtual === 0 && !consentimento && styles.mainButtonDisabled]}
+            onPress={() => (etapaAtual === 0 ? consentimento : true) && setCameraOpen(true)}
+            disabled={etapaAtual === 0 && !consentimento}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="camera" size={22} color="#fff" />
+            <Text style={styles.mainButtonText}>
+              {etapasConcluidas.has(etapa.angulo) ? "Refazer este ângulo" : `Capturar ${etapa.titulo}`}
+            </Text>
           </TouchableOpacity>
 
-          <View style={styles.scannerContainer}>
-            <Text style={styles.cameraHint}>
-               Posicione seu rosto dentro da moldura
-            </Text>
-
-            {/* MOLDURA OVAL COM A CÂMERA DENTRO */}
-            <View style={styles.faceFrameContainer}>
-              <View style={styles.ovalMask}>
-                <CameraView
-                  style={styles.cameraPreview}
-                  facing="front"
-                  ref={cameraRef}
-                />
-              </View>
-              {/* Borda decorativa azul */}
-              <View style={styles.faceFrameBorder} />
-            </View>
-          </View>
-
-          {/* BOTÕES DE CAPTURA (BASE) */}
-          <View style={styles.cameraControls}>
-            <TouchableOpacity
-              style={styles.captureBtn}
-              onPress={tirarFoto}
-              disabled={loading}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel="Tirar foto e atualizar face"
-            >
-              <View style={styles.captureBtnInner} />
-            </TouchableOpacity>
-          </View>
-
-          {loading && (
-            <View style={styles.loadingOverlay}>
-              <ActivityIndicator size="large" color={Colors.brand.primary} />
-              <Text style={styles.loadingText}>Processando Biometria...</Text>
-            </View>
+          {etapaAtual === 0 && !consentimento && (
+            <Text style={styles.hintText}>Marque o consentimento acima para continuar</Text>
           )}
-        </View>
-      ) : (
-        <SafeAreaView style={{ flex: 1 }}>
-          <View style={styles.header}>
+
+          {/* CONCLUIR ANTECIPADO — só após frontal estar concluído */}
+          {etapasConcluidas.has("frontal") && etapaAtual > 0 && (
             <TouchableOpacity
-              onPress={() => router.back()}
-              style={styles.backBtn}
+              style={styles.skipButton}
+              onPress={() => concluir(etapasConcluidas.size)}
               activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel="Voltar"
             >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Biometria Facial</Text>
-            <View style={{ width: 44 }} />
-          </View>
-
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.heroSection}>
-              <View style={styles.heroIconBadge}>
-                <MaterialCommunityIcons name="face-recognition" size={52} color={Colors.brand.primary} />
-              </View>
-              <Text style={styles.heroTitle}>Atualizar Scanner</Text>
-              <Text style={styles.heroSubtitle}>Sua face será re-indexada na AWS para garantir maior precisão.</Text>
-            </View>
-
-            <Text style={styles.sectionLabel}>Antes de começar</Text>
-            <View style={styles.instructionsContainer}>
-              <View style={styles.instructionItem}>
-                <View style={styles.iconCircle}>
-                  <Ionicons name="sunny-outline" size={18} color={Colors.brand.primary} />
-                </View>
-                <Text style={styles.instructionText}>Procure um ambiente bem iluminado</Text>
-              </View>
-
-              <View style={styles.instructionItem}>
-                <View style={styles.iconCircle}>
-                  <Ionicons name="glasses-outline" size={18} color={Colors.brand.primary} />
-                </View>
-                <Text style={styles.instructionText}>Remova óculos escuros e máscara</Text>
-              </View>
-
-              <View style={styles.instructionItem}>
-                <View style={styles.iconCircle}>
-                  <Ionicons name="person-outline" size={18} color={Colors.brand.primary} />
-                </View>
-                <Text style={styles.instructionText}>Mantenha uma expressão neutra</Text>
-              </View>
-            </View>
-
-            <Text style={styles.sectionLabel}>Privacidade</Text>
-            <View style={[styles.consentCard, consentimento && styles.consentCardActive]}>
-              <View style={styles.consentHeader}>
-                <Ionicons name="shield-checkmark-outline" size={22} color={Colors.brand.primary} />
-                <Text style={styles.consentTitle}>Consentimento LGPD</Text>
-              </View>
-              <Text style={styles.consentBody}>
-                Autorizo o SCPI a coletar e processar minha imagem facial para <Text style={styles.consentBodyStrong}>controle de presença nas aulas</Text>. Os dados são armazenados de forma segura (AWS Rekognition + S3) e posso revogar este consentimento a qualquer momento pelo meu perfil. (LGPD art. 11)
+              <Text style={styles.skipText}>
+                Concluir com {etapasConcluidas.size} ângulo{etapasConcluidas.size > 1 ? "s" : ""}
               </Text>
-              <TouchableOpacity
-                style={styles.consentRow}
-                onPress={() => setConsentimento((v) => !v)}
-                activeOpacity={0.8}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <View style={[styles.checkbox, consentimento && styles.checkboxActive]}>
-                  {consentimento && <Ionicons name="checkmark" size={16} color="#fff" />}
-                </View>
-                <Text style={styles.consentCheckLabel}>Li e concordo com o tratamento dos meus dados biométricos.</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.mainButton, !consentimento && styles.mainButtonDisabled]}
-              onPress={() => consentimento && setCameraOpen(true)}
-              disabled={!consentimento}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="camera" size={22} color="#fff" />
-              <Text style={styles.mainButtonText}>Atualizar Face</Text>
             </TouchableOpacity>
-            {!consentimento && (
-              <Text style={styles.hintText}>Marque o consentimento acima para continuar</Text>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      )}
+          )}
+        </ScrollView>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.brand.background },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: 60 },
   headerTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
   backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.brand.card, justifyContent: "center", alignItems: "center" },
   scrollContent: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 40 },
-  heroSection: { alignItems: "center", marginBottom: 28, marginTop: 8 },
+  progressContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 28, marginTop: 8 },
+  progressStep: { alignItems: "center", flex: 1 },
+  progressDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.brand.card, borderWidth: 2, borderColor: "rgba(255,255,255,0.1)", justifyContent: "center", alignItems: "center", marginBottom: 6 },
+  progressDotActive: { borderColor: Colors.brand.primary },
+  progressDotDone: { backgroundColor: Colors.brand.primary, borderColor: Colors.brand.primary },
+  progressDotText: { color: Colors.brand.textSecondary, fontSize: 13, fontWeight: "700" },
+  progressLabel: { color: Colors.brand.textSecondary, fontSize: 10, fontWeight: "600", textAlign: "center" },
+  progressLabelActive: { color: Colors.brand.primary },
+  heroSection: { alignItems: "center", marginBottom: 28 },
   heroIconBadge: { width: 96, height: 96, borderRadius: 48, backgroundColor: "rgba(75, 57, 239, 0.12)", justifyContent: "center", alignItems: "center", marginBottom: 16, borderWidth: 1, borderColor: "rgba(75, 57, 239, 0.25)" },
-  heroTitle: { color: "#fff", fontSize: 24, fontWeight: "800", textAlign: "center" },
-  heroSubtitle: { color: Colors.brand.textSecondary, fontSize: 14, textAlign: "center", marginTop: 6, paddingHorizontal: 16, lineHeight: 20 },
+  heroTitle: { color: "#fff", fontSize: 20, fontWeight: "800", textAlign: "center" },
+  heroSubtitle: { color: Colors.brand.textSecondary, fontSize: 13, textAlign: "center", marginTop: 6, paddingHorizontal: 16, lineHeight: 20 },
   sectionLabel: { color: Colors.brand.textSecondary, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 12, marginLeft: 4 },
-  instructionsContainer: { gap: 10, marginBottom: 24 },
-  instructionItem: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "rgba(255,255,255,0.03)", paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14 },
-  iconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(75, 57, 239, 0.12)", justifyContent: "center", alignItems: "center" },
-  instructionText: { flex: 1, color: Colors.brand.text, fontSize: 14, fontWeight: "500" },
   mainButton: { backgroundColor: Colors.brand.primary, height: 56, borderRadius: 16, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 8, shadowColor: Colors.brand.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   mainButtonDisabled: { opacity: 0.35, shadowOpacity: 0 },
   mainButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   hintText: { color: Colors.brand.textSecondary, fontSize: 12, textAlign: "center", marginTop: 12, fontStyle: "italic" },
+  skipButton: { marginTop: 16, alignItems: "center", paddingVertical: 12 },
+  skipText: { color: Colors.brand.textSecondary, fontSize: 14, fontWeight: "600", textDecorationLine: "underline" },
   consentCard: { backgroundColor: Colors.brand.card, borderRadius: 18, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
   consentCardActive: { borderColor: Colors.brand.primary, backgroundColor: "rgba(75, 57, 239, 0.06)" },
   consentHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
@@ -309,5 +359,5 @@ const styles = StyleSheet.create({
   loadingText: { color: "#fff", marginTop: 20, fontSize: 16, fontWeight: "700" },
   permissionText: { color: Colors.brand.textSecondary, textAlign: "center", marginVertical: 20, fontSize: 16 },
   primaryButton: { backgroundColor: Colors.brand.primary, paddingHorizontal: 30, paddingVertical: 15, borderRadius: 12 },
-  buttonText: { color: "#fff", fontWeight: "700" }
+  buttonText: { color: "#fff", fontWeight: "700" },
 });

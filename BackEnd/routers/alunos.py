@@ -23,7 +23,9 @@ from repositories.alunos import (
 from repositories.chamadas import listar_historico_chamadas_aluno
 from repositories.horarios import listar_aulas_hoje_por_aluno
 from repositories.rostos import (
+    contar_rostos_ativos_por_aluno,
     existe_qualquer_rosto_por_aluno,
+    listar_rostos_ativos_por_aluno,
     obter_path_biometria_por_usuario,
     obter_rosto_ativo_por_aluno,
     revogar_rosto_por_aluno,
@@ -161,6 +163,7 @@ async def cadastrar_aluno_api(
     ra: str = Form(..., pattern=r"^[A-Za-z0-9]{4,20}$"),
     foto: UploadFile = File(...),
     consentimento_biometrico: bool = Form(...),
+    angulo: str = Form("frontal"),
     current_user: dict = Depends(get_current_user),
 ):
     """Recebe dados e foto do App, salva no S3, indexa no Rekognition e salva no Banco."""
@@ -169,6 +172,10 @@ async def cadastrar_aluno_api(
             status_code=400,
             detail="É necessário consentimento explícito para processar dados biométricos (LGPD art. 11).",
         )
+
+    ANGULOS_VALIDOS = {"frontal", "esquerda", "direita", "baixo"}
+    if angulo not in ANGULOS_VALIDOS:
+        raise HTTPException(status_code=400, detail=f"Ângulo inválido. Use um de: {sorted(ANGULOS_VALIDOS)}")
 
     image_bytes = await validate_image_upload(foto)
 
@@ -213,10 +220,10 @@ async def cadastrar_aluno_api(
             raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado para este usuário.")
 
         aluno_id = aluno['aluno_id']
-        upsert_rosto(aluno_id, external_id, face_id, filename)
+        upsert_rosto(aluno_id, external_id, face_id, filename, angulo)
 
         os.remove(temp_file)
-        return {"status": "sucesso", "face_id": face_id, "external_id": external_id}
+        return {"status": "sucesso", "face_id": face_id, "external_id": external_id, "angulo": angulo}
 
     except HTTPException:
         if os.path.exists(temp_file):
@@ -246,6 +253,27 @@ def obter_foto_biometria(usuario_id: str, current_user: dict = Depends(get_curre
         raise internal_error(e, "obter_foto_biometria")
 
 
+@router.get("/alunos/status-angulos-face/{usuario_id}")
+def status_angulos_face(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    """Retorna quais ângulos já foram cadastrados para o aluno."""
+    require_self_or_admin(usuario_id, current_user)
+    try:
+        aluno = buscar_aluno_por_usuario_id(usuario_id)
+        if not aluno:
+            raise HTTPException(status_code=404, detail="Aluno não encontrado.")
+        rostos = listar_rostos_ativos_por_aluno(aluno["aluno_id"])
+        angulos_cadastrados = [r["angulo"] for r in rostos]
+        return {
+            "total": len(rostos),
+            "angulos_cadastrados": angulos_cadastrados,
+            "completo": len(rostos) >= 4,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "status_angulos_face")
+
+
 @router.delete("/aluno/biometria/{usuario_id}")
 def revogar_biometria(usuario_id: str, current_user: dict = Depends(get_current_user)):
     """Permite ao aluno (ou Admin) revogar consentimento e apagar biometria."""
@@ -255,20 +283,20 @@ def revogar_biometria(usuario_id: str, current_user: dict = Depends(get_current_
         if not aluno:
             raise HTTPException(status_code=404, detail="Aluno não encontrado.")
 
-        rosto = obter_rosto_ativo_por_aluno(aluno["aluno_id"])
-        if not rosto:
+        rostos = listar_rostos_ativos_por_aluno(aluno["aluno_id"])
+        if not rostos:
             raise HTTPException(status_code=404, detail="Nenhuma biometria ativa para este aluno.")
 
-        try:
-            deletar_rosto(rosto["face_id_rekognition"])
-        except Exception as e:
-            logger.warning("Falha ao deletar face no Rekognition: %s", e)
-
-        try:
-            if rosto.get("s3_path_cadastro"):
-                s3_client.delete_object(Bucket=BUCKET_NAME, Key=rosto["s3_path_cadastro"])
-        except Exception as e:
-            logger.warning("Falha ao deletar objeto no S3: %s", e)
+        for rosto in rostos:
+            try:
+                deletar_rosto(rosto["face_id_rekognition"])
+            except Exception as e:
+                logger.warning("Falha ao deletar face no Rekognition (angulo=%s): %s", rosto.get("angulo"), e)
+            try:
+                if rosto.get("s3_path_cadastro"):
+                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=rosto["s3_path_cadastro"])
+            except Exception as e:
+                logger.warning("Falha ao deletar objeto no S3 (angulo=%s): %s", rosto.get("angulo"), e)
 
         revogar_rosto_por_aluno(aluno["aluno_id"])
 
