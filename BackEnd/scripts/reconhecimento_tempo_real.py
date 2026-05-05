@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 class SistemaReconhecimento:
     def __init__(self):
+        if not _CAMERA_SALA:
+            raise ValueError("CAMERA_SALA não definido. Configure a variável de ambiente antes de iniciar.")
+
         self.rodando = False
         self.frame_atual = None
 
@@ -36,6 +39,7 @@ class SistemaReconhecimento:
 
         self.lock = threading.Lock()
         self._aws_pool = ThreadPoolExecutor(max_workers=4)
+        self._api_pool = ThreadPoolExecutor(max_workers=2)
         self.face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         )
@@ -62,7 +66,7 @@ class SistemaReconhecimento:
                 else:
                     logger.info(f"📋 Nenhuma chamada aberta em {_CAMERA_SALA} — {anteriores} presentes resetados.")
 
-    def _registrar_presenca(self, external_image_id, face_id):
+    def _registrar_presenca(self, external_image_id):
         try:
             resp = requests.post(
                 f"{_API_URL}/chamadas/registrar_presenca_camera",
@@ -89,23 +93,18 @@ class SistemaReconhecimento:
                 return
 
             match = response['FaceMatches'][0]
-            face_id = match['Face']['FaceId']
             aluno_external_id = match['Face']['ExternalImageId']
 
             with self.lock:
                 # Evita registrar se a chamada mudou enquanto a AWS processava
                 if self.chamada_id_atual != chamada_id_referencia:
                     return
-                if face_id in self.presentes_chamada:
+                if aluno_external_id in self.presentes_chamada:
                     return
-                self.presentes_chamada.add(face_id)
+                self.presentes_chamada.add(aluno_external_id)
 
             logger.info(f"🎯 Reconhecido: {aluno_external_id}")
-            threading.Thread(
-                target=self._registrar_presenca,
-                args=(aluno_external_id, face_id),
-                daemon=True,
-            ).start()
+            self._api_pool.submit(self._registrar_presenca, aluno_external_id)
 
         except botocore.exceptions.ClientError as e:
             code = e.response["Error"]["Code"]
@@ -121,53 +120,55 @@ class SistemaReconhecimento:
         ultimo_envio = 0
 
         while self.rodando:
-            with self.lock:
-                chamada_atual = self.chamada_id_atual
-            if chamada_atual is None:
-                time.sleep(0.5)
-                continue
+            try:
+                with self.lock:
+                    chamada_atual = self.chamada_id_atual
+                    frame = self.frame_atual
 
-            with self.lock:
-                frame = self.frame_atual
-            if frame is None:
-                time.sleep(0.01)
-                continue
-            img_para_processar = frame.copy()
-
-            # 1. DETECÇÃO INSTANTÂNEA: O OpenCV roda em todos os frames livremente
-            gray = cv2.cvtColor(img_para_processar, cv2.COLOR_BGR2GRAY)
-            rostos_detectados = self.face_cascade.detectMultiScale(gray, 1.1, 5)
-
-            if len(rostos_detectados) == 0:
-                time.sleep(0.03) # Pausa mínima apenas para aliviar a CPU
-                continue
-
-            # 2. CONTROLE DE ENVIO: Trava de tempo movida para CAIR APENAS na AWS
-            agora = time.time()
-            if agora - ultimo_envio < self.INTERVALO_ENVIO_AWS:
-                time.sleep(0.03)
-                continue
-
-            ultimo_envio = agora
-            with self.lock:
-                chamada_id_captura = self.chamada_id_atual
-
-            h_img, w_img = img_para_processar.shape[:2]
-            for (x, y, w, h) in rostos_detectados:
-                margin = int(0.2 * max(w, h))
-                x1 = max(0, x - margin)
-                y1 = max(0, y - margin)
-                x2 = min(w_img, x + w + margin)
-                y2 = min(h_img, y + h + margin)
-
-                face_crop = img_para_processar[y1:y2, x1:x2]
-                ret, buffer = cv2.imencode('.jpg', face_crop)
-                if not ret:
+                if chamada_atual is None:
+                    time.sleep(0.5)
                     continue
-                face_bytes = buffer.tobytes()
 
-                # 3. ENVIO ASSÍNCRONO: Lança a requisição em background e libera o loop para o próximo frame
-                self._aws_pool.submit(self._enviar_para_aws, face_bytes, chamada_id_captura)
+                if frame is None:
+                    time.sleep(0.01)
+                    continue
+
+                img_para_processar = frame.copy()
+                gray = cv2.cvtColor(img_para_processar, cv2.COLOR_BGR2GRAY)
+                rostos_detectados = self.face_cascade.detectMultiScale(gray, 1.1, 5)
+
+                if len(rostos_detectados) == 0:
+                    time.sleep(0.03)
+                    continue
+
+                agora = time.time()
+                if agora - ultimo_envio < self.INTERVALO_ENVIO_AWS:
+                    time.sleep(0.03)
+                    continue
+
+                ultimo_envio = agora
+                with self.lock:
+                    chamada_id_captura = self.chamada_id_atual
+
+                h_img, w_img = img_para_processar.shape[:2]
+                for (x, y, w, h) in rostos_detectados:
+                    margin = int(0.2 * max(w, h))
+                    x1 = max(0, x - margin)
+                    y1 = max(0, y - margin)
+                    x2 = min(w_img, x + w + margin)
+                    y2 = min(h_img, y + h + margin)
+
+                    face_crop = img_para_processar[y1:y2, x1:x2]
+                    ret, buffer = cv2.imencode('.jpg', face_crop)
+                    if not ret:
+                        continue
+                    face_bytes = buffer.tobytes()
+
+                    self._aws_pool.submit(self._enviar_para_aws, face_bytes, chamada_id_captura)
+
+            except Exception as e:
+                logger.error(f"Erro no loop de processamento visual: {e}")
+                time.sleep(0.1)
 
     def iniciar(self):
         self.rodando = True
@@ -227,6 +228,8 @@ class SistemaReconhecimento:
 
         finally:
             self.rodando = False
+            self._aws_pool.shutdown(wait=False)
+            self._api_pool.shutdown(wait=False)
             if cap is not None:
                 cap.release()
             logger.info("Sistema de reconhecimento encerrado.")
