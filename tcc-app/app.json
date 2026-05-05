@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "tcc-app",
-    "slug": "tcc-app",
+    "name": "SCPI",
+    "slug": "scpi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "tccapp",
+    "scheme": "scpi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
