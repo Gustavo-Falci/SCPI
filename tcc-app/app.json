@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "SCPI",
-    "slug": "scpi",
+    "slug": "tcc-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
