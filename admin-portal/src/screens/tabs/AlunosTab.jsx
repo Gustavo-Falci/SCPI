@@ -69,12 +69,12 @@ export function AlunosTab({ showToast, showConfirm, onCreatedComSenha }) {
             </h3>
             <form onSubmit={handleCreate} className="space-y-4">
               <InputGroup label="Nome Completo">
-                <input required minLength={3} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Maria Souza" value={novoAluno.nome} onChange={(e) => setNovoAluno({ ...novoAluno, nome: e.target.value })} />
+                <input required minLength={3} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: Nome do aluno" value={novoAluno.nome} onChange={(e) => setNovoAluno({ ...novoAluno, nome: e.target.value })} />
               </InputGroup>
               <InputGroup label="Email">
                 <input required type="email" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="aluno@scpi.com" value={novoAluno.email} onChange={(e) => setNovoAluno({ ...novoAluno, email: e.target.value })} />
               </InputGroup>
-              <InputGroup label="RA">
+              <InputGroup label="RA/CPF">
                 <input required pattern="^[A-Za-z0-9]{4,20}$" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#4B39EF] transition-all" placeholder="Ex: 202400123" value={novoAluno.ra} onChange={(e) => setNovoAluno({ ...novoAluno, ra: e.target.value })} />
               </InputGroup>
               <InputGroup label="Turno">
@@ -111,7 +111,7 @@ export function AlunosTab({ showToast, showConfirm, onCreatedComSenha }) {
                 <tr className="bg-white/[0.03] text-gray-500 uppercase text-xs tracking-[0.2em]">
                   <th className="px-5 py-4 w-[30%]">Nome</th>
                   <th className="px-5 py-4 w-[30%]">Email</th>
-                  <th className="px-5 py-4 w-[15%]">RA</th>
+                  <th className="px-5 py-4 w-[15%]">RA/CPF</th>
                   <th className="px-5 py-4 w-[15%]">Turno</th>
                   <th className="px-5 py-4 w-[10%]">Ações</th>
                 </tr>
