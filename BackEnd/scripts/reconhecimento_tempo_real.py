@@ -9,6 +9,7 @@ import logging
 import os
 import requests
 import botocore.exceptions
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv, find_dotenv
 from core.config import COLLECTION_ID, AWS_REGION
 from infra.aws_clientes import rekognition_client
@@ -34,6 +35,7 @@ class SistemaReconhecimento:
         self.presentes_chamada: set = set()
 
         self.lock = threading.Lock()
+        self._aws_pool = ThreadPoolExecutor(max_workers=4)
         self.face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         )
@@ -73,34 +75,82 @@ class SistemaReconhecimento:
         except Exception as e:
             logger.error(f"Erro ao registrar presença via API: {e}")
 
-    def _thread_aws_rekognition(self):
+    def _enviar_para_aws(self, face_bytes, chamada_id_referencia):
+        """Função separada para lidar com a AWS sem travar o OpenCV"""
+        try:
+            response = rekognition_client.search_faces_by_image(
+                CollectionId=COLLECTION_ID,
+                Image={'Bytes': face_bytes},
+                MaxFaces=1,
+                FaceMatchThreshold=85,
+            )
+
+            if not response['FaceMatches']:
+                return
+
+            match = response['FaceMatches'][0]
+            face_id = match['Face']['FaceId']
+            aluno_external_id = match['Face']['ExternalImageId']
+
+            with self.lock:
+                # Evita registrar se a chamada mudou enquanto a AWS processava
+                if self.chamada_id_atual != chamada_id_referencia:
+                    return
+                if face_id in self.presentes_chamada:
+                    return
+                self.presentes_chamada.add(face_id)
+
+            logger.info(f"🎯 Reconhecido: {aluno_external_id}")
+            threading.Thread(
+                target=self._registrar_presenca,
+                args=(aluno_external_id, face_id),
+                daemon=True,
+            ).start()
+
+        except botocore.exceptions.ClientError as e:
+            code = e.response["Error"]["Code"]
+            msg = e.response["Error"]["Message"]
+            if code == "InvalidParameterException" and "no faces" in msg.lower():
+                logger.debug("Haar falso positivo ignorado: sem rosto válido no crop.")
+            else:
+                logger.error(f"Erro AWS (face individual): {code} - {msg}")
+        except Exception as e:
+            logger.error(f"Erro AWS (face individual): {e}")
+
+    def _thread_processamento_visual(self):
         ultimo_envio = 0
 
         while self.rodando:
-            # Sem chamada aberta → aguarda sem custo AWS
-            if self.chamada_id_atual is None:
+            with self.lock:
+                chamada_atual = self.chamada_id_atual
+            if chamada_atual is None:
                 time.sleep(0.5)
                 continue
 
-            agora = time.time()
-            if agora - ultimo_envio < self.INTERVALO_ENVIO_AWS:
-                time.sleep(0.1)
-                continue
-
             with self.lock:
-                if self.frame_atual is None:
-                    time.sleep(0.1)
-                    continue
-                img_para_processar = self.frame_atual.copy()
+                frame = self.frame_atual
+            if frame is None:
+                time.sleep(0.01)
+                continue
+            img_para_processar = frame.copy()
 
+            # 1. DETECÇÃO INSTANTÂNEA: O OpenCV roda em todos os frames livremente
             gray = cv2.cvtColor(img_para_processar, cv2.COLOR_BGR2GRAY)
             rostos_detectados = self.face_cascade.detectMultiScale(gray, 1.1, 5)
 
             if len(rostos_detectados) == 0:
-                time.sleep(0.2)
+                time.sleep(0.03) # Pausa mínima apenas para aliviar a CPU
+                continue
+
+            # 2. CONTROLE DE ENVIO: Trava de tempo movida para CAIR APENAS na AWS
+            agora = time.time()
+            if agora - ultimo_envio < self.INTERVALO_ENVIO_AWS:
+                time.sleep(0.03)
                 continue
 
             ultimo_envio = agora
+            with self.lock:
+                chamada_id_captura = self.chamada_id_atual
 
             h_img, w_img = img_para_processar.shape[:2]
             for (x, y, w, h) in rostos_detectados:
@@ -116,49 +166,13 @@ class SistemaReconhecimento:
                     continue
                 face_bytes = buffer.tobytes()
 
-                try:
-                    response = rekognition_client.search_faces_by_image(
-                        CollectionId=COLLECTION_ID,
-                        Image={'Bytes': face_bytes},
-                        MaxFaces=1,
-                        FaceMatchThreshold=85,
-                    )
-
-                    if not response['FaceMatches']:
-                        continue
-
-                    match = response['FaceMatches'][0]
-                    face_id = match['Face']['FaceId']
-                    aluno_external_id = match['Face']['ExternalImageId']
-
-                    with self.lock:
-                        if self.chamada_id_atual is None:
-                            continue
-                        if face_id in self.presentes_chamada:
-                            continue
-                        self.presentes_chamada.add(face_id)
-
-                    logger.info(f"🎯 Reconhecido: {aluno_external_id}")
-                    threading.Thread(
-                        target=self._registrar_presenca,
-                        args=(aluno_external_id, face_id),
-                        daemon=True,
-                    ).start()
-
-                except botocore.exceptions.ClientError as e:
-                    code = e.response["Error"]["Code"]
-                    msg = e.response["Error"]["Message"]
-                    if code == "InvalidParameterException" and "no faces" in msg.lower():
-                        logger.debug("Haar falso positivo ignorado: sem rosto válido no crop.")
-                    else:
-                        logger.error(f"Erro AWS (face individual): {code} - {msg}")
-                except Exception as e:
-                    logger.error(f"Erro AWS (face individual): {e}")
+                # 3. ENVIO ASSÍNCRONO: Lança a requisição em background e libera o loop para o próximo frame
+                self._aws_pool.submit(self._enviar_para_aws, face_bytes, chamada_id_captura)
 
     def iniciar(self):
         self.rodando = True
         cap = None
-        t_aws = None
+        t_proc = None
         ultima_sync = 0
         INTERVALO_SYNC = 5
 
@@ -184,10 +198,11 @@ class SistemaReconhecimento:
                             continue
                         logger.info("📷 Câmera ligada.")
 
-                    if t_aws is None or not t_aws.is_alive():
-                        t_aws = threading.Thread(target=self._thread_aws_rekognition)
-                        t_aws.daemon = True
-                        t_aws.start()
+                    # Nome da thread atualizado
+                    if t_proc is None or not t_proc.is_alive():
+                        t_proc = threading.Thread(target=self._thread_processamento_visual)
+                        t_proc.daemon = True
+                        t_proc.start()
 
                     ret, frame = cap.read()
                     if not ret:
