@@ -25,6 +25,13 @@ import { Colors } from "../../constants/theme";
 
 const { height } = Dimensions.get("window");
 
+const ETAPAS = [
+  { angulo: "frontal", titulo: "Frontal", instrucao: "Olhe direto para a câmera", icone: "face-recognition" as const },
+  { angulo: "esquerda", titulo: "Perfil Esquerdo", instrucao: "Vire levemente para a esquerda (~30°)", icone: "face-man" as const },
+  { angulo: "direita", titulo: "Perfil Direito", instrucao: "Vire levemente para a direita (~30°)", icone: "face-man" as const },
+  { angulo: "baixo", titulo: "Olhar para Baixo", instrucao: "Olhe levemente para baixo (simule ler o celular)", icone: "face-man" as const },
+];
+
 export default function PrimeiroAcesso() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -43,6 +50,8 @@ export default function PrimeiroAcesso() {
   const cameraRef = useRef<CameraView | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [consentimento, setConsentimento] = useState(false);
+  const [etapaAtual, setEtapaAtual] = useState(0);
+  const [etapasConcluidas, setEtapasConcluidas] = useState<Set<string>>(new Set());
   const [userData, setUserData] = useState<any>(null);
 
   useEffect(() => {
@@ -101,7 +110,18 @@ export default function PrimeiroAcesso() {
     }
   };
 
-  const tirarFotoECadastrar = async () => {
+  const etapa = ETAPAS[etapaAtual];
+
+  const concluir = async (totalConcluidas: number) => {
+    await storage.setItem("face_cadastrada", "true");
+    Alert.alert(
+      "Cadastro Concluído!",
+      `${totalConcluidas} ângulo${totalConcluidas > 1 ? "s" : ""} cadastrado${totalConcluidas > 1 ? "s" : ""}. O reconhecimento será mais preciso.`,
+      [{ text: "OK", onPress: () => router.replace("/aluno/home") }]
+    );
+  };
+
+  const tirarFoto = async () => {
     if (!cameraRef.current || isLoading) return;
     if (!userData?.email || !userData?.ra) {
       Alert.alert("Erro de Dados", "Seus dados (Email/RA) não foram localizados. Faça logout e entre novamente.");
@@ -121,28 +141,30 @@ export default function PrimeiroAcesso() {
       formData.append("nome", userData?.nome || "Aluno");
       formData.append("email", userData?.email || "");
       formData.append("ra", userData?.ra || "");
+      formData.append("angulo", etapa.angulo);
 
       const localUri = photo.uri;
       const filename = localUri.split("/").pop() || "face.jpg";
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : `image/jpeg`;
 
-      formData.append("foto", {
-        uri: localUri,
-        name: filename,
-        type,
-      } as any);
+      formData.append("foto", { uri: localUri, name: filename, type } as any);
       formData.append("consentimento_biometrico", "true");
 
-      console.log("[face] uri:", localUri, "type:", type, "userData:", JSON.stringify(userData));
       await apiPostFormData("/alunos/cadastrar-face", formData);
 
-      await storage.setItem("face_cadastrada", "true");
-      Alert.alert("Tudo pronto!", "Sua biometria facial foi cadastrada com sucesso!");
-      router.replace("/aluno/home");
+      const novasConcluidas = new Set(etapasConcluidas);
+      novasConcluidas.add(etapa.angulo);
+      setEtapasConcluidas(novasConcluidas);
+      setCameraOpen(false);
+
+      if (etapaAtual < ETAPAS.length - 1) {
+        setEtapaAtual(etapaAtual + 1);
+      } else {
+        await concluir(novasConcluidas.size);
+      }
     } catch (error: any) {
       Alert.alert("Erro", error.message || "Não foi possível processar sua face. Tente novamente.");
-      setCameraOpen(false);
     } finally {
       setIsLoading(false);
     }
@@ -192,7 +214,7 @@ export default function PrimeiroAcesso() {
             </TouchableOpacity>
 
             <View style={styles.scannerContainer}>
-              <Text style={styles.cameraHint}>Posicione seu rosto dentro da moldura</Text>
+              <Text style={styles.cameraHint}>{etapa.instrucao}</Text>
 
               <View style={styles.faceFrameContainer}>
                 <View style={styles.ovalMask}>
@@ -205,11 +227,11 @@ export default function PrimeiroAcesso() {
             <View style={styles.cameraControls}>
               <TouchableOpacity
                 style={styles.captureBtn}
-                onPress={tirarFotoECadastrar}
+                onPress={tirarFoto}
                 disabled={isLoading}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityLabel="Tirar foto e cadastrar face"
+                accessibilityLabel="Capturar foto"
               >
                 <View style={styles.captureBtnInner} />
               </TouchableOpacity>
@@ -218,7 +240,7 @@ export default function PrimeiroAcesso() {
             {isLoading && (
               <View style={styles.loadingOverlay}>
                 <ActivityIndicator size="large" color={Colors.brand.primary} />
-                <Text style={styles.loadingText}>Processando Biometria...</Text>
+                <Text style={styles.loadingText}>Processando...</Text>
               </View>
             )}
           </View>
@@ -235,78 +257,97 @@ export default function PrimeiroAcesso() {
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
+              {/* PROGRESSO */}
+              <View style={styles.progressContainer}>
+                {ETAPAS.map((e, i) => (
+                  <View key={e.angulo} style={styles.progressStep}>
+                    <View style={[
+                      styles.progressDot,
+                      etapasConcluidas.has(e.angulo) && styles.progressDotDone,
+                      i === etapaAtual && !etapasConcluidas.has(e.angulo) && styles.progressDotActive,
+                    ]}>
+                      {etapasConcluidas.has(e.angulo)
+                        ? <Ionicons name="checkmark" size={14} color="#fff" />
+                        : <Text style={styles.progressDotText}>{i + 1}</Text>
+                      }
+                    </View>
+                    <Text style={[
+                      styles.progressLabel,
+                      i === etapaAtual && styles.progressLabelActive,
+                    ]}>{e.titulo}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* HERO */}
               <View style={styles.heroSection}>
                 <View style={styles.heroIconBadge}>
-                  <MaterialCommunityIcons name="face-recognition" size={52} color={Colors.brand.primary} />
+                  <MaterialCommunityIcons name={etapa.icone} size={52} color={Colors.brand.primary} />
                 </View>
-                <Text style={styles.heroTitle}>Complete seu Cadastro</Text>
+                <Text style={styles.heroTitle}>{etapa.instrucao}</Text>
                 <Text style={styles.heroSubtitle}>
-                  Cadastre seu rosto para registrar presença nas aulas automaticamente.
+                  Ângulo {etapaAtual + 1} de {ETAPAS.length} — {etapaAtual === 0 ? "foto principal" : "ângulo adicional para maior precisão"}
                 </Text>
               </View>
 
-              <Text style={styles.faceSectionLabel}>Antes de começar</Text>
-              <View style={styles.instructionsContainer}>
-                <View style={styles.instructionItem}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons name="sunny-outline" size={18} color={Colors.brand.primary} />
+              {/* LGPD — só na primeira etapa */}
+              {etapaAtual === 0 && (
+                <>
+                  <Text style={styles.faceSectionLabel}>Privacidade</Text>
+                  <View style={[styles.consentCard, consentimento && styles.consentCardActive]}>
+                    <View style={styles.consentHeader}>
+                      <Ionicons name="shield-checkmark-outline" size={22} color={Colors.brand.primary} />
+                      <Text style={styles.consentTitle}>Consentimento LGPD</Text>
+                    </View>
+                    <Text style={styles.consentBody}>
+                      Autorizo o SCPI a coletar e processar minha imagem facial para{" "}
+                      <Text style={styles.consentBodyStrong}>controle de presença nas aulas</Text>. Os dados são
+                      armazenados de forma segura (AWS Rekognition + S3) e posso revogar este consentimento a
+                      qualquer momento pelo meu perfil. (LGPD art. 11)
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.consentRow}
+                      onPress={() => setConsentimento((v) => !v)}
+                      activeOpacity={0.8}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <View style={[styles.checkbox, consentimento && styles.checkboxActive]}>
+                        {consentimento && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                      <Text style={styles.consentCheckLabel}>
+                        Li e concordo com o tratamento dos meus dados biométricos.
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                  <Text style={styles.instructionText}>Procure um ambiente bem iluminado</Text>
-                </View>
-
-                <View style={styles.instructionItem}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons name="glasses-outline" size={18} color={Colors.brand.primary} />
-                  </View>
-                  <Text style={styles.instructionText}>Remova óculos escuros e máscara</Text>
-                </View>
-
-                <View style={styles.instructionItem}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons name="person-outline" size={18} color={Colors.brand.primary} />
-                  </View>
-                  <Text style={styles.instructionText}>Mantenha uma expressão neutra</Text>
-                </View>
-              </View>
-
-              <Text style={styles.faceSectionLabel}>Privacidade</Text>
-              <View style={[styles.consentCard, consentimento && styles.consentCardActive]}>
-                <View style={styles.consentHeader}>
-                  <Ionicons name="shield-checkmark-outline" size={22} color={Colors.brand.primary} />
-                  <Text style={styles.consentTitle}>Consentimento LGPD</Text>
-                </View>
-                <Text style={styles.consentBody}>
-                  Autorizo o SCPI a coletar e processar minha imagem facial para{" "}
-                  <Text style={styles.consentBodyStrong}>controle de presença nas aulas</Text>. Os dados são
-                  armazenados de forma segura (AWS Rekognition + S3) e posso revogar este consentimento a
-                  qualquer momento pelo meu perfil. (LGPD art. 11)
-                </Text>
-                <TouchableOpacity
-                  style={styles.consentRow}
-                  onPress={() => setConsentimento((v) => !v)}
-                  activeOpacity={0.8}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <View style={[styles.checkbox, consentimento && styles.checkboxActive]}>
-                    {consentimento && <Ionicons name="checkmark" size={16} color="#fff" />}
-                  </View>
-                  <Text style={styles.consentCheckLabel}>
-                    Li e concordo com o tratamento dos meus dados biométricos.
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                </>
+              )}
 
               <TouchableOpacity
-                style={[styles.mainButton, !consentimento && styles.mainButtonDisabled]}
-                onPress={() => consentimento && setCameraOpen(true)}
-                disabled={!consentimento}
+                style={[styles.mainButton, etapaAtual === 0 && !consentimento && styles.mainButtonDisabled]}
+                onPress={() => (etapaAtual === 0 ? consentimento : true) && setCameraOpen(true)}
+                disabled={etapaAtual === 0 && !consentimento}
                 activeOpacity={0.85}
               >
                 <Ionicons name="camera" size={22} color="#fff" />
-                <Text style={styles.mainButtonText}>Cadastrar Face</Text>
+                <Text style={styles.mainButtonText}>
+                  {etapasConcluidas.has(etapa.angulo) ? "Refazer este ângulo" : `Capturar ${etapa.titulo}`}
+                </Text>
               </TouchableOpacity>
-              {!consentimento && (
+
+              {etapaAtual === 0 && !consentimento && (
                 <Text style={styles.hintText}>Marque o consentimento acima para continuar</Text>
+              )}
+
+              {etapasConcluidas.has("frontal") && etapaAtual > 0 && (
+                <TouchableOpacity
+                  style={styles.skipButton}
+                  onPress={() => concluir(etapasConcluidas.size)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.skipText}>
+                    Concluir com {etapasConcluidas.size} ângulo{etapasConcluidas.size > 1 ? "s" : ""}
+                  </Text>
+                </TouchableOpacity>
               )}
             </ScrollView>
           </SafeAreaView>
@@ -491,6 +532,16 @@ const styles = StyleSheet.create({
   },
 
   // Face step
+  progressContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 28, marginTop: 8 },
+  progressStep: { alignItems: "center", flex: 1 },
+  progressDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.brand.card, borderWidth: 2, borderColor: "rgba(255,255,255,0.1)", justifyContent: "center", alignItems: "center", marginBottom: 6 },
+  progressDotActive: { borderColor: Colors.brand.primary },
+  progressDotDone: { backgroundColor: Colors.brand.primary, borderColor: Colors.brand.primary },
+  progressDotText: { color: Colors.brand.textSecondary, fontSize: 13, fontWeight: "700" },
+  progressLabel: { color: Colors.brand.textSecondary, fontSize: 10, fontWeight: "600", textAlign: "center" },
+  progressLabelActive: { color: Colors.brand.primary },
+  skipButton: { marginTop: 16, alignItems: "center", paddingVertical: 12 },
+  skipText: { color: Colors.brand.textSecondary, fontSize: 14, fontWeight: "600", textDecorationLine: "underline" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40 },
   faceHeader: {
     flexDirection: "row",
