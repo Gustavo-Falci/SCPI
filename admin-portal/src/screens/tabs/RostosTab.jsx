@@ -331,7 +331,7 @@ export function RostosTab({ showToast, showConfirm }) {
                           <div className="w-9 h-9 bg-gradient-to-br from-[#4B39EF] to-[#5E47FF] rounded-xl flex items-center justify-center font-black text-white text-sm shadow-lg shrink-0">
                             {(r.external_image_id || '?').charAt(0).toUpperCase()}
                           </div>
-                          <p className="font-black text-white text-sm truncate max-w-[180px]" title={r.external_image_id || '—'}>
+                          <p className="font-black text-white text-sm truncate" title={r.external_image_id || '—'}>
                             {r.external_image_id || '—'}
                           </p>
                         </div>
