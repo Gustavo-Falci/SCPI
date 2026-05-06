@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Trash2, ScanFace, Database, ImageOff } from 'lucide-react';
+import { RefreshCw, Trash2, ScanFace, Database, ImageOff, ChevronLeft, ChevronRight } from 'lucide-react';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { usePagination } from '../../hooks/usePagination';
 import {
   listarRostosRekognition,
   listarRostosS3,
@@ -9,6 +10,33 @@ import {
   excluirRostoS3,
 } from '../../services/rostosService';
 import { extractErrorMessage } from '../../services/apiClient';
+
+const PAGE_SIZE = 15;
+
+function Paginacao({ page, totalPages, setPage }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-2 py-3 border-t border-white/5 flex-shrink-0">
+      <button
+        onClick={() => setPage((p) => Math.max(1, p - 1))}
+        disabled={page === 1}
+        className="w-8 h-8 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <ChevronLeft size={15} />
+      </button>
+      <span className="text-xs font-black text-gray-400 uppercase tracking-widest px-2">
+        {page} / {totalPages}
+      </span>
+      <button
+        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+        disabled={page === totalPages}
+        className="w-8 h-8 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <ChevronRight size={15} />
+      </button>
+    </div>
+  );
+}
 
 function formatarTamanho(bytes) {
   if (bytes === 0 || bytes == null) return '0 B';
@@ -74,6 +102,9 @@ export function RostosTab({ showToast, showConfirm }) {
     }
   }, [showToast]);
 
+  const { page: pageRostos, setPage: setPageRostos, totalPages: totalPagesRostos, paged: rostosPaged } = usePagination(rostos, PAGE_SIZE);
+  const { page: pageS3, setPage: setPageS3, totalPages: totalPagesS3, paged: arquivosPaged } = usePagination(arquivos, PAGE_SIZE);
+
   const toggleRosto = (face_id) =>
     setSelectedRostos((prev) => {
       const next = new Set(prev);
@@ -81,10 +112,19 @@ export function RostosTab({ showToast, showConfirm }) {
       return next;
     });
 
+  const todosRostosPaginaChecked = rostosPaged.length > 0 && rostosPaged.every((r) => selectedRostos.has(r.face_id));
+  const algunsRostosPaginaChecked = rostosPaged.some((r) => selectedRostos.has(r.face_id));
+
   const toggleAllRostos = () =>
-    setSelectedRostos((prev) =>
-      prev.size === rostos.length ? new Set() : new Set(rostos.map((r) => r.face_id))
-    );
+    setSelectedRostos((prev) => {
+      const next = new Set(prev);
+      if (todosRostosPaginaChecked) {
+        rostosPaged.forEach((r) => next.delete(r.face_id));
+      } else {
+        rostosPaged.forEach((r) => next.add(r.face_id));
+      }
+      return next;
+    });
 
   const toggleArquivo = (key) =>
     setSelectedArquivos((prev) => {
@@ -93,10 +133,19 @@ export function RostosTab({ showToast, showConfirm }) {
       return next;
     });
 
+  const todosArquivosPaginaChecked = arquivosPaged.length > 0 && arquivosPaged.every((a) => selectedArquivos.has(a.key));
+  const algunsArquivosPaginaChecked = arquivosPaged.some((a) => selectedArquivos.has(a.key));
+
   const toggleAllArquivos = () =>
-    setSelectedArquivos((prev) =>
-      prev.size === arquivos.length ? new Set() : new Set(arquivos.map((a) => a.key))
-    );
+    setSelectedArquivos((prev) => {
+      const next = new Set(prev);
+      if (todosArquivosPaginaChecked) {
+        arquivosPaged.forEach((a) => next.delete(a.key));
+      } else {
+        arquivosPaged.forEach((a) => next.add(a.key));
+      }
+      return next;
+    });
 
   useEffect(() => {
     fetchRostos();
@@ -245,13 +294,14 @@ export function RostosTab({ showToast, showConfirm }) {
             ) : rostos.length === 0 ? (
               <EmptyState icon={ScanFace} message="Nenhum rosto indexado" />
             ) : (
-              <table className="w-full text-left">
+              <table className="w-full text-left" style={{ tableLayout: 'fixed' }}>
                 <thead>
                   <tr className="bg-white/[0.03] text-gray-500 uppercase text-xs tracking-[0.2em]">
                     <th className="px-4 py-3 rounded-l-xl w-10">
                       <input
                         type="checkbox"
-                        checked={rostos.length > 0 && selectedRostos.size === rostos.length}
+                        checked={todosRostosPaginaChecked}
+                        ref={(el) => { if (el) el.indeterminate = algunsRostosPaginaChecked && !todosRostosPaginaChecked; }}
                         onChange={toggleAllRostos}
                         className="w-4 h-4 rounded accent-[#4B39EF] cursor-pointer"
                       />
@@ -262,7 +312,7 @@ export function RostosTab({ showToast, showConfirm }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {rostos.map((r) => (
+                  {rostosPaged.map((r) => (
                     <tr
                       key={r.face_id}
                       onClick={() => toggleRosto(r.face_id)}
@@ -309,6 +359,7 @@ export function RostosTab({ showToast, showConfirm }) {
               </table>
             )}
           </div>
+          <Paginacao page={pageRostos} totalPages={totalPagesRostos} setPage={setPageRostos} />
         </div>
 
         {/* S3 SECTION */}
@@ -360,7 +411,8 @@ export function RostosTab({ showToast, showConfirm }) {
                     <th className="px-4 py-3 rounded-l-xl w-10">
                       <input
                         type="checkbox"
-                        checked={arquivos.length > 0 && selectedArquivos.size === arquivos.length}
+                        checked={todosArquivosPaginaChecked}
+                        ref={(el) => { if (el) el.indeterminate = algunsArquivosPaginaChecked && !todosArquivosPaginaChecked; }}
                         onChange={toggleAllArquivos}
                         className="w-4 h-4 rounded accent-[#4B39EF] cursor-pointer"
                       />
@@ -372,7 +424,7 @@ export function RostosTab({ showToast, showConfirm }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {arquivos.map((a) => (
+                  {arquivosPaged.map((a) => (
                     <tr
                       key={a.key}
                       onClick={() => toggleArquivo(a.key)}
@@ -419,6 +471,7 @@ export function RostosTab({ showToast, showConfirm }) {
               </table>
             )}
           </div>
+          <Paginacao page={pageS3} totalPages={totalPagesS3} setPage={setPageS3} />
         </div>
 
       </div>
