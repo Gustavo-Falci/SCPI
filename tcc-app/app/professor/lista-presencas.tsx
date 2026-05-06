@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
-  Alert,
   StatusBar,
   Animated,
 } from "react-native";
@@ -17,10 +16,12 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { apiGet, apiPost } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 export default function ListaPresenca() {
   const { turma_id, turma_nome } = useLocalSearchParams();
   const router = useRouter();
+  const { showError, showSuccess } = useErrorToast();
 
   const [loading, setLoading] = useState(true);
   const [statusChamada, setStatusChamada] = useState<any>(null);
@@ -72,10 +73,10 @@ export default function ListaPresenca() {
     try {
       setClosing(true);
       await apiPost(`/chamadas/fechar/${turma_id}`, {});
-      Alert.alert("Sucesso", "Chamada encerrada e salva no histórico!");
-      router.back();
+      showSuccess("Chamada encerrada e salva no histórico.");
+      setTimeout(() => router.back(), 800);
     } catch (err: any) {
-      Alert.alert("Erro", err.message || "Erro ao fechar chamada");
+      showError(err, "Erro ao fechar chamada");
     } finally {
       setClosing(false);
     }
