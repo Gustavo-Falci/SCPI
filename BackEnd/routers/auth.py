@@ -212,7 +212,8 @@ def alterar_senha_primeiro_acesso(body: PrimeiroAcessoSenhaBody, current_user: d
 
 
 @router.post("/esqueci-senha")
-def esqueci_senha(body: EsqueciSenhaBody):
+@limiter.limit("3/minute")
+def esqueci_senha(request: Request, body: EsqueciSenhaBody):
     email = body.email.strip().lower()
     generic_response = {"mensagem": "Se o e-mail existir, um código de redefinição foi enviado."}
 
@@ -253,7 +254,8 @@ def esqueci_senha(body: EsqueciSenhaBody):
 
 
 @router.post("/verificar-codigo")
-def verificar_codigo(body: VerificarCodigoBody):
+@limiter.limit("5/minute")
+def verificar_codigo(request: Request, body: VerificarCodigoBody):
     email = body.email.strip().lower()
 
     row = buscar_codigo_reset_valido(email, body.codigo)
