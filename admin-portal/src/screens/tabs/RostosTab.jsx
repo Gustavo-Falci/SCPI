@@ -116,7 +116,9 @@ export function RostosTab({ showToast, showConfirm }) {
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(r);
     }
-    return Array.from(map.entries()).map(([nome, faces]) => ({ nome, faces }));
+    return Array.from(map.entries())
+      .map(([nome, faces]) => ({ nome, faces }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
   }, [rostos]);
 
   // Agrupar S3 por external_id extraído do key
@@ -127,12 +129,14 @@ export function RostosTab({ showToast, showConfirm }) {
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(a);
     }
-    return Array.from(map.entries()).map(([nome, files]) => ({
-      nome,
-      files,
-      totalSize: files.reduce((s, f) => s + (f.size || 0), 0),
-      ultimaData: files.map((f) => f.last_modified).filter(Boolean).sort().pop() || null,
-    }));
+    return Array.from(map.entries())
+      .map(([nome, files]) => ({
+        nome,
+        files,
+        totalSize: files.reduce((s, f) => s + (f.size || 0), 0),
+        ultimaData: files.map((f) => f.last_modified).filter(Boolean).sort().pop() || null,
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
   }, [arquivos]);
 
   const { page: pageRek, setPage: setPageRek, totalPages: totalPagesRek, paged: gruposRekPaged } =
