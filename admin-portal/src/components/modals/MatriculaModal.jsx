@@ -61,6 +61,25 @@ export function MatriculaModal({ turma, onClose, onSuccess, showToast }) {
     (a.ra || '').toLowerCase().includes(q)
   );
 
+  const selecionaveis = filtrados.filter((a) => {
+    const turnoIncompativel = turmaTurno && a.turno && a.turno !== turmaTurno;
+    return !a.ja_matriculado && !turnoIncompativel;
+  });
+  const todosSelecionados = selecionaveis.length > 0 && selecionaveis.every((a) => selectedAlunoIds.has(a.aluno_id));
+  const algunsSelecionados = selecionaveis.some((a) => selectedAlunoIds.has(a.aluno_id));
+
+  const toggleTodos = () => {
+    setSelectedAlunoIds((prev) => {
+      const next = new Set(prev);
+      if (todosSelecionados) {
+        selecionaveis.forEach((a) => next.delete(a.aluno_id));
+      } else {
+        selecionaveis.forEach((a) => next.add(a.aluno_id));
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={onClose}>
       <div className="bg-[#151718] rounded-[40px] border border-white/5 shadow-2xl max-w-3xl w-full p-10 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -88,6 +107,26 @@ export function MatriculaModal({ turma, onClose, onSuccess, showToast }) {
             onChange={(e) => setSearchAluno(e.target.value)}
           />
         </div>
+
+        {!loadingAlunos && selecionaveis.length > 0 && (
+          <label className="flex items-center gap-3 px-2 pb-3 mb-1 border-b border-white/5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={todosSelecionados}
+              ref={(el) => { if (el) el.indeterminate = algunsSelecionados && !todosSelecionados; }}
+              onChange={toggleTodos}
+              className="w-5 h-5 accent-[#4B39EF] cursor-pointer"
+            />
+            <span className="text-sm font-black text-gray-400 uppercase tracking-widest">
+              {todosSelecionados ? 'Desmarcar todos' : 'Selecionar todos'}
+            </span>
+            {algunsSelecionados && (
+              <span className="text-xs font-bold text-[#4B39EF]">
+                {selectedAlunoIds.size}/{selecionaveis.length}
+              </span>
+            )}
+          </label>
+        )}
 
         <div className="flex-1 overflow-y-auto space-y-3 -mx-2 px-2" style={{ minHeight: 200 }}>
           {loadingAlunos ? (
