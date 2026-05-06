@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,9 +15,11 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { apiGet, apiPost } from "../../services/api";
 import { storage } from "../../services/storage";
 import { Colors } from "../../constants/theme";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 export default function IniciarChamada() {
   const router = useRouter();
+  const { showError, showSuccess, showWarning } = useErrorToast();
   const [turmas, setTurmas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [openingTurmaId, setOpeningTurmaId] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export default function IniciarChamada() {
       setTurmas(response.turmas || []);
     } catch (err: any) {
       console.error("Erro carregar turmas:", err);
+      showError(err, "Falha ao carregar turmas");
     } finally {
       setLoading(false);
     }
@@ -44,7 +46,10 @@ export default function IniciarChamada() {
 
   const handleAbrirChamada = async (turmaId: string, nomeTurma: string, podeIniciar: boolean) => {
     if (!podeIniciar) {
-      Alert.alert("Acesso Negado", "Você só pode iniciar a chamada durante o horário oficial da aula.");
+      showWarning(
+        "Você só pode iniciar a chamada durante o horário oficial da aula.",
+        "Acesso negado"
+      );
       return;
     }
     if (openingTurmaId) return;
@@ -53,14 +58,14 @@ export default function IniciarChamada() {
       setOpeningTurmaId(turmaId);
       await apiPost("/chamadas/abrir", { turma_id: turmaId });
 
-      Alert.alert("Sucesso!", `Chamada biométrica iniciada para: ${nomeTurma}`);
+      showSuccess(`Chamada biométrica iniciada para: ${nomeTurma}`);
 
       router.replace({
         pathname: "/professor/lista-presencas",
         params: { turma_id: turmaId, turma_nome: nomeTurma },
       });
     } catch (err: any) {
-      Alert.alert("Erro", err.message || "Falha ao abrir a chamada.");
+      showError(err, "Falha ao abrir a chamada");
     } finally {
       setOpeningTurmaId(null);
     }

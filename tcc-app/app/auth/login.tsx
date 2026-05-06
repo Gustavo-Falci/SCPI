@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Dimensions,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -18,6 +17,7 @@ import { registerForPushNotificationsAsync } from "../../services/notifications"
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Colors } from "../../constants/theme";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 const { height } = Dimensions.get("window");
 
@@ -27,10 +27,11 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { showError, showWarning } = useErrorToast();
 
   const handleLogin = async () => {
     if (!email || !senha) {
-      Alert.alert("Erro", "Por favor, preencha todos os campos.");
+      showWarning("Por favor, preencha todos os campos.");
       return;
     }
 
@@ -59,10 +60,7 @@ export default function Login() {
         router.replace("/aluno/home");
       }
     } catch (error: any) {
-      Alert.alert(
-        "Falha no Login",
-        error.message || "E-mail ou senha incorretos.",
-      );
+      showError(error, "Falha no login");
     } finally {
       setIsLoading(false);
     }

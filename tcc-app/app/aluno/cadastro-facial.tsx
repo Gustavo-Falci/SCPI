@@ -6,7 +6,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Alert,
   ActivityIndicator,
   StatusBar,
   ScrollView,
@@ -16,6 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { storage } from "../../services/storage";
 import { apiPostFormData } from "../../services/api";
 import { Colors } from "../../constants/theme";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 const ETAPAS = [
   {
@@ -49,6 +49,7 @@ export default function CadastroFacial() {
   const params = useLocalSearchParams();
   const obrigatorio = params.obrigatorio === "true";
   const insets = useSafeAreaInsets();
+  const { showError, showSuccess } = useErrorToast();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraOpen, setCameraOpen] = useState(false);
   const cameraRef = useRef<CameraView | null>(null);
@@ -73,17 +74,20 @@ export default function CadastroFacial() {
 
   const concluir = async (totalConcluidas: number) => {
     await storage.setItem("face_cadastrada", "true");
-    Alert.alert(
-      "Cadastro Concluído!",
+    showSuccess(
       `${totalConcluidas} ângulo${totalConcluidas > 1 ? "s" : ""} cadastrado${totalConcluidas > 1 ? "s" : ""}. O reconhecimento será mais preciso.`,
-      [{ text: "OK", onPress: () => (obrigatorio ? router.replace("/aluno/home") : router.back()) }]
+      "Cadastro concluído!"
+    );
+    setTimeout(
+      () => (obrigatorio ? router.replace("/aluno/home") : router.back()),
+      1200
     );
   };
 
   const tirarFoto = async () => {
     if (!cameraRef.current || loading) return;
     if (!userData?.email || !userData?.ra) {
-      Alert.alert("Erro de Dados", "Seus dados não foram localizados. Faça logout e entre novamente.");
+      showError("Seus dados não foram localizados. Faça logout e entre novamente.", "Erro de dados");
       return;
     }
 
@@ -123,7 +127,7 @@ export default function CadastroFacial() {
         await concluir(novasConcluidas.size);
       }
     } catch (error: any) {
-      Alert.alert("Erro", error.message || "Não foi possível processar sua face. Tente novamente.");
+      showError(error, "Não foi possível processar sua face");
     } finally {
       setLoading(false);
     }

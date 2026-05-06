@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 import { storage } from '../services/storage';
 import { useEffect, useState } from 'react';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ErrorToastProvider } from '../hooks/useErrorToast';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -53,19 +54,21 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/login" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/primeiro-acesso" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/esqueci-senha" options={{ headerShown: false }} />
-        <Stack.Screen name="aluno/home" options={{ headerShown: false }} />
-        <Stack.Screen name="aluno/cadastro-facial" options={{ headerShown: false }} />
-        <Stack.Screen name="aluno/frequencia-detalhe" options={{ headerShown: false }} />
-        <Stack.Screen name="professor/home" options={{ headerShown: false }} />
-        <Stack.Screen name="professor/relatorios" options={{ headerShown: false }} />
-        <Stack.Screen name="professor/relatorio-detalhe" options={{ headerShown: false }} />
-      </Stack>
-      <StatusBar style="auto" />
+      <ErrorToastProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/primeiro-acesso" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/esqueci-senha" options={{ headerShown: false }} />
+          <Stack.Screen name="aluno/home" options={{ headerShown: false }} />
+          <Stack.Screen name="aluno/cadastro-facial" options={{ headerShown: false }} />
+          <Stack.Screen name="aluno/frequencia-detalhe" options={{ headerShown: false }} />
+          <Stack.Screen name="professor/home" options={{ headerShown: false }} />
+          <Stack.Screen name="professor/relatorios" options={{ headerShown: false }} />
+          <Stack.Screen name="professor/relatorio-detalhe" options={{ headerShown: false }} />
+        </Stack>
+        <StatusBar style="auto" />
+      </ErrorToastProvider>
     </ThemeProvider>
   );
 }

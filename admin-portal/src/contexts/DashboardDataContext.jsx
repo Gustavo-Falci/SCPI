@@ -4,10 +4,14 @@ import { listarProfessores } from '../services/professoresService';
 import { listarHorariosTodos } from '../services/horariosService';
 import { listarAlunos } from '../services/alunosService';
 import { listarRelatorios } from '../services/relatoriosService';
+import { extractErrorMessage } from '../services/apiClient';
+import { useToastContext } from './ToastContext';
 
 const DashboardDataContext = createContext(null);
 
 export function DashboardDataProvider({ children }) {
+  const { showError } = useToastContext();
+
   const [turmas, setTurmas] = useState([]);
   const [professores, setProfessores] = useState([]);
   const [grade, setGrade] = useState([]);
@@ -35,10 +39,11 @@ export function DashboardDataProvider({ children }) {
       setGrade(g);
     } catch (err) {
       console.error(err);
+      showError(`Falha ao carregar dados do painel: ${extractErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showError]);
 
   const refetchAlunos = useCallback(async () => {
     try {
@@ -46,8 +51,9 @@ export function DashboardDataProvider({ children }) {
       setAlunos(a);
     } catch (err) {
       console.error(err);
+      showError(`Falha ao carregar alunos: ${extractErrorMessage(err)}`);
     }
-  }, []);
+  }, [showError]);
 
   const refetchRelatorios = useCallback(async () => {
     setLoadingRelatorios(true);
@@ -56,10 +62,11 @@ export function DashboardDataProvider({ children }) {
       setRelatorios(r);
     } catch (err) {
       console.error(err);
+      showError(`Falha ao carregar relatórios: ${extractErrorMessage(err)}`);
     } finally {
       setLoadingRelatorios(false);
     }
-  }, []);
+  }, [showError]);
 
   useEffect(() => {
     refetchTurmasProfsGrade();

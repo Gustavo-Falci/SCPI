@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Dimensions,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,6 +16,7 @@ import { apiPost } from "../../services/api";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Colors } from "../../constants/theme";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 const { height } = Dimensions.get("window");
 
@@ -24,6 +24,7 @@ type Step = "email" | "codigo" | "senha";
 
 export default function EsqueciSenha() {
   const router = useRouter();
+  const { showError, showSuccess, showWarning } = useErrorToast();
 
   const [step, setStep] = useState<Step>("email");
   const [isLoading, setIsLoading] = useState(false);
@@ -52,43 +53,43 @@ export default function EsqueciSenha() {
   };
 
   const handleEnviarEmail = async () => {
-    if (!email.trim()) { Alert.alert("Erro", "Informe seu e-mail."); return; }
+    if (!email.trim()) { showWarning("Informe seu e-mail."); return; }
     setIsLoading(true);
     try {
       await apiPost("/auth/esqueci-senha", { email: email.trim() });
       setStep("codigo");
     } catch (error: any) {
-      Alert.alert("Atenção", error.message || "Não foi possível enviar o código.");
+      showError(error, "Não foi possível enviar o código");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleVerificarCodigo = async () => {
-    if (codigo.length !== 6) { Alert.alert("Erro", "O código deve ter 6 dígitos."); return; }
+    if (codigo.length !== 6) { showWarning("O código deve ter 6 dígitos."); return; }
     setIsLoading(true);
     try {
       const resp = await apiPost("/auth/verificar-codigo", { email: email.trim(), codigo });
       setResetToken(resp.reset_token);
       setStep("senha");
     } catch (error: any) {
-      Alert.alert("Erro", error.message || "Código inválido ou expirado.");
+      showError(error, "Código inválido ou expirado");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleRedefinirSenha = async () => {
-    if (!allRulesOk) { Alert.alert("Senha fraca", "A senha não atende todos os requisitos."); return; }
-    if (!senhasConferem) { Alert.alert("Erro", "As senhas não coincidem."); return; }
+    if (!allRulesOk) { showWarning("A senha não atende todos os requisitos.", "Senha fraca"); return; }
+    if (!senhasConferem) { showWarning("As senhas não coincidem."); return; }
     setIsLoading(true);
     try {
       await apiPost("/auth/redefinir-senha", { reset_token: resetToken, nova_senha: novaSenha });
-      Alert.alert("Sucesso!", "Sua senha foi redefinida. Faça login com a nova senha.", [
-        { text: "OK", onPress: () => router.replace("/auth/login") },
-      ]);
+      showSuccess("Sua senha foi redefinida. Faça login com a nova senha.");
+      // Pequeno delay para o usuário ver o toast antes de navegar
+      setTimeout(() => router.replace("/auth/login"), 800);
     } catch (error: any) {
-      Alert.alert("Erro", error.message || "Não foi possível redefinir a senha.");
+      showError(error, "Não foi possível redefinir a senha");
     } finally {
       setIsLoading(false);
     }

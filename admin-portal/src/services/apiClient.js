@@ -111,9 +111,97 @@ export function installAuthInterceptor(onSessionExpired) {
   return () => apiClient.interceptors.response.eject(id);
 }
 
+/**
+ * Mensagens amigáveis (PT-BR) por status HTTP.
+ * Usadas como fallback quando o backend não envia `detail` legível.
+ */
+const HTTP_STATUS_MESSAGES = {
+  400: 'Requisição inválida. Confira os dados informados.',
+  401: 'Sua sessão expirou. Faça login novamente.',
+  403: 'Você não tem permissão para acessar este recurso.',
+  404: 'Recurso não encontrado.',
+  408: 'A requisição demorou demais. Tente novamente.',
+  409: 'Conflito ao processar a solicitação.',
+  413: 'Arquivo grande demais para envio.',
+  415: 'Tipo de arquivo não suportado.',
+  422: 'Dados inválidos. Confira o formulário.',
+  429: 'Muitas requisições em pouco tempo. Aguarde alguns segundos.',
+  500: 'Erro interno do servidor. Tente novamente em instantes.',
+  502: 'Servidor indisponível no momento.',
+  503: 'Serviço temporariamente indisponível.',
+  504: 'O servidor demorou para responder. Tente novamente.',
+};
+
+/**
+ * Formata um erro de validação Pydantic v2.
+ * Aceita itens como: { loc: ["body","email"], msg: "field required", type: "..." }
+ */
+function formatPydanticErrors(arr) {
+  return arr
+    .map((item) => {
+      const loc = Array.isArray(item.loc) ? item.loc.filter((p) => p !== 'body').join('.') : '';
+      const msg = item.msg || item.message || 'inválido';
+      return loc ? `${loc}: ${msg}` : msg;
+    })
+    .join(' | ');
+}
+
+/**
+ * Extrai mensagem amigável de um erro do axios/fetch.
+ *
+ * Trata:
+ *  - Sem resposta (rede offline)
+ *  - detail string (formato simples)
+ *  - detail dict { detail, error_code } (formato novo do backend)
+ *  - detail array (Pydantic validation errors)
+ *  - Status HTTP comuns (404, 403, 401, 429, 5xx)
+ */
 export function extractErrorMessage(err, fallback = 'Falha no servidor') {
-  const detail = err?.response?.data?.detail;
-  if (typeof detail === 'string') return detail;
-  if (detail) return JSON.stringify(detail);
+  // Sem resposta: provável erro de rede / CORS / timeout
+  if (!err?.response) {
+    if (err?.code === 'ECONNABORTED') return 'Tempo de resposta esgotado. Tente novamente.';
+    if (err?.message?.toLowerCase().includes('network')) {
+      return 'Sem conexão com o servidor. Verifique sua internet.';
+    }
+    return err?.message || fallback;
+  }
+
+  const status = err.response.status;
+  const data = err.response.data;
+  const detail = data?.detail;
+
+  // Backend padronizado: detail é objeto { detail, error_code }
+  if (detail && typeof detail === 'object' && !Array.isArray(detail) && typeof detail.detail === 'string') {
+    return detail.detail;
+  }
+
+  // Pydantic v2: detail é array de erros
+  if (Array.isArray(detail) && detail.length > 0) {
+    return formatPydanticErrors(detail);
+  }
+
+  // String simples
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+
+  // Mensagem direta no body (alguns endpoints)
+  if (typeof data?.message === 'string') return data.message;
+
+  // Fallback por status HTTP
+  if (HTTP_STATUS_MESSAGES[status]) return HTTP_STATUS_MESSAGES[status];
+
   return fallback;
+}
+
+/**
+ * Retorna o `error_code` (string) embutido pelo backend, se disponível.
+ * Útil para fluxos que precisam reagir a um código específico.
+ */
+export function extractErrorCode(err) {
+  const detail = err?.response?.data?.detail;
+  if (detail && typeof detail === 'object' && typeof detail.error_code === 'string') {
+    return detail.error_code;
+  }
+  return null;
 }

@@ -10,9 +10,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from core.errors import rate_limit_handler
 from core.limiter import limiter
 from infra import migrations as _migrations
 from infra.aws_clientes import rekognition_client, s3_client
@@ -55,7 +55,7 @@ def _check_aws_connectivity():
 app = FastAPI(title="SCPI API")
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
 if _raw_origins:

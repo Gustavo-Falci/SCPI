@@ -4,6 +4,54 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL;
 if (!API_URL) throw new Error("EXPO_PUBLIC_API_URL não definida. Execute 'npm run sync-env' na pasta tcc-app antes de iniciar.");
 
 import { storage } from "./storage";
+import { friendlyErrorMessage, HTTP_STATUS_MESSAGES } from "./errorMessages";
+
+/**
+ * Normaliza o `detail` recebido do backend.
+ * Backend novo: { detail: "...", error_code: "..." }
+ * Backend antigo: "string"
+ * Pydantic: [{ loc, msg, type }, ...]
+ */
+function extractDetailAndCode(data, status) {
+  let message = HTTP_STATUS_MESSAGES[status] || `Erro HTTP ${status}`;
+  let errorCode = null;
+
+  if (!data) return { message, errorCode };
+
+  const detail = data.detail;
+
+  if (detail && typeof detail === "object" && !Array.isArray(detail) && typeof detail.detail === "string") {
+    // Formato novo
+    message = detail.detail;
+    errorCode = detail.error_code || null;
+  } else if (Array.isArray(detail)) {
+    // Pydantic v2
+    message = detail
+      .map((item) => {
+        const loc = Array.isArray(item.loc) ? item.loc.filter((p) => p !== "body").join(".") : "";
+        const msg = item.msg || item.message || "inválido";
+        return loc ? `${loc}: ${msg}` : msg;
+      })
+      .join(" | ");
+  } else if (typeof detail === "string" && detail.trim()) {
+    message = detail;
+  } else if (typeof data.message === "string") {
+    message = data.message;
+  }
+
+  return { message, errorCode };
+}
+
+/**
+ * Cria um Error padronizado com `status` e `errorCode` anexados.
+ * Compatível com o consumo antigo: `error.message` continua exibível.
+ */
+function makeApiError(message, status, errorCode) {
+  const err = new Error(message);
+  err.status = status;
+  err.errorCode = errorCode;
+  return err;
+}
 
 async function getAuthHeaders(contentType = "application/json") {
   const token = await storage.getItem("access_token");
@@ -86,10 +134,21 @@ async function authFetch(endpoint, init, contentType) {
   return response;
 }
 
+async function safeJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function apiGet(endpoint) {
   const response = await authFetch(endpoint, { method: "GET" });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || `Erro HTTP ${response.status}`);
+  const data = await safeJson(response);
+  if (!response.ok) {
+    const { message, errorCode } = extractDetailAndCode(data, response.status);
+    throw makeApiError(message, response.status, errorCode);
+  }
   return data;
 }
 
@@ -99,8 +158,11 @@ export async function apiPost(endpoint, body) {
     { method: "POST", body: JSON.stringify(body) },
     "application/json"
   );
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || `Erro HTTP ${response.status}`);
+  const data = await safeJson(response);
+  if (!response.ok) {
+    const { message, errorCode } = extractDetailAndCode(data, response.status);
+    throw makeApiError(message, response.status, errorCode);
+  }
   return data;
 }
 
@@ -130,17 +192,10 @@ export async function apiPostFormData(endpoint, formData) {
     }
   }
 
-  const data = await response.json();
+  const data = await safeJson(response);
   if (!response.ok) {
-    let errorMsg = `Erro HTTP ${response.status}`;
-    if (data.detail) {
-      if (Array.isArray(data.detail)) {
-        errorMsg = data.detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('\n');
-      } else {
-        errorMsg = data.detail;
-      }
-    }
-    throw new Error(errorMsg);
+    const { message, errorCode } = extractDetailAndCode(data, response.status);
+    throw makeApiError(message, response.status, errorCode);
   }
   return data;
 }
@@ -156,10 +211,16 @@ export async function loginRequest(email, senha) {
     body: formData.toString(),
   });
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || "Erro ao fazer login");
+  const data = await safeJson(response);
+  if (!response.ok) {
+    const { message, errorCode } = extractDetailAndCode(data, response.status);
+    throw makeApiError(message, response.status, errorCode);
+  }
   return data;
 }
+
+// Re-exporta utilitário para que telas possam transformar erros em mensagens amigáveis.
+export { friendlyErrorMessage };
 
 export async function logoutRequest() {
   const refresh = await storage.getItem("refresh_token");

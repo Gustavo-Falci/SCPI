@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Sidebar } from '../components/layout/Sidebar';
 import { DashboardHeader } from '../components/layout/DashboardHeader';
-import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { HorarioModal } from '../components/modals/HorarioModal';
 import { ProfessorAssignModal } from '../components/modals/ProfessorAssignModal';
@@ -14,14 +13,14 @@ import { ProfessoresTab } from './tabs/ProfessoresTab';
 import { AlunosTab } from './tabs/AlunosTab';
 import { RelatoriosTab } from './tabs/RelatoriosTab';
 import { RostosTab } from './tabs/RostosTab';
-import { useToast } from '../hooks/useToast';
+import { ToastProvider, useToastContext } from '../contexts/ToastContext';
 import { useConfirm } from '../hooks/useConfirm';
 import { DashboardDataProvider, useDashboardData } from '../contexts/DashboardDataContext';
 
 function DashboardInner({ admin, onLogout }) {
   const [activeTab, setActiveTab] = useState('turmas');
 
-  const { toast, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
   const { confirmDialog, showConfirm, dismissConfirm, handleConfirm } = useConfirm();
 
   const {
@@ -38,7 +37,6 @@ function DashboardInner({ admin, onLogout }) {
 
   return (
     <div className="flex h-screen bg-[#0C0C12] text-gray-200 font-sans">
-      <Toast toast={toast} onDismiss={dismissToast} />
       <ConfirmDialog dialog={confirmDialog} onCancel={dismissConfirm} onConfirm={handleConfirm} />
 
       <Sidebar admin={admin} activeTab={activeTab} onChangeTab={setActiveTab} onLogout={onLogout} />
@@ -139,8 +137,10 @@ function DashboardInner({ admin, onLogout }) {
 
 export function AdminDashboard({ admin, onLogout }) {
   return (
-    <DashboardDataProvider>
-      <DashboardInner admin={admin} onLogout={onLogout} />
-    </DashboardDataProvider>
+    <ToastProvider>
+      <DashboardDataProvider>
+        <DashboardInner admin={admin} onLogout={onLogout} />
+      </DashboardDataProvider>
+    </ToastProvider>
   );
 }

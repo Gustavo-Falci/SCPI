@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Dimensions,
-  Alert,
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
@@ -22,6 +21,7 @@ import { storage } from "../../services/storage";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Colors } from "../../constants/theme";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 const { height } = Dimensions.get("window");
 
@@ -35,6 +35,7 @@ const ETAPAS = [
 export default function PrimeiroAcesso() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { showError, showSuccess, showWarning } = useErrorToast();
 
   const [step, setStep] = useState<"senha" | "face">("senha");
   const [isLoading, setIsLoading] = useState(false);
@@ -77,11 +78,11 @@ export default function PrimeiroAcesso() {
 
   const handleAlterarSenha = async () => {
     if (!allRulesOk) {
-      Alert.alert("Senha fraca", "A senha não atende a todos os requisitos de segurança.");
+      showWarning("A senha não atende a todos os requisitos de segurança.", "Senha fraca");
       return;
     }
     if (!senhasConferem) {
-      Alert.alert("Erro", "As senhas não coincidem.");
+      showWarning("As senhas não coincidem.");
       return;
     }
 
@@ -104,7 +105,7 @@ export default function PrimeiroAcesso() {
         router.replace("/aluno/home");
       }
     } catch (error: any) {
-      Alert.alert("Erro", error.message || "Não foi possível alterar a senha.");
+      showError(error, "Não foi possível alterar a senha");
     } finally {
       setIsLoading(false);
     }
@@ -114,17 +115,17 @@ export default function PrimeiroAcesso() {
 
   const concluir = async (totalConcluidas: number) => {
     await storage.setItem("face_cadastrada", "true");
-    Alert.alert(
-      "Cadastro Concluído!",
+    showSuccess(
       `${totalConcluidas} ângulo${totalConcluidas > 1 ? "s" : ""} cadastrado${totalConcluidas > 1 ? "s" : ""}. O reconhecimento será mais preciso.`,
-      [{ text: "OK", onPress: () => router.replace("/aluno/home") }]
+      "Cadastro concluído!"
     );
+    setTimeout(() => router.replace("/aluno/home"), 1200);
   };
 
   const tirarFoto = async () => {
     if (!cameraRef.current || isLoading) return;
     if (!userData?.email || !userData?.ra) {
-      Alert.alert("Erro de Dados", "Seus dados (Email/RA) não foram localizados. Faça logout e entre novamente.");
+      showError("Seus dados (Email/RA) não foram localizados. Faça logout e entre novamente.", "Erro de dados");
       return;
     }
 
@@ -164,7 +165,7 @@ export default function PrimeiroAcesso() {
         await concluir(novasConcluidas.size);
       }
     } catch (error: any) {
-      Alert.alert("Erro", error.message || "Não foi possível processar sua face. Tente novamente.");
+      showError(error, "Não foi possível processar sua face");
     } finally {
       setIsLoading(false);
     }
