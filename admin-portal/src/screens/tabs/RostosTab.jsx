@@ -307,8 +307,8 @@ export function RostosTab({ showToast, showConfirm }) {
                       />
                     </th>
                     <th className="px-4 py-3">External Image Id</th>
-                    <th className="px-4 py-3">Face Id</th>
-                    <th className="px-4 py-3 rounded-r-xl text-right">Ações</th>
+                    <th className="px-4 py-3 w-36">Face Id</th>
+                    <th className="px-4 py-3 w-16 rounded-r-xl text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
