@@ -88,7 +88,7 @@ export default function PerfilAluno() {
               <Ionicons name="id-card-outline" size={20} color={Colors.brand.primary} />
             </View>
             <View style={styles.infoTexts}>
-              <Text style={styles.infoLabel}>Registro Acadêmico (RA)</Text>
+              <Text style={styles.infoLabel}>Registro Acadêmico (RA/CPF)</Text>
               <Text style={styles.infoValue}>{ra}</Text>
             </View>
           </View>
