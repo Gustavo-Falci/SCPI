@@ -370,8 +370,8 @@ export function RostosTab({ showToast, showConfirm }) {
                             </td>
                             <td className="px-4 py-2.5">
                               <div className="flex items-center gap-3 pl-4 border-l-2 border-white/10">
-                                <span className="bg-white/5 px-3 py-1 rounded-lg text-xs font-black text-gray-400 border border-white/5 font-mono" title={f.face_id}>
-                                  {truncarFaceId(f.face_id)}
+                                <span className="bg-white/5 px-3 py-1 rounded-lg text-xs font-black text-gray-400 border border-white/5 font-mono">
+                                  {f.face_id}
                                 </span>
                               </div>
                             </td>
