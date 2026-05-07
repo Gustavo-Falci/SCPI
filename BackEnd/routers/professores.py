@@ -1,4 +1,5 @@
 import datetime
+import zoneinfo
 
 from fastapi import APIRouter, Depends
 
@@ -29,7 +30,7 @@ def get_dashboard(usuario_id: str, current_user: dict = Depends(get_current_user
         else:
             estatisticas = {"total": 0, "presentes": 0, "ausentes": 0, "disciplina": "Nenhuma chamada recente"}
 
-        dia_hoje = datetime.datetime.now().weekday()
+        dia_hoje = datetime.datetime.now(zoneinfo.ZoneInfo("America/Sao_Paulo")).weekday()
         aulas_hoje = listar_aulas_hoje_por_professor(usuario_id, dia_hoje)
 
         return {"nome": nome, "estatisticas": estatisticas, "aulas_hoje": aulas_hoje}

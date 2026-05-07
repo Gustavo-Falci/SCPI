@@ -1,5 +1,6 @@
 import datetime
 import logging
+import zoneinfo
 import os
 import uuid
 from typing import Optional
@@ -58,7 +59,7 @@ def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_curren
         total_chamadas = row['total_chamadas'] or 0
         frequencia = round((total_presencas / total_chamadas) * 100) if total_chamadas > 0 else 0
 
-        dia_hoje = datetime.datetime.now().weekday()
+        dia_hoje = datetime.datetime.now(zoneinfo.ZoneInfo("America/Sao_Paulo")).weekday()
         aulas_hoje = listar_aulas_hoje_por_aluno(aluno_id, dia_hoje, aluno_turno)
 
         return {"nome": nome, "frequencia_geral": frequencia, "aulas_hoje": aulas_hoje}
