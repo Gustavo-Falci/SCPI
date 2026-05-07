@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Trash2, Search } from 'lucide-react';
+import { Plus, Trash2, Search, Pencil } from 'lucide-react';
 import { InputGroup } from '../../components/ui/InputGroup';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { Pagination } from '../../components/ui/Pagination';
+import { AlunoEditModal } from '../../components/modals/AlunoEditModal';
 import { useDashboardData } from '../../contexts/DashboardDataContext';
 import { usePagination } from '../../hooks/usePagination';
 import { criarAluno, deletarAluno } from '../../services/alunosService';
@@ -14,6 +15,7 @@ export function AlunosTab({ showToast, showConfirm, onCreatedComSenha }) {
   const { alunos, refetchAlunos } = useDashboardData();
   const [novoAluno, setNovoAluno] = useState({ nome: '', email: '', ra: '', turno: 'Matutino' });
   const [search, setSearch] = useState('');
+  const [alunoEditando, setAlunoEditando] = useState(null);
 
   useEffect(() => { refetchAlunos(); }, [refetchAlunos]);
 
@@ -57,6 +59,14 @@ export function AlunosTab({ showToast, showConfirm, onCreatedComSenha }) {
   };
 
   return (
+    <>
+    <AlunoEditModal
+      open={!!alunoEditando}
+      aluno={alunoEditando}
+      onClose={() => setAlunoEditando(null)}
+      onSuccess={() => { refetchAlunos(); showToast('Aluno atualizado com sucesso!', 'success'); }}
+      showToast={showToast}
+    />
     <div className="flex-1 overflow-hidden flex flex-col min-h-0">
       <h2 className="text-2xl font-black text-white tracking-tight mb-4 flex-shrink-0">Alunos</h2>
       <div className="flex gap-6 flex-1 overflow-hidden min-h-0">
@@ -112,8 +122,8 @@ export function AlunosTab({ showToast, showConfirm, onCreatedComSenha }) {
                   <th className="px-5 py-4 w-[30%]">Nome</th>
                   <th className="px-5 py-4 w-[30%]">Email</th>
                   <th className="px-5 py-4 w-[15%]">RA/CPF</th>
-                  <th className="px-5 py-4 w-[15%]">Turno</th>
-                  <th className="px-5 py-4 w-[10%]">Ações</th>
+                  <th className="px-5 py-4 w-[10%]">Turno</th>
+                  <th className="px-5 py-4 w-[15%] text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -145,13 +155,22 @@ export function AlunosTab({ showToast, showConfirm, onCreatedComSenha }) {
                       )}
                     </td>
                     <td className="px-5 py-3">
-                      <button
-                        onClick={() => handleDelete(a.aluno_id, a.nome)}
-                        title="Excluir aluno"
-                        className="w-9 h-9 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 hover:text-red-500 transition-all border border-white/5 hover:border-red-500/30"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setAlunoEditando(a)}
+                          title="Editar aluno"
+                          className="w-9 h-9 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 hover:text-[#4B39EF] transition-all border border-white/5 hover:border-[#4B39EF]/30"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(a.aluno_id, a.nome)}
+                          title="Excluir aluno"
+                          className="w-9 h-9 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 hover:text-red-500 transition-all border border-white/5 hover:border-red-500/30"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -176,5 +195,6 @@ export function AlunosTab({ showToast, showConfirm, onCreatedComSenha }) {
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -10,6 +10,11 @@ export async function criarAluno(payload) {
   return res.data;
 }
 
+export async function atualizarAluno(aluno_id, payload) {
+  const res = await apiClient.patch(`/admin/alunos/${aluno_id}`, payload);
+  return res.data;
+}
+
 export async function deletarAluno(aluno_id) {
   await apiClient.delete(`/admin/alunos/${aluno_id}`);
 }

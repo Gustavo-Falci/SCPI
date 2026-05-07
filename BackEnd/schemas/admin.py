@@ -39,3 +39,10 @@ class CriarAlunoAdmin(BaseModel):
     email: EmailStr
     ra: str = Field(..., pattern=r"^[A-Za-z0-9]{4,20}$")
     turno: Optional[str] = Field(None, pattern=r"^(Matutino|Noturno)$")
+
+
+class AtualizarAlunoAdmin(BaseModel):
+    nome: Optional[str] = Field(None, min_length=3, max_length=100)
+    email: Optional[EmailStr] = None
+    ra: Optional[str] = Field(None, pattern=r"^[A-Za-z0-9]{4,20}$")
+    turno: Optional[str] = Field(None, pattern=r"^(Matutino|Noturno)$")

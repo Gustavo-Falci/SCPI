@@ -180,6 +180,26 @@ def aluno_matriculado_por_usuario(turma_id, usuario_id):
         return cur.fetchone() is not None
 
 
+def atualizar_aluno(aluno_id, nome=None, email=None, ra=None, turno=None):
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return None
+        cur.execute("SELECT usuario_id FROM Alunos WHERE aluno_id = %s", (aluno_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        usuario_id = row["usuario_id"]
+        if nome is not None:
+            cur.execute("UPDATE Usuarios SET nome = %s WHERE usuario_id = %s", (nome, usuario_id))
+        if email is not None:
+            cur.execute("UPDATE Usuarios SET email = %s WHERE usuario_id = %s", (email, usuario_id))
+        if ra is not None:
+            cur.execute("UPDATE Alunos SET ra = %s WHERE aluno_id = %s", (ra, aluno_id))
+        if turno is not None:
+            cur.execute("UPDATE Alunos SET turno = %s WHERE aluno_id = %s", (turno, aluno_id))
+        return aluno_id
+
+
 def excluir_aluno_em_cascata(aluno_id):
     with get_db_cursor(commit=True) as cur:
         if not cur:

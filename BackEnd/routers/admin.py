@@ -14,6 +14,7 @@ from core.security import require_role
 from infra.aws_clientes import rekognition_client, s3_client
 from infra.notificacoes import send_email_senha_temporaria
 from repositories.alunos import (
+    atualizar_aluno,
     criar_aluno_com_usuario,
     excluir_aluno_em_cascata,
     existe_aluno_por_ra,
@@ -42,6 +43,7 @@ from repositories.turmas import (
 from repositories.usuarios import buscar_usuario_por_email
 from schemas.admin import (
     AtribuirProfessor,
+    AtualizarAlunoAdmin,
     CriarAlunoAdmin,
     CriarProfessorAdmin,
     HorarioCreate,
@@ -119,6 +121,39 @@ def admin_excluir_turma(turma_id: str):
     try:
         excluir_turma_em_cascata(turma_id)
         return {"mensagem": "Turma e dependências excluídas com sucesso!"}
+    except Exception as e:
+        raise internal_error(e)
+
+
+@router.patch("/alunos/{aluno_id}")
+def admin_atualizar_aluno(aluno_id: str, dados: AtualizarAlunoAdmin):
+    try:
+        if dados.email is not None:
+            from repositories.usuarios import buscar_usuario_por_email
+            existente = buscar_usuario_por_email(dados.email.strip())
+            if existente and existente.get("usuario_id"):
+                from repositories.alunos import buscar_usuario_id_por_aluno_id
+                row = buscar_usuario_id_por_aluno_id(aluno_id)
+                if not row or row["usuario_id"] != existente["usuario_id"]:
+                    raise HTTPException(status_code=400, detail="Email já cadastrado.")
+        if dados.ra is not None:
+            if existe_aluno_por_ra(dados.ra):
+                from repositories.alunos import buscar_aluno_id_por_ra
+                ra_aluno_id = buscar_aluno_id_por_ra(dados.ra)
+                if ra_aluno_id != aluno_id:
+                    raise HTTPException(status_code=400, detail="RA já cadastrado.")
+        resultado = atualizar_aluno(
+            aluno_id,
+            nome=dados.nome,
+            email=dados.email.strip() if dados.email else None,
+            ra=dados.ra,
+            turno=dados.turno,
+        )
+        if not resultado:
+            raise HTTPException(status_code=404, detail="Aluno não encontrado.")
+        return {"mensagem": "Aluno atualizado com sucesso."}
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e)
 
