@@ -191,8 +191,8 @@ class SistemaReconhecimento:
                     # Câmera deve estar ligada
                     if cap is None or not cap.isOpened():
                         cap = cv2.VideoCapture(self.CAM_INDEX, cv2.CAP_DSHOW)
-                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
                         if not cap.isOpened():
                             logger.error("❌ Não foi possível abrir a câmera.")
                             time.sleep(5)
