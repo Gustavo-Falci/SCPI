@@ -100,42 +100,79 @@ export default function AulasDoDia() {
         <View style={styles.timeline}>
           {aulas.length > 0 ? (
             aulas.map((aula, index) => {
-              // Lógica simples para detectar se a aula é "Agora" baseada no horário atual seria ideal aqui no futuro
-              const isNow = index === 0; // Temporário para demonstração visual
-              
+              const parts = aula.horario.split(' - ');
+              const timeStart = parts[0] ?? '';
+              const timeEnd = parts[1] ?? '';
+
+              const isNow = (() => {
+                if (parts.length < 2) return false;
+                const [hI, mI] = timeStart.split(':').map(Number);
+                const [hF, mF] = timeEnd.split(':').map(Number);
+                const cur = new Date().getHours() * 60 + new Date().getMinutes();
+                return cur >= hI * 60 + mI && cur < hF * 60 + mF;
+              })();
+
+              const isPast = (() => {
+                if (parts.length < 2) return false;
+                const [hF, mF] = timeEnd.split(':').map(Number);
+                const cur = new Date().getHours() * 60 + new Date().getMinutes();
+                return cur >= hF * 60 + mF;
+              })();
+
               return (
                 <View key={aula.id} style={styles.timelineItem}>
+                  {/* Coluna de horário */}
                   <View style={styles.timeColumn}>
-                    <Text style={styles.timeText}>{aula.horario.split(' - ')[0]}</Text>
-                    <View style={[styles.timelineLine, index === aulas.length - 1 && { backgroundColor: 'transparent' }]} />
+                    <Text style={[styles.timeStart, isPast && !isNow && styles.timePast]}>
+                      {timeStart}
+                    </Text>
+                    <Text style={styles.timeEnd}>{timeEnd}</Text>
                   </View>
 
+                  {/* Dot + linha conectora */}
+                  <View style={styles.connector}>
+                    <View style={[
+                      styles.dot,
+                      isNow && styles.dotActive,
+                      isPast && styles.dotPast,
+                    ]} />
+                    {index < aulas.length - 1 && (
+                      <View style={styles.connectorLine} />
+                    )}
+                  </View>
+
+                  {/* Card da aula */}
                   <TouchableOpacity
-                    style={[styles.classCard, isNow && styles.activeCard]}
+                    style={[
+                      styles.classCard,
+                      isNow && styles.activeCard,
+                      isPast && styles.pastCard,
+                    ]}
                     activeOpacity={0.7}
                     accessibilityRole="button"
                     accessibilityLabel={`Aula de ${aula.nome}${isNow ? ', ao vivo' : ''}`}
-                    onPress={() => router.push("/professor/turmas")}
+                    onPress={() => router.push("/professor/iniciar-chamada")}
                   >
                     <View style={styles.cardHeader}>
-                      <Text style={styles.className}>{aula.nome}</Text>
+                      <Text style={[styles.className, isPast && styles.textPast]} numberOfLines={2}>
+                        {aula.nome}
+                      </Text>
                       {isNow && (
                         <View style={styles.liveBadge}>
                           <View style={styles.liveDot} />
                           <Text style={styles.liveText}>AO VIVO</Text>
                         </View>
                       )}
+                      {isPast && (
+                        <View style={styles.pastBadge}>
+                          <Text style={styles.pastBadgeText}>Encerrada</Text>
+                        </View>
+                      )}
                     </View>
-                    
-                    <View style={styles.cardFooter}>
-                      <View style={styles.infoRow}>
-                        <Ionicons name="location-outline" size={14} color={Colors.brand.textSecondary} />
-                        <Text style={styles.infoText}>{aula.sala}</Text>
-                      </View>
-                      <View style={styles.infoRow}>
-                        <Ionicons name="time-outline" size={14} color={Colors.brand.textSecondary} />
-                        <Text style={styles.infoText}>{aula.horario}</Text>
-                      </View>
+
+                    <View style={styles.infoRow}>
+                      <Ionicons name="location-outline" size={13} color={Colors.brand.textSecondary} />
+                      <Text style={styles.infoText}>{aula.sala}</Text>
                     </View>
 
                     {isNow && (
@@ -181,26 +218,46 @@ const styles = StyleSheet.create({
   countBadge: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.brand.primary, justifyContent: "center", alignItems: "center" },
   countText: { color: "#fff", fontWeight: "800", fontSize: 18 },
   timeline: { paddingLeft: 4 },
-  timelineItem: { flexDirection: "row", marginBottom: 12 },
-  timeColumn: { alignItems: "center", width: 50, marginRight: 16 },
-  timeText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  timelineLine: { width: 2, flex: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 8 },
-  classCard: {
-    flex: 1, backgroundColor: Colors.brand.card, borderRadius: 20, padding: 16,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+  timelineItem: { flexDirection: "row", marginBottom: 16, alignItems: "flex-start" },
+
+  timeColumn: { width: 56, alignItems: "flex-end", paddingRight: 4, paddingTop: 1 },
+  timeStart: { color: "#fff", fontSize: 14, fontWeight: "700", lineHeight: 18 },
+  timeEnd: { color: Colors.brand.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 2 },
+  timePast: { color: Colors.brand.textSecondary },
+
+  connector: { width: 24, alignItems: "center", paddingTop: 3 },
+  dot: {
+    width: 12, height: 12, borderRadius: 6,
+    backgroundColor: Colors.brand.card,
+    borderWidth: 2, borderColor: "rgba(255,255,255,0.25)",
   },
-  activeCard: { borderColor: Colors.brand.primary, borderWidth: 1.5 },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
+  dotActive: { backgroundColor: "#22C55E", borderColor: "#22C55E" },
+  dotPast: { backgroundColor: "transparent", borderColor: "rgba(255,255,255,0.1)" },
+  connectorLine: {
+    width: 2, flex: 1, minHeight: 24,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginTop: 4,
+  },
+
+  classCard: {
+    flex: 1, backgroundColor: Colors.brand.card, borderRadius: 16, padding: 14,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", marginLeft: 10,
+  },
+  activeCard: { borderColor: "#22C55E", borderWidth: 1.5 },
+  pastCard: { opacity: 0.5 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
   className: { color: "#fff", fontSize: 15, fontWeight: "700", flex: 1, marginRight: 8 },
+  textPast: { color: Colors.brand.textSecondary },
   liveBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(34, 197, 94, 0.15)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#22C55E" },
   liveText: { color: "#22C55E", fontSize: 10, fontWeight: "800" },
-  cardFooter: { flexDirection: "row", gap: 16 },
+  pastBadge: { backgroundColor: "rgba(255,255,255,0.06)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  pastBadgeText: { color: Colors.brand.textSecondary, fontSize: 10, fontWeight: "700" },
   infoRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   infoText: { color: Colors.brand.textSecondary, fontSize: 12 },
-  callButton: { 
-    marginTop: 16, backgroundColor: Colors.brand.primary, paddingVertical: 10, 
-    borderRadius: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 
+  callButton: {
+    marginTop: 12, backgroundColor: Colors.brand.primary, paddingVertical: 10,
+    borderRadius: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8,
   },
   callButtonText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   emptyContainer: {
