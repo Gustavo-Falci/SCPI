@@ -40,7 +40,7 @@ export function LoginScreen({ onLogin }) {
             <input
               type="email" required
               className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-lg text-white focus:border-[#4B39EF] focus:ring-2 focus:ring-[#4B39EF]/20 outline-none transition-all placeholder:text-gray-700"
-              placeholder="admin@scpi.com"
+              placeholder="seu@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
