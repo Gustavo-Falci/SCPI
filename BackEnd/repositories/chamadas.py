@@ -252,3 +252,19 @@ def obter_relatorio_chamada(chamada_id, professor_id=None):
             return None
         cur.execute(sql, tuple(params))
         return cur.fetchone()
+
+
+def obter_chamada_por_id(chamada_id):
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute(
+            """
+            SELECT c.chamada_id, c.turma_id, t.nome_disciplina
+            FROM Chamadas c
+            JOIN Turmas t ON t.turma_id = c.turma_id
+            WHERE c.chamada_id = %s
+            """,
+            (chamada_id,),
+        )
+        return cur.fetchone()

@@ -41,3 +41,25 @@ def contar_alunos_da_turma(turma_id):
         cur.execute("SELECT COUNT(*) as total FROM Turma_Alunos WHERE turma_id=%s", (turma_id,))
         row = cur.fetchone()
         return row["total"] if row else 0
+
+
+def ajustar_presencas_chamada(chamada_id, alunos_presencas):
+    """alunos_presencas: list of dicts with {aluno_id, presente}"""
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return
+        for item in alunos_presencas:
+            if item["presente"]:
+                cur.execute(
+                    """
+                    INSERT INTO Presencas (chamada_id, aluno_id, tipo_registro)
+                    VALUES (%s, %s, 'Manual')
+                    ON CONFLICT (chamada_id, aluno_id) DO NOTHING
+                    """,
+                    (chamada_id, item["aluno_id"]),
+                )
+            else:
+                cur.execute(
+                    "DELETE FROM Presencas WHERE chamada_id=%s AND aluno_id=%s",
+                    (chamada_id, item["aluno_id"]),
+                )

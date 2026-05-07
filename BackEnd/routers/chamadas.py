@@ -15,12 +15,13 @@ from repositories.chamadas import (
     obter_chamada_aberta_com_disciplina,
     obter_chamada_aberta_por_sala,
     obter_chamada_aberta_por_turma,
+    obter_chamada_por_id,
 )
 from repositories.horarios import existe_aula_no_horario_atual_para_turma
-from repositories.presencas import contar_alunos_da_turma, contar_presentes_por_chamada
+from repositories.presencas import ajustar_presencas_chamada, contar_alunos_da_turma, contar_presentes_por_chamada
 from repositories.turmas import professor_responsavel_pela_turma
 from repositories.usuarios import obter_professor_id, registrar_presenca_por_face
-from schemas.chamada import ChamadaAbrir
+from schemas.chamada import ChamadaAbrir, FinalizarChamadaPayload, PresencaAluno
 from services.notificacoes import enviar_notificacoes_presenca, notificar_alunos_presentes
 
 logger = logging.getLogger(__name__)
@@ -108,6 +109,36 @@ def listar_alunos_chamada(chamada_id: str, current_user: dict = Depends(get_curr
         return {"alunos": alunos}
     except Exception as e:
         raise internal_error(e, "listar_alunos_chamada")
+
+
+@router.post("/{chamada_id}/finalizar")
+def finalizar_chamada(
+    chamada_id: int,
+    payload: FinalizarChamadaPayload,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(require_role("Professor")),
+):
+    try:
+        chamada = obter_chamada_por_id(chamada_id)
+        if not chamada:
+            raise HTTPException(status_code=404, detail="Chamada não encontrada.")
+
+        ajustar_presencas_chamada(chamada_id, [a.model_dump() for a in payload.alunos])
+        fechar_chamadas_abertas_por_turma(chamada["turma_id"])
+
+        audit_logger.info("Chamada %s finalizada com edições pelo professor.", chamada_id)
+
+        background_tasks.add_task(
+            notificar_alunos_presentes,
+            chamada_id,
+            chamada["nome_disciplina"],
+        )
+
+        return {"mensagem": "Chamada finalizada com sucesso!"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "finalizar_chamada")
 
 
 @router.post("/registrar_rosto")
