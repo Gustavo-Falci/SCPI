@@ -13,13 +13,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 
-import { apiGet } from "../../services/api";
+import { apiGet, apiPost } from "../../services/api";
+import { useErrorToast } from "../../hooks/useErrorToast";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 
 export default function ListaPresenca() {
   const { turma_id, turma_nome } = useLocalSearchParams();
   const router = useRouter();
+  const { showError } = useErrorToast();
 
   const [loading, setLoading] = useState(true);
   const [statusChamada, setStatusChamada] = useState<any>(null);
@@ -65,16 +67,26 @@ export default function ListaPresenca() {
     return () => clearInterval(intervalId);
   }, [turma_id]);
 
-  const irParaRevisao = () => {
-    if (!statusChamada?.chamada_id) return;
-    router.push({
-      pathname: "/professor/revisar-chamada",
-      params: {
-        chamada_id: String(statusChamada.chamada_id),
-        turma_id: String(turma_id),
-        turma_nome: String(turma_nome),
-      },
-    });
+  const [encerrandoChamada, setEncerrandoChamada] = useState(false);
+
+  const encerrarERevisar = async () => {
+    if (!statusChamada?.chamada_id || encerrandoChamada) return;
+    try {
+      setEncerrandoChamada(true);
+      await apiPost(`/chamadas/fechar/${turma_id}`, {});
+      router.push({
+        pathname: "/professor/revisar-chamada",
+        params: {
+          chamada_id: String(statusChamada.chamada_id),
+          turma_id: String(turma_id),
+          turma_nome: String(turma_nome),
+        },
+      });
+    } catch (err: any) {
+      showError(err, "Erro ao encerrar chamada");
+    } finally {
+      setEncerrandoChamada(false);
+    }
   };
 
   const menuItems: any[] = [
@@ -153,14 +165,21 @@ export default function ListaPresenca() {
 
           {isAberta && (
             <TouchableOpacity
-              style={styles.closeCallBtn}
-              onPress={irParaRevisao}
+              style={[styles.closeCallBtn, encerrandoChamada && { opacity: 0.75 }]}
+              onPress={encerrarERevisar}
               activeOpacity={0.8}
+              disabled={encerrandoChamada}
               accessibilityRole="button"
               accessibilityLabel="Encerrar chamada"
             >
-              <Ionicons name="stop-circle-outline" size={20} color="#fff" />
-              <Text style={styles.closeCallText}>Encerrar Chamada</Text>
+              {encerrandoChamada ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="stop-circle-outline" size={20} color="#fff" />
+                  <Text style={styles.closeCallText}>Encerrar Chamada</Text>
+                </>
+              )}
             </TouchableOpacity>
           )}
         </View>

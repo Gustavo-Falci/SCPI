@@ -111,6 +111,27 @@ def listar_alunos_chamada(chamada_id: str, current_user: dict = Depends(get_curr
         raise internal_error(e, "listar_alunos_chamada")
 
 
+@router.post("/{chamada_id}/ajustar")
+def ajustar_chamada(
+    chamada_id: int,
+    payload: FinalizarChamadaPayload,
+    current_user: dict = Depends(require_role("Professor")),
+):
+    try:
+        chamada = obter_chamada_por_id(chamada_id)
+        if not chamada:
+            raise HTTPException(status_code=404, detail="Chamada não encontrada.")
+
+        ajustar_presencas_chamada(chamada_id, [a.model_dump() for a in payload.alunos])
+        audit_logger.info("Presenças da chamada %s ajustadas pelo professor.", chamada_id)
+
+        return {"mensagem": "Presenças salvas com sucesso!"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "ajustar_chamada")
+
+
 @router.post("/{chamada_id}/finalizar")
 def finalizar_chamada(
     chamada_id: int,

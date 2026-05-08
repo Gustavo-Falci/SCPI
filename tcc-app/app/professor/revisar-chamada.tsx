@@ -59,17 +59,17 @@ export default function RevisarChamada() {
   const presentes = alunos.filter((a) => a.presente).length;
   const ausentes = alunos.length - presentes;
 
-  const salvarEEncerrar = async () => {
+  const salvar = async () => {
     if (saving) return;
     try {
       setSaving(true);
-      await apiPost(`/chamadas/${chamada_id}/finalizar`, {
+      await apiPost(`/chamadas/${chamada_id}/ajustar`, {
         alunos: alunos.map((a) => ({ aluno_id: a.id, presente: a.presente })),
       });
-      showSuccess("Chamada salva e encerrada com sucesso!");
+      showSuccess("Presenças salvas com sucesso!");
       setTimeout(() => router.replace("/professor/home"), 800);
     } catch (err: any) {
-      showError(err, "Erro ao salvar chamada");
+      showError(err, "Erro ao salvar presenças");
     } finally {
       setSaving(false);
     }
@@ -135,18 +135,18 @@ export default function RevisarChamada() {
 
           <TouchableOpacity
             style={[styles.saveBtn, saving && { opacity: 0.75 }]}
-            onPress={salvarEEncerrar}
+            onPress={salvar}
             activeOpacity={0.8}
             disabled={saving}
             accessibilityRole="button"
-            accessibilityLabel="Salvar e encerrar chamada"
+            accessibilityLabel="Salvar presenças"
           >
             {saving ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <>
                 <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-                <Text style={styles.saveBtnText}>Salvar e Encerrar</Text>
+                <Text style={styles.saveBtnText}>Salvar</Text>
               </>
             )}
           </TouchableOpacity>
