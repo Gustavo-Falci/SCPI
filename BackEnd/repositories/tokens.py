@@ -64,6 +64,14 @@ def revogar_refresh_token(token_hash, usuario_id):
         return cur.rowcount
 
 
+def purgar_tokens_expirados():
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return 0
+        cur.execute("DELETE FROM RefreshTokens WHERE expires_at < NOW()")
+        return cur.rowcount
+
+
 def invalidar_codigos_anteriores(email):
     with get_db_cursor(commit=True) as cur:
         if not cur:
