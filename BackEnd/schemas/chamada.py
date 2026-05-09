@@ -7,7 +7,7 @@ class ChamadaAbrir(BaseModel):
 
 class PresencaAluno(BaseModel):
     aluno_id: str
-    presente: bool
+    aulas_presentes: list[int]  # [1, 2] = presente nas aulas 1 e 2; [] = falta total
 
 
 class FinalizarChamadaPayload(BaseModel):
