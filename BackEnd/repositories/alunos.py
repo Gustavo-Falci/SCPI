@@ -118,9 +118,10 @@ def obter_dashboard_aluno(usuario_id):
                 a.aluno_id,
                 a.turno,
                 (SELECT COUNT(*) FROM Presencas WHERE aluno_id = a.aluno_id) AS total_presencas,
-                (SELECT COUNT(*) FROM Chamadas ch
+                (SELECT COALESCE(SUM(ch.total_aulas), 0)
+                 FROM Chamadas ch
                  JOIN Turma_Alunos ta ON ch.turma_id = ta.turma_id
-                 WHERE ta.aluno_id = a.aluno_id) AS total_chamadas
+                 WHERE ta.aluno_id = a.aluno_id AND ch.status = 'Fechada') AS total_chamadas
             FROM Usuarios u
             LEFT JOIN Alunos a ON a.usuario_id = u.usuario_id
             WHERE u.usuario_id = %s
@@ -140,12 +141,21 @@ def listar_frequencias_por_aluno(aluno_id):
                 t.turma_id,
                 t.nome_disciplina AS nome,
                 t.codigo_turma,
-                COUNT(DISTINCT ch.chamada_id) FILTER (WHERE ch.status = 'Fechada') AS total_aulas,
-                COUNT(DISTINCT p.presenca_id) AS presencas
+                COALESCE((
+                    SELECT SUM(ch.total_aulas)
+                    FROM Chamadas ch
+                    WHERE ch.turma_id = t.turma_id AND ch.status = 'Fechada'
+                ), 0) AS total_aulas,
+                COALESCE((
+                    SELECT COUNT(p.presenca_id)
+                    FROM Presencas p
+                    JOIN Chamadas ch ON ch.chamada_id = p.chamada_id
+                    WHERE ch.turma_id = t.turma_id
+                      AND ch.status = 'Fechada'
+                      AND p.aluno_id = ta.aluno_id
+                ), 0) AS presencas
             FROM Turma_Alunos ta
             JOIN Turmas t ON ta.turma_id = t.turma_id
-            LEFT JOIN Chamadas ch ON ch.turma_id = t.turma_id AND ch.status = 'Fechada'
-            LEFT JOIN Presencas p ON p.chamada_id = ch.chamada_id AND p.aluno_id = ta.aluno_id
             WHERE ta.aluno_id = %s
             GROUP BY t.turma_id, t.nome_disciplina, t.codigo_turma
             """,

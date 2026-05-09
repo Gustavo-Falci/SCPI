@@ -1,4 +1,6 @@
 import datetime
+import math
+from datetime import datetime as dt, date
 
 from infra.database import get_db_cursor, logger
 
@@ -19,9 +21,6 @@ def fechar_chamadas_abertas_por_turma(turma_id):
 
 def abrir_chamada_para_turma(turma_id, professor_id):
     """Fecha qualquer chamada aberta da turma e abre uma nova; retorna chamada_id."""
-    import math
-    from datetime import datetime, date
-
     with get_db_cursor(commit=True) as cur:
         if not cur:
             return None
@@ -48,8 +47,8 @@ def abrir_chamada_para_turma(turma_id, professor_id):
 
         total_aulas = 1
         if horario and horario["horario_fim"] and horario["horario_inicio"]:
-            inicio = datetime.combine(date.today(), horario["horario_inicio"])
-            fim    = datetime.combine(date.today(), horario["horario_fim"])
+            inicio = dt.combine(date.today(), horario["horario_inicio"])
+            fim    = dt.combine(date.today(), horario["horario_fim"])
             duracao_min = (fim - inicio).total_seconds() / 60
             total_aulas = max(1, math.ceil(duracao_min / 50))
 
@@ -122,15 +121,22 @@ def listar_alunos_da_chamada(chamada_id):
         cur.execute(
             """
             SELECT
-                a.aluno_id as id,
+                a.aluno_id AS id,
                 u.nome,
-                CASE WHEN p.presenca_id IS NOT NULL THEN true ELSE false END as presente
+                c.total_aulas,
+                COALESCE(
+                    ARRAY_AGG(p.num_aula ORDER BY p.num_aula)
+                        FILTER (WHERE p.presenca_id IS NOT NULL),
+                    ARRAY[]::smallint[]
+                ) AS aulas_presentes
             FROM Chamadas c
             JOIN Turma_Alunos ta ON c.turma_id = ta.turma_id
             JOIN Alunos a ON ta.aluno_id = a.aluno_id
             JOIN Usuarios u ON a.usuario_id = u.usuario_id
-            LEFT JOIN Presencas p ON a.aluno_id = p.aluno_id AND p.chamada_id = c.chamada_id
+            LEFT JOIN Presencas p
+                ON a.aluno_id = p.aluno_id AND p.chamada_id = c.chamada_id
             WHERE c.chamada_id = %s
+            GROUP BY a.aluno_id, u.nome, c.total_aulas
             ORDER BY u.nome ASC
             """,
             (chamada_id,),
@@ -150,14 +156,24 @@ def listar_historico_chamadas_aluno(aluno_id, turma_id):
                 EXTRACT(ISODOW FROM c.data_chamada)::int AS dia_iso,
                 to_char(c.horario_inicio, 'HH24:MI')    AS horario_inicio,
                 to_char(c.horario_fim,    'HH24:MI')    AS horario_fim,
-                CASE WHEN p.presenca_id IS NOT NULL THEN true ELSE false END AS presente,
-                COALESCE(p.tipo_registro, '—') AS tipo_registro
+                c.total_aulas,
+                (SELECT COUNT(*) FROM Presencas p2
+                 WHERE p2.chamada_id = c.chamada_id AND p2.aluno_id = %s) AS aulas_presentes_count,
+                CASE WHEN (
+                    SELECT COUNT(*) FROM Presencas p3
+                    WHERE p3.chamada_id = c.chamada_id AND p3.aluno_id = %s
+                ) > 0 THEN true ELSE false END AS presente,
+                COALESCE(
+                    (SELECT p.tipo_registro FROM Presencas p
+                     WHERE p.chamada_id = c.chamada_id AND p.aluno_id = %s
+                     LIMIT 1),
+                    '—'
+                ) AS tipo_registro
             FROM Chamadas c
-            LEFT JOIN Presencas p ON p.chamada_id = c.chamada_id AND p.aluno_id = %s
             WHERE c.turma_id = %s AND c.status = 'Fechada'
             ORDER BY c.data_chamada DESC, c.horario_inicio DESC
             """,
-            (aluno_id, turma_id),
+            (aluno_id, aluno_id, aluno_id, turma_id),
         )
         return cur.fetchall()
 
@@ -284,7 +300,7 @@ def obter_chamada_por_id(chamada_id):
             return None
         cur.execute(
             """
-            SELECT c.chamada_id, c.turma_id, t.nome_disciplina
+            SELECT c.chamada_id, c.turma_id, c.total_aulas, t.nome_disciplina
             FROM Chamadas c
             JOIN Turmas t ON t.turma_id = c.turma_id
             WHERE c.chamada_id = %s

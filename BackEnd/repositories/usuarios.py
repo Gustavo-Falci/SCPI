@@ -121,7 +121,7 @@ def registrar_presenca_por_face(external_image_id):
 
         cur.execute(
             """
-            SELECT chamada_id, turma_id FROM Chamadas
+            SELECT chamada_id, turma_id, total_aulas FROM Chamadas
             WHERE status = 'Aberta' ORDER BY data_criacao DESC LIMIT 1
             """
         )
@@ -140,16 +140,21 @@ def registrar_presenca_por_face(external_image_id):
             logger.warning(f"Aluno {external_image_id} não pertence a esta turma.")
             return None
 
-        cur.execute(
-            """
-            INSERT INTO Presencas (chamada_id, aluno_id, tipo_registro)
-            VALUES (%s, %s, 'Reconhecimento')
-            ON CONFLICT (chamada_id, aluno_id) DO NOTHING
-            """,
-            (chamada["chamada_id"], aluno_uuid),
-        )
+        total_aulas = chamada.get("total_aulas", 1) or 1
 
-        if cur.rowcount == 0:
+        rows_inserted = 0
+        for num_aula in range(1, total_aulas + 1):
+            cur.execute(
+                """
+                INSERT INTO Presencas (chamada_id, aluno_id, num_aula, tipo_registro)
+                VALUES (%s, %s, %s, 'Reconhecimento')
+                ON CONFLICT (chamada_id, aluno_id, num_aula) DO NOTHING
+                """,
+                (chamada["chamada_id"], aluno_uuid, num_aula),
+            )
+            rows_inserted += cur.rowcount
+
+        if rows_inserted == 0:
             return None
 
         logger.info(f"✅ Presença confirmada: {external_image_id}")

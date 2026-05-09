@@ -15,7 +15,7 @@ from repositories.chamadas import (
     obter_chamada_aberta_com_disciplina,
     obter_chamada_aberta_por_sala,
     obter_chamada_aberta_por_turma,
-    obter_chamada_por_id,
+    obter_chamada_por_id,  # now includes total_aulas
 )
 from repositories.horarios import existe_aula_no_horario_atual_para_turma
 from repositories.presencas import ajustar_presencas_chamada, contar_alunos_da_turma, contar_presentes_por_chamada
@@ -106,7 +106,20 @@ def status_chamada(turma_id: str, current_user: dict = Depends(get_current_user)
 def listar_alunos_chamada(chamada_id: str, current_user: dict = Depends(get_current_user)):
     try:
         alunos = listar_alunos_da_chamada(chamada_id)
-        return {"alunos": alunos}
+        if alunos:
+            total_aulas = alunos[0]["total_aulas"]
+        else:
+            chamada = obter_chamada_por_id(chamada_id)
+            total_aulas = chamada["total_aulas"] if chamada else 1
+        alunos_serializados = [
+            {
+                "id": str(a["id"]),
+                "nome": a["nome"],
+                "aulas_presentes": list(a["aulas_presentes"]) if a["aulas_presentes"] else [],
+            }
+            for a in alunos
+        ]
+        return {"total_aulas": total_aulas, "alunos": alunos_serializados}
     except Exception as e:
         raise internal_error(e, "listar_alunos_chamada")
 

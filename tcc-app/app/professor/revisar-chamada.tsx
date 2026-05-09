@@ -7,7 +7,6 @@ import {
   View,
   ActivityIndicator,
   StatusBar,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,16 +20,17 @@ import { useErrorToast } from "../../hooks/useErrorToast";
 type Aluno = {
   id: string;
   nome: string;
-  presente: boolean;
+  aulasPresentes: boolean[]; // índice 0 = Aula 1, comprimento = totalAulas
 };
 
 export default function RevisarChamada() {
-  const { chamada_id, turma_id, turma_nome } = useLocalSearchParams();
+  const { chamada_id, turma_nome } = useLocalSearchParams();
   const router = useRouter();
   const { showError, showSuccess } = useErrorToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [totalAulas, setTotalAulas] = useState(1);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
 
   useEffect(() => {
@@ -40,7 +40,17 @@ export default function RevisarChamada() {
   const carregarAlunos = async () => {
     try {
       const resp = await apiGet(`/chamadas/${chamada_id}/alunos`);
-      if (resp?.alunos) setAlunos(resp.alunos);
+      const n = resp?.total_aulas ?? 1;
+      setTotalAulas(n);
+      setAlunos(
+        (resp?.alunos ?? []).map((a: any) => ({
+          id: a.id,
+          nome: a.nome,
+          aulasPresentes: Array.from({ length: n }, (_, i) =>
+            (a.aulas_presentes ?? []).includes(i + 1)
+          ),
+        }))
+      );
     } catch (err: any) {
       showError(err, "Erro ao carregar alunos");
     } finally {
@@ -48,23 +58,48 @@ export default function RevisarChamada() {
     }
   };
 
-  const togglePresenca = (alunoId: string) => {
+  const toggleCard = (alunoId: string) => {
     setAlunos((prev) =>
-      prev.map((a) =>
-        a.id === alunoId ? { ...a, presente: !a.presente } : a
-      )
+      prev.map((a) => {
+        if (a.id !== alunoId) return a;
+        const todasPresentes = a.aulasPresentes.every(Boolean);
+        return {
+          ...a,
+          aulasPresentes: a.aulasPresentes.map(() => !todasPresentes),
+        };
+      })
     );
   };
 
-  const presentes = alunos.filter((a) => a.presente).length;
-  const ausentes = alunos.length - presentes;
+  const toggleAula = (alunoId: string, aulaIdx: number) => {
+    setAlunos((prev) =>
+      prev.map((a) => {
+        if (a.id !== alunoId) return a;
+        const novo = [...a.aulasPresentes];
+        novo[aulaIdx] = !novo[aulaIdx];
+        return { ...a, aulasPresentes: novo };
+      })
+    );
+  };
+
+  const totalPresencas = alunos.reduce(
+    (sum, a) => sum + a.aulasPresentes.filter(Boolean).length,
+    0
+  );
+  const totalPossivel = alunos.length * totalAulas;
+  const totalFaltas = totalPossivel - totalPresencas;
 
   const salvar = async () => {
     if (saving) return;
     try {
       setSaving(true);
       await apiPost(`/chamadas/${chamada_id}/ajustar`, {
-        alunos: alunos.map((a) => ({ aluno_id: a.id, presente: a.presente })),
+        alunos: alunos.map((a) => ({
+          aluno_id: a.id,
+          aulas_presentes: a.aulasPresentes
+            .map((presente, i) => (presente ? i + 1 : null))
+            .filter((n): n is number => n !== null),
+        })),
       });
       showSuccess("Presenças salvas com sucesso!");
       setTimeout(() => router.replace("/professor/home"), 800);
@@ -73,6 +108,25 @@ export default function RevisarChamada() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const cardBorderColor = (a: Aluno) => {
+    const qtd = a.aulasPresentes.filter(Boolean).length;
+    if (qtd === 0) return "rgba(255, 75, 75, 0.25)";
+    if (qtd === totalAulas) return "rgba(34, 197, 94, 0.25)";
+    return "rgba(234, 179, 8, 0.35)";
+  };
+
+  const tagColor = (a: Aluno) => {
+    const qtd = a.aulasPresentes.filter(Boolean).length;
+    if (qtd === 0) return "rgba(255, 75, 75, 0.85)";
+    if (qtd === totalAulas) return "rgba(34, 197, 94, 0.85)";
+    return "rgba(234, 179, 8, 0.85)";
+  };
+
+  const tagText = (a: Aluno) => {
+    const qtd = a.aulasPresentes.filter(Boolean).length;
+    return `${qtd}/${totalAulas} aula${totalAulas > 1 ? "s" : ""}`;
   };
 
   const menuItems: any[] = [
@@ -111,7 +165,7 @@ export default function RevisarChamada() {
             {turma_nome || "Turma"}
           </Text>
           <Text style={styles.infoText}>
-            Revise e ajuste as presenças antes de salvar.
+            Toque no card para alternar todas as aulas. Toque em cada aula para ajuste individual.
           </Text>
 
           <View style={styles.divider} />
@@ -119,17 +173,17 @@ export default function RevisarChamada() {
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{alunos.length}</Text>
-              <Text style={styles.statLabel}>Total</Text>
+              <Text style={styles.statLabel}>Alunos</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: "#22C55E" }]}>{presentes}</Text>
-              <Text style={styles.statLabel}>Presentes</Text>
+              <Text style={[styles.statValue, { color: "#22C55E" }]}>{totalPresencas}</Text>
+              <Text style={styles.statLabel}>Presenças</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
-              <Text style={[styles.statValue, { color: Colors.brand.error }]}>{ausentes}</Text>
-              <Text style={styles.statLabel}>Ausentes</Text>
+              <Text style={[styles.statValue, { color: Colors.brand.error }]}>{totalFaltas}</Text>
+              <Text style={styles.statLabel}>Faltas</Text>
             </View>
           </View>
 
@@ -154,7 +208,7 @@ export default function RevisarChamada() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Lista de Alunos</Text>
-          <Text style={styles.sectionHint}>Toque para alternar presença</Text>
+          <Text style={styles.sectionHint}>{totalAulas} aula{totalAulas > 1 ? "s" : ""} nesta chamada</Text>
         </View>
 
         {loading ? (
@@ -168,54 +222,76 @@ export default function RevisarChamada() {
           alunos.map((aluno) => (
             <TouchableOpacity
               key={aluno.id}
-              style={[
-                styles.studentCard,
-                aluno.presente ? styles.cardPresent : styles.cardAbsent,
-              ]}
-              onPress={() => togglePresenca(aluno.id)}
+              style={[styles.studentCard, { borderColor: cardBorderColor(aluno) }]}
+              onPress={() => toggleCard(aluno.id)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`${aluno.nome}: ${aluno.presente ? "Presente" : "Ausente"}. Toque para alternar.`}
+              accessibilityLabel={`${aluno.nome}: ${tagText(aluno)}. Toque para alternar todas.`}
             >
-              <View
-                style={[
-                  styles.avatar,
-                  {
-                    backgroundColor: aluno.presente
-                      ? "rgba(34, 197, 94, 0.15)"
-                      : "rgba(255, 75, 75, 0.12)",
-                  },
-                ]}
-              >
-                <Text
+              <View style={styles.cardTop}>
+                <View
                   style={[
-                    styles.avatarText,
-                    { color: aluno.presente ? "#22C55E" : Colors.brand.error },
+                    styles.avatar,
+                    {
+                      backgroundColor:
+                        aluno.aulasPresentes.filter(Boolean).length === 0
+                          ? "rgba(255, 75, 75, 0.12)"
+                          : aluno.aulasPresentes.every(Boolean)
+                          ? "rgba(34, 197, 94, 0.15)"
+                          : "rgba(234, 179, 8, 0.15)",
+                    },
                   ]}
                 >
-                  {aluno.nome.charAt(0).toUpperCase()}
+                  <Text
+                    style={[
+                      styles.avatarText,
+                      {
+                        color:
+                          aluno.aulasPresentes.filter(Boolean).length === 0
+                            ? Colors.brand.error
+                            : aluno.aulasPresentes.every(Boolean)
+                            ? "#22C55E"
+                            : "#EAB308",
+                      },
+                    ]}
+                  >
+                    {aluno.nome.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+
+                <Text style={styles.studentName} numberOfLines={1} ellipsizeMode="tail">
+                  {aluno.nome}
                 </Text>
+
+                <View style={[styles.statusTag, { backgroundColor: tagColor(aluno) }]}>
+                  <Text style={styles.tagText}>{tagText(aluno)}</Text>
+                </View>
               </View>
 
-              <Text style={styles.studentName} numberOfLines={1} ellipsizeMode="tail">
-                {aluno.nome}
-              </Text>
-
-              <View
-                style={[
-                  styles.statusTag,
-                  aluno.presente ? styles.tagPresent : styles.tagAbsent,
-                ]}
-              >
-                <Ionicons
-                  name={aluno.presente ? "checkmark-circle" : "close-circle"}
-                  size={13}
-                  color="#fff"
-                />
-                <Text style={styles.tagText}>
-                  {aluno.presente ? "Presente" : "Ausente"}
-                </Text>
-              </View>
+              {totalAulas > 1 && (
+                <View style={styles.aulasRow}>
+                  {aluno.aulasPresentes.map((presente, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.aulaChip}
+                      onPress={() => toggleAula(aluno.id, idx)}
+                      activeOpacity={0.7}
+                      accessibilityRole="checkbox"
+                      accessibilityLabel={`Aula ${idx + 1}: ${presente ? "presente" : "ausente"}`}
+                      accessibilityState={{ checked: presente }}
+                    >
+                      <Ionicons
+                        name={presente ? "checkbox" : "square-outline"}
+                        size={18}
+                        color={presente ? "#22C55E" : Colors.brand.textSecondary}
+                      />
+                      <Text style={[styles.aulaLabel, { color: presente ? "#22C55E" : Colors.brand.textSecondary }]}>
+                        Aula {idx + 1}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </TouchableOpacity>
           ))
         )}
@@ -313,21 +389,16 @@ const styles = StyleSheet.create({
   sectionHint: { color: Colors.brand.textSecondary, fontSize: 12 },
 
   studentCard: {
+    backgroundColor: Colors.brand.card,
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 14,
     marginBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
     borderWidth: 1,
   },
-  cardPresent: {
-    backgroundColor: Colors.brand.card,
-    borderColor: "rgba(34, 197, 94, 0.15)",
-  },
-  cardAbsent: {
-    backgroundColor: Colors.brand.card,
-    borderColor: "rgba(255, 75, 75, 0.10)",
+  cardTop: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   avatar: {
     width: 42,
@@ -347,19 +418,31 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   statusTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
     flexShrink: 0,
-    minWidth: 80,
-    justifyContent: "center",
+    minWidth: 68,
+    alignItems: "center",
   },
-  tagPresent: { backgroundColor: "rgba(34, 197, 94, 0.85)" },
-  tagAbsent: { backgroundColor: "rgba(255, 75, 75, 0.85)" },
   tagText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+
+  aulasRow: {
+    flexDirection: "row",
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.06)",
+    gap: 16,
+    flexWrap: "wrap",
+  },
+  aulaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 2,
+  },
+  aulaLabel: { fontSize: 13, fontWeight: "600" },
 
   emptyContainer: {
     alignItems: "center",
