@@ -19,9 +19,13 @@ def fechar_chamadas_abertas_por_turma(turma_id):
 
 def abrir_chamada_para_turma(turma_id, professor_id):
     """Fecha qualquer chamada aberta da turma e abre uma nova; retorna chamada_id."""
+    import math
+    from datetime import datetime, date
+
     with get_db_cursor(commit=True) as cur:
         if not cur:
             return None
+
         cur.execute(
             """
             UPDATE Chamadas SET status='Fechada', horario_fim=CURRENT_TIME
@@ -29,13 +33,33 @@ def abrir_chamada_para_turma(turma_id, professor_id):
             """,
             (turma_id,),
         )
+
         cur.execute(
             """
-            INSERT INTO Chamadas (turma_id, professor_id, data_chamada, horario_inicio, status)
-            VALUES (%s, %s, CURRENT_DATE, CURRENT_TIME, 'Aberta')
+            SELECT horario_inicio, horario_fim
+            FROM horarios_aulas
+            WHERE turma_id = %s
+              AND dia_semana = (EXTRACT(DOW FROM NOW() AT TIME ZONE 'America/Sao_Paulo')::int + 6) %% 7
+            LIMIT 1
+            """,
+            (turma_id,),
+        )
+        horario = cur.fetchone()
+
+        total_aulas = 1
+        if horario and horario["horario_fim"] and horario["horario_inicio"]:
+            inicio = datetime.combine(date.today(), horario["horario_inicio"])
+            fim    = datetime.combine(date.today(), horario["horario_fim"])
+            duracao_min = (fim - inicio).total_seconds() / 60
+            total_aulas = max(1, math.ceil(duracao_min / 50))
+
+        cur.execute(
+            """
+            INSERT INTO Chamadas (turma_id, professor_id, data_chamada, horario_inicio, total_aulas, status)
+            VALUES (%s, %s, CURRENT_DATE, CURRENT_TIME, %s, 'Aberta')
             RETURNING chamada_id
             """,
-            (turma_id, professor_id),
+            (turma_id, professor_id, total_aulas),
         )
         nova = cur.fetchone()
         return nova["chamada_id"] if nova else None
