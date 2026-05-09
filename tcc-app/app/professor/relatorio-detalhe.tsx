@@ -93,21 +93,21 @@ export default function RelatorioDetalhe() {
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{detalhe.total_alunos}</Text>
-              <Text style={styles.statLabel}>Total</Text>
+              <Text style={styles.statLabel}>Alunos</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
               <Text style={[styles.statValue, { color: "#22C55E" }]}>
                 {detalhe.presentes}
               </Text>
-              <Text style={styles.statLabel}>Presentes</Text>
+              <Text style={styles.statLabel}>Aulas pres.</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
               <Text style={[styles.statValue, { color: Colors.brand.error }]}>
                 {detalhe.ausentes}
               </Text>
-              <Text style={styles.statLabel}>Ausentes</Text>
+              <Text style={styles.statLabel}>Aulas falt.</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
@@ -136,65 +136,51 @@ export default function RelatorioDetalhe() {
             </Text>
           </View>
 
-          {detalhe.alunos.map((a: any) => (
-            <View
-              key={a.aluno_id}
-              style={[
-                styles.studentCard,
-                a.presente ? styles.cardPresente : styles.cardAusente,
-              ]}
-            >
-              <View
-                style={[
-                  styles.avatar,
-                  {
-                    backgroundColor: a.presente
-                      ? "rgba(34,197,94,0.12)"
-                      : "rgba(255,75,75,0.12)",
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.avatarText,
-                    { color: a.presente ? "#22C55E" : Colors.brand.error },
-                  ]}
-                >
-                  {a.nome.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.studentName} numberOfLines={1}>
-                  {a.nome}
-                </Text>
-                <Text style={[styles.studentRa, { marginTop: 2 }]}>RA {a.ra}</Text>
-              </View>
-
-              <View style={{ alignItems: "flex-end", gap: 4 }}>
-                <View
-                  style={[
-                    styles.statusTag,
-                    a.presente ? styles.tagPresent : styles.tagAbsent,
-                  ]}
-                >
-                  <Ionicons
-                    name={a.presente ? "checkmark-circle" : "close-circle"}
-                    size={13}
-                    color="#fff"
-                  />
-                  <Text style={styles.tagText}>
-                    {a.presente ? "Presente" : "Ausente"}
+          {detalhe.alunos.map((a: any) => {
+            const parcial = a.aulas_presentes_count > 0 && a.aulas_presentes_count < a.total_aulas;
+            const ausente = a.aulas_presentes_count === 0;
+            const cardStyle = ausente ? styles.cardAusente : parcial ? styles.cardParcial : styles.cardPresente;
+            const avatarBg = ausente ? "rgba(255,75,75,0.12)" : parcial ? "rgba(245,158,11,0.12)" : "rgba(34,197,94,0.12)";
+            const avatarColor = ausente ? Colors.brand.error : parcial ? "#F59E0B" : "#22C55E";
+            const tagStyle = ausente ? styles.tagAbsent : parcial ? styles.tagParcial : styles.tagPresent;
+            const tagLabel = ausente ? "Ausente" : parcial ? "Parcial" : "Presente";
+            const tagIcon = ausente ? "close-circle" : parcial ? "remove-circle" : "checkmark-circle";
+            return (
+              <View key={a.aluno_id} style={[styles.studentCard, cardStyle]}>
+                <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
+                  <Text style={[styles.avatarText, { color: avatarColor }]}>
+                    {a.nome.charAt(0).toUpperCase()}
                   </Text>
                 </View>
-                {a.presente && a.tipo_registro !== "—" && (
-                  <View style={styles.tipoTag}>
-                    <Text style={styles.tipoTagText}>{a.tipo_registro}</Text>
+
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.studentName} numberOfLines={1}>
+                    {a.nome}
+                  </Text>
+                  <Text style={[styles.studentRa, { marginTop: 2 }]}>RA {a.ra}</Text>
+                </View>
+
+                <View style={{ alignItems: "flex-end", gap: 4 }}>
+                  <View style={[styles.statusTag, tagStyle]}>
+                    <Ionicons name={tagIcon as any} size={13} color="#fff" />
+                    <Text style={styles.tagText}>{tagLabel}</Text>
                   </View>
-                )}
+                  {a.total_aulas > 1 && (
+                    <View style={styles.tipoTag}>
+                      <Text style={styles.tipoTagText}>
+                        {a.aulas_presentes_count}/{a.total_aulas} aulas
+                      </Text>
+                    </View>
+                  )}
+                  {a.aulas_presentes_count > 0 && a.tipo_registro !== "—" && (
+                    <View style={styles.tipoTag}>
+                      <Text style={styles.tipoTagText}>{a.tipo_registro}</Text>
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
 
           <View style={{ height: 48 }} />
         </ScrollView>
@@ -281,6 +267,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(34,197,94,0.04)",
     borderColor: "rgba(34,197,94,0.12)",
   },
+  cardParcial: {
+    backgroundColor: "rgba(245,158,11,0.04)",
+    borderColor: "rgba(245,158,11,0.12)",
+  },
   cardAusente: {
     backgroundColor: "rgba(255,75,75,0.04)",
     borderColor: "rgba(255,75,75,0.10)",
@@ -319,6 +309,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tagPresent: { backgroundColor: "rgba(34,197,94,0.85)" },
+  tagParcial: { backgroundColor: "rgba(245,158,11,0.85)" },
   tagAbsent: { backgroundColor: "rgba(255,75,75,0.85)" },
   tagText: { color: "#fff", fontSize: 11, fontWeight: "700" },
 });

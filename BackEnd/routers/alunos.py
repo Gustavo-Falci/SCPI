@@ -136,16 +136,16 @@ def get_historico_chamadas_aluno(
             for r in rows
         ]
 
-        total = len(chamadas)
-        presentes = sum(1 for c in chamadas if c["presente"])
+        total_slots = sum(c.get("total_aulas", 1) for c in chamadas)
+        presentes_slots = sum(c.get("aulas_presentes_count", 0) for c in chamadas)
         return {
             "turma_id": turma_id,
             "nome_disciplina": turma["nome_disciplina"],
             "codigo_turma": turma["codigo_turma"],
-            "total": total,
-            "presentes": presentes,
-            "ausentes": total - presentes,
-            "percentual": round(presentes / total * 100) if total > 0 else 0,
+            "total": total_slots,
+            "presentes": presentes_slots,
+            "ausentes": total_slots - presentes_slots,
+            "percentual": round(presentes_slots / total_slots * 100) if total_slots > 0 else 0,
             "chamadas": chamadas,
         }
     except HTTPException:

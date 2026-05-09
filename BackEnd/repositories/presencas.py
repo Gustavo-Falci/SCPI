@@ -19,14 +19,18 @@ def listar_alunos_presenca_chamada(chamada_id, turma_id):
             SELECT
                 al.aluno_id,
                 u.nome,
-                COALESCE(al.ra, '—')          AS ra,
-                CASE WHEN p.presenca_id IS NOT NULL THEN true ELSE false END AS presente,
-                COALESCE(p.tipo_registro, '—') AS tipo_registro
-            FROM Turma_Alunos ta
+                COALESCE(al.ra, '—')               AS ra,
+                c.total_aulas,
+                COUNT(p.presenca_id)                AS aulas_presentes_count,
+                COUNT(p.presenca_id) > 0            AS presente,
+                COALESCE(MAX(p.tipo_registro), '—') AS tipo_registro
+            FROM Chamadas c
+            JOIN Turma_Alunos ta ON ta.turma_id = c.turma_id
             JOIN Alunos   al ON al.aluno_id   = ta.aluno_id
             JOIN Usuarios u  ON u.usuario_id  = al.usuario_id
-            LEFT JOIN Presencas p ON p.aluno_id = al.aluno_id AND p.chamada_id = %s
-            WHERE ta.turma_id = %s
+            LEFT JOIN Presencas p ON p.aluno_id = al.aluno_id AND p.chamada_id = c.chamada_id
+            WHERE c.chamada_id = %s AND c.turma_id = %s
+            GROUP BY al.aluno_id, u.nome, al.ra, c.total_aulas
             ORDER BY u.nome ASC
             """,
             (chamada_id, turma_id),

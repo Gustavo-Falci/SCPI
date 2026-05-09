@@ -194,33 +194,36 @@ export default function ListaPresenca() {
         {loading ? (
           <ActivityIndicator size="large" color={Colors.brand.primary} style={{ marginTop: 20 }} />
         ) : alunos.length > 0 ? (
-          alunos.map((aluno) => (
-            <View style={styles.studentCard} key={aluno.id}>
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: aluno.presente ? 'rgba(34, 197, 94, 0.12)' : 'rgba(255, 75, 75, 0.12)' },
-                ]}
-              >
-                <Text style={[styles.avatarText, { color: aluno.presente ? '#22C55E' : Colors.brand.error }]}>
-                  {aluno.nome.charAt(0).toUpperCase()}
+          alunos.map((aluno) => {
+            const presente = (aluno.aulas_presentes?.length ?? 0) > 0;
+            return (
+              <View style={styles.studentCard} key={aluno.id}>
+                <View
+                  style={[
+                    styles.avatar,
+                    { backgroundColor: presente ? 'rgba(34, 197, 94, 0.12)' : 'rgba(255, 75, 75, 0.12)' },
+                  ]}
+                >
+                  <Text style={[styles.avatarText, { color: presente ? '#22C55E' : Colors.brand.error }]}>
+                    {aluno.nome.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+
+                <Text style={styles.studentName} numberOfLines={1} ellipsizeMode="tail">
+                  {aluno.nome}
                 </Text>
-              </View>
 
-              <Text style={styles.studentName} numberOfLines={1} ellipsizeMode="tail">
-                {aluno.nome}
-              </Text>
-
-              <View style={[styles.statusTag, aluno.presente ? styles.tagPresent : styles.tagAbsent]}>
-                <Ionicons
-                  name={aluno.presente ? "checkmark-circle" : "close-circle"}
-                  size={13}
-                  color="#fff"
-                />
-                <Text style={styles.tagText}>{aluno.presente ? "Presente" : "Ausente"}</Text>
+                <View style={[styles.statusTag, presente ? styles.tagPresent : styles.tagAbsent]}>
+                  <Ionicons
+                    name={presente ? "checkmark-circle" : "close-circle"}
+                    size={13}
+                    color="#fff"
+                  />
+                  <Text style={styles.tagText}>{presente ? "Presente" : "Ausente"}</Text>
+                </View>
               </View>
-            </View>
-          ))
+            );
+          })
         ) : (
           <View style={styles.emptyContainer}>
             <Ionicons name="people-outline" size={48} color={Colors.brand.textSecondary} />

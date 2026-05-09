@@ -5,9 +5,9 @@ export function RelatorioDetalheModal({ data, onClose }) {
   if (!data) return null;
 
   const stats = [
-    { label: 'Total', value: data.total_alunos, cls: 'text-white', bg: 'bg-white/[0.03] border-white/5' },
-    { label: 'Presentes', value: data.presentes, cls: 'text-green-400', bg: 'bg-green-500/5 border-green-500/10' },
-    { label: 'Ausentes', value: data.ausentes, cls: 'text-red-400', bg: 'bg-red-500/5 border-red-500/10' },
+    { label: 'Alunos', value: data.total_alunos, cls: 'text-white', bg: 'bg-white/[0.03] border-white/5' },
+    { label: 'Aulas Pres.', value: data.presentes, cls: 'text-green-400', bg: 'bg-green-500/5 border-green-500/10' },
+    { label: 'Aulas Falt.', value: data.ausentes, cls: 'text-red-400', bg: 'bg-red-500/5 border-red-500/10' },
     {
       label: 'Presença',
       value: `${data.percentual}%`,
@@ -44,27 +44,52 @@ export function RelatorioDetalheModal({ data, onClose }) {
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-3 -mx-2 px-2">
-          {data.alunos.map((a) => (
-            <div key={a.aluno_id} className={`flex items-center gap-5 p-5 rounded-2xl border transition-all ${a.presente ? 'bg-green-500/[0.03] border-green-500/10' : 'bg-red-500/[0.03] border-red-500/10'}`}>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-lg shrink-0 ${a.presente ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                {a.nome.charAt(0)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-black text-white truncate">{a.nome}</p>
-                <p className="text-xs text-gray-500 font-bold mt-1">RA {a.ra}</p>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                {a.presente && a.tipo_registro !== '—' && (
-                  <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 bg-white/5 px-3 py-1 rounded-lg">
-                    {a.tipo_registro}
+          {data.alunos.map((a) => {
+            const parcial = a.aulas_presentes_count > 0 && a.aulas_presentes_count < a.total_aulas;
+            const ausente = a.aulas_presentes_count === 0;
+            const cardCls = ausente
+              ? 'bg-red-500/[0.03] border-red-500/10'
+              : parcial
+              ? 'bg-yellow-500/[0.03] border-yellow-500/10'
+              : 'bg-green-500/[0.03] border-green-500/10';
+            const avatarCls = ausente
+              ? 'bg-red-500/10 text-red-400'
+              : parcial
+              ? 'bg-yellow-500/10 text-yellow-400'
+              : 'bg-green-500/10 text-green-400';
+            const tagCls = ausente
+              ? 'text-red-400 bg-red-500/10'
+              : parcial
+              ? 'text-yellow-400 bg-yellow-500/10'
+              : 'text-green-400 bg-green-500/10';
+            const tagLabel = ausente ? 'Ausente' : parcial ? 'Parcial' : 'Presente';
+            return (
+              <div key={a.aluno_id} className={`flex items-center gap-5 p-5 rounded-2xl border transition-all ${cardCls}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-lg shrink-0 ${avatarCls}`}>
+                  {a.nome.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-white truncate">{a.nome}</p>
+                  <p className="text-xs text-gray-500 font-bold mt-1">RA {a.ra}</p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  {a.total_aulas > 1 && (
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 bg-white/5 px-3 py-1 rounded-lg">
+                      {a.aulas_presentes_count}/{a.total_aulas} aulas
+                    </span>
+                  )}
+                  {a.aulas_presentes_count > 0 && a.tipo_registro !== '—' && (
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 bg-white/5 px-3 py-1 rounded-lg">
+                      {a.tipo_registro}
+                    </span>
+                  )}
+                  <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${tagCls}`}>
+                    {tagLabel}
                   </span>
-                )}
-                <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${a.presente ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'}`}>
-                  {a.presente ? 'Presente' : 'Ausente'}
-                </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="pt-8 border-t border-white/5 mt-6">

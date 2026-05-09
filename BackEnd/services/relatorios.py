@@ -9,10 +9,11 @@ from repositories.chamadas import (
 from repositories.presencas import listar_alunos_presenca_chamada
 
 
-def resumo_presenca(total: int, presentes: int) -> dict:
+def resumo_presenca(total_alunos: int, total_aulas: int, presentes: int) -> dict:
+    total_slots = total_alunos * total_aulas
     return {
-        "ausentes": total - presentes,
-        "percentual": round(presentes / total * 100) if total > 0 else 0,
+        "ausentes": total_slots - presentes,
+        "percentual": round(presentes / total_slots * 100) if total_slots > 0 else 0,
     }
 
 
@@ -21,7 +22,7 @@ def listar_relatorios(professor_id: Optional[str] = None, turma_id: Optional[str
     rows = listar_relatorios_chamadas(
         professor_id=professor_id, turma_id=turma_id, limit=limit, offset=offset
     )
-    return [{**dict(r), **resumo_presenca(r["total_alunos"], r["presentes"])} for r in rows]
+    return [{**dict(r), **resumo_presenca(r["total_alunos"], r["total_aulas"], r["presentes"])} for r in rows]
 
 
 def detalhe_relatorio(chamada_id: str, professor_id: Optional[str] = None):
@@ -30,13 +31,14 @@ def detalhe_relatorio(chamada_id: str, professor_id: Optional[str] = None):
         raise HTTPException(status_code=404, detail="Chamada não encontrada.")
 
     alunos = listar_alunos_presenca_chamada(chamada_id, chamada["turma_id"])
-
-    total = len(alunos)
-    presentes = sum(1 for a in alunos if a["presente"])
+    total_aulas = chamada["total_aulas"]
+    total_alunos = len(alunos)
+    presentes = sum(a["aulas_presentes_count"] for a in alunos)
     return {
         **dict(chamada),
-        "total_alunos": total,
+        "total_alunos": total_alunos,
+        "total_aulas": total_aulas,
         "presentes": presentes,
-        **resumo_presenca(total, presentes),
+        **resumo_presenca(total_alunos, total_aulas, presentes),
         "alunos": [dict(a) for a in alunos],
     }

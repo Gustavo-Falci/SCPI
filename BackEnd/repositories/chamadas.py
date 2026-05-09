@@ -242,6 +242,7 @@ def listar_relatorios_chamadas(professor_id=None, turma_id=None, limit=200, offs
             to_char(c.data_chamada,   'DD/MM/YYYY') AS data_chamada,
             to_char(c.horario_inicio, 'HH24:MI')    AS horario_inicio,
             to_char(c.horario_fim,    'HH24:MI')    AS horario_fim,
+            c.total_aulas,
             (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = c.turma_id) AS total_alunos,
             (SELECT COUNT(*) FROM Presencas p  WHERE p.chamada_id  = c.chamada_id) AS presentes
         FROM Chamadas c
@@ -275,7 +276,8 @@ def obter_relatorio_chamada(chamada_id, professor_id=None):
             u.nome AS professor_nome,
             to_char(c.data_chamada,   'DD/MM/YYYY') AS data_chamada,
             to_char(c.horario_inicio, 'HH24:MI')    AS horario_inicio,
-            to_char(c.horario_fim,    'HH24:MI')    AS horario_fim
+            to_char(c.horario_fim,    'HH24:MI')    AS horario_fim,
+            c.total_aulas
         FROM Chamadas c
         JOIN Turmas     t  ON t.turma_id     = c.turma_id
         JOIN Professores pr ON pr.professor_id = c.professor_id

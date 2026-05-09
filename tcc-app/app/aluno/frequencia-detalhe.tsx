@@ -115,7 +115,7 @@ export default function FrequenciaDetalhe() {
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{detalhe.total}</Text>
-              <Text style={styles.statLabel}>Total</Text>
+              <Text style={styles.statLabel}>Total aulas</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
@@ -158,73 +158,61 @@ export default function FrequenciaDetalhe() {
               </Text>
             </View>
           ) : (
-            detalhe.chamadas.map((c: any, idx: number) => (
-              <View
-                key={c.chamada_id ?? idx}
-                style={[
-                  styles.callCard,
-                  c.presente ? styles.cardPresente : styles.cardAusente,
-                ]}
-              >
-                {/* Linha 1: dia + data + badge */}
-                <View style={styles.cardRow}>
-                  <View
-                    style={[
-                      styles.dayBadge,
-                      {
-                        backgroundColor: c.presente
-                          ? "rgba(34,197,94,0.12)"
-                          : "rgba(255,75,75,0.12)",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.dayText,
-                        { color: c.presente ? "#22C55E" : Colors.brand.error },
-                      ]}
-                    >
-                      {c.dia_semana}
-                    </Text>
-                  </View>
-
-                  <Text style={styles.callDate}>{c.data_chamada}</Text>
-
-                  <View
-                    style={[
-                      styles.statusTag,
-                      c.presente ? styles.tagPresent : styles.tagAbsent,
-                    ]}
-                  >
-                    <Ionicons
-                      name={c.presente ? "checkmark-circle" : "close-circle"}
-                      size={13}
-                      color="#fff"
-                    />
-                    <Text style={styles.tagText}>
-                      {c.presente ? "Presente" : "Falta"}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Linha 2: horário + tipo de registro */}
-                <View style={styles.cardSubRow}>
-                  <Ionicons
-                    name="time-outline"
-                    size={13}
-                    color={Colors.brand.textSecondary}
-                  />
-                  <Text style={styles.callTime}>
-                    {c.horario_inicio} – {c.horario_fim}
-                  </Text>
-                  {c.presente && c.tipo_registro !== "—" && (
-                    <View style={styles.tipoTag}>
-                      <Text style={styles.tipoTagText}>{c.tipo_registro}</Text>
+            detalhe.chamadas.map((c: any, idx: number) => {
+              const parcial = c.aulas_presentes_count > 0 && c.aulas_presentes_count < c.total_aulas;
+              const ausente = c.aulas_presentes_count === 0;
+              const cardStyle = ausente ? styles.cardAusente : parcial ? styles.cardParcial : styles.cardPresente;
+              const dayBg = ausente ? "rgba(255,75,75,0.12)" : parcial ? "rgba(245,158,11,0.12)" : "rgba(34,197,94,0.12)";
+              const dayColor = ausente ? Colors.brand.error : parcial ? "#F59E0B" : "#22C55E";
+              const tagStyle = ausente ? styles.tagAbsent : parcial ? styles.tagParcial : styles.tagPresent;
+              const tagLabel = ausente ? "Falta" : parcial ? "Parcial" : "Presente";
+              const tagIcon = ausente ? "close-circle" : parcial ? "remove-circle" : "checkmark-circle";
+              return (
+                <View key={c.chamada_id ?? idx} style={[styles.callCard, cardStyle]}>
+                  {/* Linha 1: dia + data + badge */}
+                  <View style={styles.cardRow}>
+                    <View style={[styles.dayBadge, { backgroundColor: dayBg }]}>
+                      <Text style={[styles.dayText, { color: dayColor }]}>
+                        {c.dia_semana}
+                      </Text>
                     </View>
-                  )}
+
+                    <Text style={styles.callDate}>{c.data_chamada}</Text>
+
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                      {c.total_aulas > 1 && (
+                        <View style={styles.tipoTag}>
+                          <Text style={styles.tipoTagText}>
+                            {c.aulas_presentes_count}/{c.total_aulas}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={[styles.statusTag, tagStyle]}>
+                        <Ionicons name={tagIcon as any} size={13} color="#fff" />
+                        <Text style={styles.tagText}>{tagLabel}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Linha 2: horário + tipo de registro */}
+                  <View style={styles.cardSubRow}>
+                    <Ionicons
+                      name="time-outline"
+                      size={13}
+                      color={Colors.brand.textSecondary}
+                    />
+                    <Text style={styles.callTime}>
+                      {c.horario_inicio} – {c.horario_fim}
+                    </Text>
+                    {c.aulas_presentes_count > 0 && c.tipo_registro !== "—" && (
+                      <View style={styles.tipoTag}>
+                        <Text style={styles.tipoTagText}>{c.tipo_registro}</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
 
           <View style={{ height: 48 }} />
@@ -356,6 +344,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(34,197,94,0.04)",
     borderColor: "rgba(34,197,94,0.12)",
   },
+  cardParcial: {
+    backgroundColor: "rgba(245,158,11,0.04)",
+    borderColor: "rgba(245,158,11,0.12)",
+  },
   cardAusente: {
     backgroundColor: "rgba(255,75,75,0.04)",
     borderColor: "rgba(255,75,75,0.10)",
@@ -392,6 +384,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   tagPresent: { backgroundColor: "rgba(34,197,94,0.85)" },
+  tagParcial: { backgroundColor: "rgba(245,158,11,0.85)" },
   tagAbsent: { backgroundColor: "rgba(255,75,75,0.85)" },
   tagText: { color: "#fff", fontSize: 11, fontWeight: "700" },
 
