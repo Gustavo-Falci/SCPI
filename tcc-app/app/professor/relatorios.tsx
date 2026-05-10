@@ -127,14 +127,14 @@ export default function Relatorios() {
                 <View style={styles.statsRow}>
                   <View style={styles.statItem}>
                     <Text style={styles.statValue}>{c.total_alunos}</Text>
-                    <Text style={styles.statLabel}>Total</Text>
+                    <Text style={styles.statLabel}>Alunos</Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
                     <Text style={[styles.statValue, { color: "#22C55E" }]}>
                       {c.presentes}
                     </Text>
-                    <Text style={styles.statLabel}>Presentes</Text>
+                    <Text style={styles.statLabel}>Presenças</Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
@@ -143,7 +143,12 @@ export default function Relatorios() {
                     >
                       {c.ausentes}
                     </Text>
-                    <Text style={styles.statLabel}>Ausentes</Text>
+                    <Text style={styles.statLabel}>Faltas</Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statItem}>
+                    <Text style={styles.statValue}>{c.total_aulas}</Text>
+                    <Text style={styles.statLabel}>Aulas/sessão</Text>
                   </View>
                   <Ionicons
                     name="chevron-forward"
