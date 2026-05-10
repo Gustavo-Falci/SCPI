@@ -42,6 +42,9 @@ export default function RelatorioDetalhe() {
   const ausentes_count = detalhe
     ? detalhe.alunos.filter((a: any) => a.aulas_presentes_count === 0).length
     : 0;
+  const parciais_count = detalhe
+    ? detalhe.alunos.filter((a: any) => a.aulas_presentes_count > 0 && a.aulas_presentes_count < a.total_aulas).length
+    : 0;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -115,6 +118,13 @@ export default function RelatorioDetalhe() {
                 {ausentes_count}
               </Text>
               <Text style={styles.statLabel}>Ausentes</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={[styles.statValue, { color: "#F59E0B" }]}>
+                {parciais_count}
+              </Text>
+              <Text style={styles.statLabel}>Parciais</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
