@@ -244,7 +244,19 @@ def listar_relatorios_chamadas(professor_id=None, turma_id=None, limit=200, offs
             to_char(c.horario_fim,    'HH24:MI')    AS horario_fim,
             c.total_aulas,
             (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = c.turma_id) AS total_alunos,
-            (SELECT COUNT(*) FROM Presencas p  WHERE p.chamada_id  = c.chamada_id) AS presentes
+            (SELECT COUNT(*) FROM Presencas p  WHERE p.chamada_id  = c.chamada_id) AS presentes,
+            (SELECT COUNT(*)
+             FROM Turma_Alunos ta
+             LEFT JOIN (SELECT aluno_id, COUNT(*) AS cnt FROM Presencas WHERE chamada_id = c.chamada_id GROUP BY aluno_id) pc ON pc.aluno_id = ta.aluno_id
+             WHERE ta.turma_id = c.turma_id AND COALESCE(pc.cnt, 0) = c.total_aulas) AS presentes_alunos,
+            (SELECT COUNT(*)
+             FROM Turma_Alunos ta
+             LEFT JOIN (SELECT aluno_id, COUNT(*) AS cnt FROM Presencas WHERE chamada_id = c.chamada_id GROUP BY aluno_id) pc ON pc.aluno_id = ta.aluno_id
+             WHERE ta.turma_id = c.turma_id AND COALESCE(pc.cnt, 0) = 0) AS ausentes_alunos,
+            (SELECT COUNT(*)
+             FROM Turma_Alunos ta
+             LEFT JOIN (SELECT aluno_id, COUNT(*) AS cnt FROM Presencas WHERE chamada_id = c.chamada_id GROUP BY aluno_id) pc ON pc.aluno_id = ta.aluno_id
+             WHERE ta.turma_id = c.turma_id AND COALESCE(pc.cnt, 0) > 0 AND COALESCE(pc.cnt, 0) < c.total_aulas) AS parciais_alunos
         FROM Chamadas c
         JOIN Turmas     t  ON t.turma_id     = c.turma_id
         JOIN Professores pr ON pr.professor_id = c.professor_id

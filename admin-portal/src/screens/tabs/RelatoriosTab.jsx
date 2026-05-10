@@ -67,9 +67,9 @@ export function RelatoriosTab({ showToast, onOpenDetalhe }) {
                 <div className="flex items-center gap-6 shrink-0">
                   <div className="hidden md:flex items-center gap-4">
                     <div className="text-center"><p className="text-sm font-black text-white">{r.total_alunos}</p><p className="text-xs text-gray-600 font-black uppercase tracking-widest">Alunos</p></div>
-                    <div className="text-center"><p className="text-sm font-black text-green-400">{r.presentes}</p><p className="text-xs text-gray-600 font-black uppercase tracking-widest">Presenças</p></div>
-                    <div className="text-center"><p className="text-sm font-black text-red-400">{r.ausentes}</p><p className="text-xs text-gray-600 font-black uppercase tracking-widest">Faltas</p></div>
-                    <div className="text-center"><p className="text-sm font-black text-white">{r.total_aulas}</p><p className="text-xs text-gray-600 font-black uppercase tracking-widest">Aulas/sessão</p></div>
+                    <div className="text-center"><p className="text-sm font-black text-green-400">{r.presentes_alunos}</p><p className="text-xs text-gray-600 font-black uppercase tracking-widest">Presentes</p></div>
+                    <div className="text-center"><p className="text-sm font-black text-red-400">{r.ausentes_alunos}</p><p className="text-xs text-gray-600 font-black uppercase tracking-widest">Ausentes</p></div>
+                    <div className="text-center"><p className="text-sm font-black text-yellow-400">{r.parciais_alunos}</p><p className="text-xs text-gray-600 font-black uppercase tracking-widest">Parciais</p></div>
                   </div>
                   <div className="text-center min-w-[50px]">
                     <p className={`text-lg font-black ${r.percentual >= 75 ? 'text-green-400' : 'text-red-400'}`}>{r.percentual}%</p>

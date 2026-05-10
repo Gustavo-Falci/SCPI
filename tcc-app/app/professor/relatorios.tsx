@@ -132,23 +132,23 @@ export default function Relatorios() {
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
                     <Text style={[styles.statValue, { color: "#22C55E" }]}>
-                      {c.presentes}
+                      {c.presentes_alunos}
                     </Text>
-                    <Text style={styles.statLabel}>Presenças</Text>
+                    <Text style={styles.statLabel}>Presentes</Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
-                    <Text
-                      style={[styles.statValue, { color: Colors.brand.error }]}
-                    >
-                      {c.ausentes}
+                    <Text style={[styles.statValue, { color: Colors.brand.error }]}>
+                      {c.ausentes_alunos}
                     </Text>
-                    <Text style={styles.statLabel}>Faltas</Text>
+                    <Text style={styles.statLabel}>Ausentes</Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
-                    <Text style={styles.statValue}>{c.total_aulas}</Text>
-                    <Text style={styles.statLabel}>Aulas/sessão</Text>
+                    <Text style={[styles.statValue, { color: "#F59E0B" }]}>
+                      {c.parciais_alunos}
+                    </Text>
+                    <Text style={styles.statLabel}>Parciais</Text>
                   </View>
                   <Ionicons
                     name="chevron-forward"
