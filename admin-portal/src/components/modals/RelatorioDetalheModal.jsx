@@ -39,10 +39,10 @@ export function RelatorioDetalheModal({ data, onClose }) {
           </button>
         </div>
 
-        <div className="grid grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-5 gap-2 mb-8">
           {stats.map(({ label, value, cls, bg }) => (
-            <div key={label} className={`${bg} rounded-2xl p-4 text-center border`}>
-              <p className={`text-2xl font-black ${cls}`}>{value}</p>
+            <div key={label} className={`${bg} rounded-xl p-3 text-center border`}>
+              <p className={`text-xl font-black ${cls}`}>{value}</p>
               <p className="text-xs text-gray-500 font-black uppercase tracking-widest mt-1">{label}</p>
             </div>
           ))}
