@@ -4,10 +4,13 @@ import { FileText, X } from 'lucide-react';
 export function RelatorioDetalheModal({ data, onClose }) {
   if (!data) return null;
 
+  const presentes_count = data.alunos.filter(a => a.aulas_presentes_count === a.total_aulas).length;
+  const ausentes_count = data.alunos.filter(a => a.aulas_presentes_count === 0).length;
+
   const stats = [
     { label: 'Alunos', value: data.total_alunos, cls: 'text-white', bg: 'bg-white/[0.03] border-white/5' },
-    { label: 'Aulas Pres.', value: data.presentes, cls: 'text-green-400', bg: 'bg-green-500/5 border-green-500/10' },
-    { label: 'Aulas Falt.', value: data.ausentes, cls: 'text-red-400', bg: 'bg-red-500/5 border-red-500/10' },
+    { label: 'Presentes', value: presentes_count, cls: 'text-green-400', bg: 'bg-green-500/5 border-green-500/10' },
+    { label: 'Ausentes', value: ausentes_count, cls: 'text-red-400', bg: 'bg-red-500/5 border-red-500/10' },
     {
       label: 'Presença',
       value: `${data.percentual}%`,

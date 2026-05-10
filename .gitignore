@@ -12,3 +12,6 @@ venv/
 node_modules/
 admin-portal/dist/
 docs/
+DESIGN.md
+logo-concept.svg
+MEMORIA_OBSIDIAN.md

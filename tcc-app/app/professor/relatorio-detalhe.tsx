@@ -36,6 +36,13 @@ export default function RelatorioDetalhe() {
     load();
   }, [chamada_id]);
 
+  const presentes_count = detalhe
+    ? detalhe.alunos.filter((a: any) => a.aulas_presentes_count === a.total_aulas).length
+    : 0;
+  const ausentes_count = detalhe
+    ? detalhe.alunos.filter((a: any) => a.aulas_presentes_count === 0).length
+    : 0;
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar barStyle="light-content" />
@@ -98,16 +105,16 @@ export default function RelatorioDetalhe() {
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
               <Text style={[styles.statValue, { color: "#22C55E" }]}>
-                {detalhe.presentes}
+                {presentes_count}
               </Text>
-              <Text style={styles.statLabel}>Aulas pres.</Text>
+              <Text style={styles.statLabel}>Presentes</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
               <Text style={[styles.statValue, { color: Colors.brand.error }]}>
-                {detalhe.ausentes}
+                {ausentes_count}
               </Text>
-              <Text style={styles.statLabel}>Aulas falt.</Text>
+              <Text style={styles.statLabel}>Ausentes</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>

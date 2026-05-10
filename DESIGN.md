@@ -20,15 +20,15 @@ A identidade une dois mundos — **tecnologia** (scan, nodes, verde de "OK") e *
 
 ## Paleta de Cores
 
-| Papel          | Nome            | Hex       | Uso                                          |
-|----------------|-----------------|-----------|----------------------------------------------|
-| **Primária**   | Deep Blue       | `#1E40AF` | Frame, silhueta, elementos estruturais        |
-| **Accent**     | Emerald         | `#10B981` | Scan line, badge, underline do wordmark       |
-| **Node**       | Mid Blue        | `#3B82F6` | Pontos e linhas de detecção facial            |
-| **Texto**      | Near Black      | `#0F172A` | Wordmark "SCPI"                               |
-| **Tagline**    | Slate           | `#475569` | "PRESENÇA INTELIGENTE"                        |
-| **Descriptor** | Light Slate     | `#94A3B8` | Linha de detalhe inferior                     |
-| **Separator**  | Border          | `#CBD5E1` | Linha divisória vertical                      |
+| Papel                | Nome        | Hex         | Uso                                     |
+| -------------------- | ----------- | ----------- | --------------------------------------- |
+| **Primária**  | Deep Blue   | `#1E40AF` | Frame, silhueta, elementos estruturais  |
+| **Accent**     | Emerald     | `#10B981` | Scan line, badge, underline do wordmark |
+| **Node**       | Mid Blue    | `#3B82F6` | Pontos e linhas de detecção facial    |
+| **Texto**      | Near Black  | `#0F172A` | Wordmark "SCPI"                         |
+| **Tagline**    | Slate       | `#475569` | "PRESENÇA INTELIGENTE"                 |
+| **Descriptor** | Light Slate | `#94A3B8` | Linha de detalhe inferior               |
+| **Separator**  | Border      | `#CBD5E1` | Linha divisória vertical               |
 
 ### Uso em fundos escuros
 
@@ -42,11 +42,11 @@ A identidade une dois mundos — **tecnologia** (scan, nodes, verde de "OK") e *
 
 ## Tipografia
 
-| Elemento        | Fonte                 | Peso | Tamanho | Espaçamento |
-|-----------------|-----------------------|------|---------|-------------|
-| Wordmark "SCPI" | Arial Black / Inter   | 900  | 65 px   | −1.5        |
-| Tagline         | Arial / Inter         | 400  | 11.5 px | +3.8        |
-| Descriptor      | Arial / Inter         | 400  | 8.5 px  | +1.8        |
+| Elemento        | Fonte               | Peso | Tamanho | Espaçamento |
+| --------------- | ------------------- | ---- | ------- | ------------ |
+| Wordmark "SCPI" | Arial Black / Inter | 900  | 65 px   | −1.5        |
+| Tagline         | Arial / Inter       | 400  | 11.5 px | +3.8         |
+| Descriptor      | Arial / Inter       | 400  | 8.5 px  | +1.8         |
 
 **Substituições web-safe:** Arial Black → fallback para Arial Bold → Helvetica Neue Bold.
 
@@ -83,18 +83,23 @@ A identidade une dois mundos — **tecnologia** (scan, nodes, verde de "OK") e *
 ## Variantes
 
 ### 1. Lockup Horizontal (principal)
+
 `logo-concept.svg` — ícone à esquerda, wordmark à direita. Uso: cabeçalhos, splash screen, documentação.
 
 ### 2. Ícone isolado
+
 Exportar apenas a região `0 0 150 150` do SVG. Uso: favicon, ícone do app mobile, avatar.
 
 ### 3. Monochromatic (preto)
+
 Trocar `#1E40AF` → `#0F172A`, `#10B981` → `#0F172A`, `#3B82F6` → `#334155`. Uso: impressão B&W, bordados, gravação.
 
 ### 4. Monochromatic (branco)
+
 Todos os elementos em `#FFFFFF`. Uso: sobre fundos sólidos escuros, camisetas.
 
 ### 5. Ícone + Wordmark vertical
+
 Símbolo centralizado acima de "SCPI" e tagline — uso: splash screen mobile, cartão.
 
 ---
@@ -105,10 +110,10 @@ Mínimo de **½ da altura do badge** (≈ 7 px no SVG de referência) em todos o
 
 ### Tamanho mínimo
 
-| Variante           | Mínimo       |
-|--------------------|--------------|
-| Lockup horizontal  | 240 × 75 px  |
-| Ícone isolado      | 32 × 32 px   |
+| Variante          | Mínimo      |
+| ----------------- | ------------ |
+| Lockup horizontal | 240 × 75 px |
+| Ícone isolado    | 32 × 32 px  |
 
 Abaixo do mínimo, usar apenas o wordmark "SCPI" sem o ícone.
 
@@ -127,14 +132,14 @@ Abaixo do mínimo, usar apenas o wordmark "SCPI" sem o ícone.
 
 ## Aplicações sugeridas
 
-| Contexto                    | Variante              | Fundo         |
-|-----------------------------|-----------------------|---------------|
-| App mobile — splash screen  | Ícone + vertical      | `#0F172A`     |
-| App mobile — header         | Ícone isolado         | transparente  |
-| Admin portal — sidebar      | Lockup horizontal     | `#1E293B`     |
-| Documentação / README       | Lockup horizontal     | branco        |
-| Favicon / PWA icon          | Ícone isolado (64 px) | `#1E40AF`     |
-| Apresentação TCC            | Lockup horizontal     | branco/escuro |
+| Contexto                    | Variante               | Fundo         |
+| --------------------------- | ---------------------- | ------------- |
+| App mobile — splash screen | Ícone + vertical      | `#0F172A`   |
+| App mobile — header        | Ícone isolado         | transparente  |
+| Admin portal — sidebar     | Lockup horizontal      | `#1E293B`   |
+| Documentação / README     | Lockup horizontal      | branco        |
+| Favicon / PWA icon          | Ícone isolado (64 px) | `#1E40AF`   |
+| Apresentação TCC          | Lockup horizontal      | branco/escuro |
 
 ---
 
