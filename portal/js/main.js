@@ -24,6 +24,10 @@ const TABS = [
 
 const TABS_WITH_CREATE = new Set(['turmas', 'professores', 'alunos']);
 
+// Bottom nav: máx 5 itens (UX guideline bottom-nav-limit)
+// 4 tabs principais + botão "Mais" que abre sidebar
+const BOTTOM_NAV_TABS = ['turmas', 'alunos', 'professores', 'relatorios'];
+
 function buildSidebar() {
   const nav = document.getElementById('sidebar-nav');
   nav.innerHTML = TABS.map(t => `
@@ -37,14 +41,22 @@ function buildSidebar() {
 function buildBottomNav() {
   const nav = document.getElementById('bottom-nav');
   if (!nav) return;
-  nav.innerHTML = TABS.map(t => `
-    <button data-tab="${t.id}" class="bnav-item">
+  const mainTabs = TABS.filter(t => BOTTOM_NAV_TABS.includes(t.id));
+  nav.innerHTML = mainTabs.map(t => `
+    <button data-tab="${t.id}" class="bnav-item" aria-label="${t.label}">
       ${icon(t.iconName, 20)}
       <span>${t.bLabel}</span>
       <div class="bnav-dot"></div>
     </button>
-  `).join('');
-  nav.querySelectorAll('.bnav-item').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+  `).join('') + `
+    <button id="bnav-more" class="bnav-item" aria-label="Mais opções">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      <span>Mais</span>
+      <div class="bnav-dot"></div>
+    </button>
+  `;
+  nav.querySelectorAll('.bnav-item[data-tab]').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+  document.getElementById('bnav-more').addEventListener('click', openSidebar);
 }
 
 function setActiveNav(tabId) {
@@ -52,9 +64,11 @@ function setActiveNav(tabId) {
     const a = btn.dataset.tab === tabId;
     btn.className = `nav-item w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm transition-all text-left ${a ? 'bg-accent/10 text-accent border border-accent/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`;
   });
-  document.querySelectorAll('.bnav-item').forEach(btn => {
+  document.querySelectorAll('.bnav-item[data-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tabId);
   });
+  // "Mais" fica ativo se tab atual não está no bottom nav principal
+  document.getElementById('bnav-more')?.classList.toggle('active', !BOTTOM_NAV_TABS.includes(tabId));
   // FAB: show only for tabs with create form
   const fab = document.getElementById('fab');
   if (fab) fab.classList.toggle('hidden', !TABS_WITH_CREATE.has(tabId));

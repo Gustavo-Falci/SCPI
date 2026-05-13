@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SCPI — Admin Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -25,6 +28,8 @@
   <script>window.__SCPI_API_URL__ = 'https://api.scpi.me'</script>
 </head>
 <body class="bg-surface text-white min-h-screen antialiased">
+  <!-- Skip link para acessibilidade via teclado -->
+  <a href="#tab-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-accent focus:text-white focus:rounded-xl focus:font-black focus:text-sm">Ir para conteúdo</a>
 
   <!-- ============================== LOGIN ============================== -->
   <div id="view-login" class="min-h-screen flex items-center justify-center p-4">
@@ -95,7 +100,7 @@
       </div>
 
       <!-- Navigation -->
-      <nav id="sidebar-nav" class="flex-1 p-3 space-y-1 overflow-y-auto"></nav>
+      <nav id="sidebar-nav" aria-label="Menu principal" class="flex-1 p-3 space-y-1 overflow-y-auto"></nav>
 
       <!-- User profile + logout -->
       <div class="p-3 border-t border-white/5 flex-shrink-0 space-y-1">
@@ -146,7 +151,7 @@
       </header>
 
       <!-- Tab content -->
-      <main id="tab-content" class="flex-1 overflow-hidden p-4 sm:p-6 min-h-0 flex flex-col gap-4"></main>
+      <main id="tab-content" role="main" tabindex="-1" class="flex-1 overflow-hidden p-4 sm:p-6 min-h-0 flex flex-col gap-4"></main>
     </div>
   </div>
 
@@ -180,7 +185,7 @@
   <div id="toast-container" class="fixed top-4 right-4 z-[80] flex flex-col gap-2 pointer-events-none max-w-sm w-full"></div>
 
   <!-- ============================== BOTTOM NAV (mobile) ============================== -->
-  <nav id="bottom-nav"
+  <nav id="bottom-nav" aria-label="Navegação móvel"
     class="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-white/5 flex items-stretch"
     style="background:rgba(21,23,24,0.97);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);height:56px">
     <!-- Populated by main.js buildBottomNav() -->

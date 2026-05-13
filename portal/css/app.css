@@ -1,3 +1,6 @@
+/* ── Font ── */
+body, input, select, textarea, button { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -65,6 +68,34 @@ select.scpi-input option { background: #151718; color: #fff; }
 
 /* Loader button state */
 button:disabled { cursor: not-allowed; }
+
+/* ── cursor-pointer em cards e itens clicáveis ── */
+[data-tab], .nav-item, .bnav-item, .rel-item, .group-row,
+.anim-item button, [onclick] { cursor: pointer; }
+
+/* ── Focus rings acessíveis ── */
+:focus-visible {
+  outline: 2px solid #4B39EF;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid #4B39EF;
+  outline-offset: 2px;
+}
+/* Remove outline para clique com mouse (mantém para teclado) */
+:focus:not(:focus-visible) { outline: none; }
+
+/* ── prefers-reduced-motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .skeleton { animation: none; background: rgba(255,255,255,0.06); }
+  .spin { animation: none; }
+}
 
 /* Accent color (mirrors tailwind config) */
 :root { --accent: #4B39EF; --accent-dark: #3D2DD4; }
