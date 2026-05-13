@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCPI — Admin Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: '#0C0C12',
+            card: '#151718',
+            'card-hover': '#1A1C1E',
+            accent: '#4B39EF',
+            'accent-dark': '#3D2DD4',
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/app.css">
+  <!-- Set your backend URL here (overrides default in config.js) -->
+  <script>window.__SCPI_API_URL__ = 'https://api.scpi.me'</script>
+</head>
+<body class="bg-surface text-white min-h-screen antialiased">
+
+  <!-- ============================== LOGIN ============================== -->
+  <div id="view-login" class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-sm">
+      <div class="text-center mb-8">
+        <div class="w-16 h-16 bg-accent rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-accent/40">
+          <span class="logo-icon text-white"></span>
+        </div>
+        <h1 class="text-2xl font-black tracking-tight">SCPI</h1>
+        <p class="text-gray-500 text-sm font-bold mt-1">Portal Administrativo</p>
+      </div>
+
+      <div class="bg-card rounded-3xl p-8 border border-white/5 shadow-2xl shadow-black/60">
+        <form id="login-form" class="space-y-5" autocomplete="on">
+          <div>
+            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email</label>
+            <input id="login-email" name="email" type="email" placeholder="admin@escola.com" autocomplete="email"
+              class="scpi-input" required>
+          </div>
+          <div>
+            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Senha</label>
+            <div class="relative">
+              <input id="login-password" name="password" type="password" placeholder="••••••••" autocomplete="current-password"
+                class="scpi-input pr-12" required>
+              <button type="button" id="toggle-password"
+                class="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-gray-600 hover:text-gray-300 transition-colors rounded-xl hover:bg-white/5">
+              </button>
+            </div>
+          </div>
+
+          <div id="login-error" class="hidden px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-2xl">
+            <p class="text-red-400 text-sm font-bold"></p>
+          </div>
+
+          <button type="submit" id="login-btn"
+            class="w-full bg-accent hover:bg-accent-dark text-white font-black py-3.5 rounded-2xl transition-all hover:shadow-lg hover:shadow-accent/30 flex items-center justify-center gap-2 mt-2">
+            <span id="login-btn-text">Entrar</span>
+            <span id="login-spinner" class="hidden spin"></span>
+          </button>
+        </form>
+      </div>
+
+      <p class="text-center text-gray-700 text-xs font-bold mt-6">Sistema de Controle de Presença por Identificação Facial</p>
+    </div>
+  </div>
+
+  <!-- ============================== DASHBOARD ============================== -->
+  <div id="view-dashboard" class="hidden h-screen flex overflow-hidden">
+
+    <!-- Mobile sidebar overlay -->
+    <div id="sidebar-overlay" class="hidden fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar"
+      class="fixed lg:relative z-50 w-64 h-full bg-card border-r border-white/5 flex flex-col flex-shrink-0 -translate-x-full lg:translate-x-0">
+
+      <!-- Logo -->
+      <div class="px-5 py-5 border-b border-white/5 flex-shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-accent rounded-2xl flex items-center justify-center shadow-lg shadow-accent/30 flex-shrink-0">
+            <span class="logo-icon text-white"></span>
+          </div>
+          <div>
+            <h1 class="font-black text-base tracking-tight leading-tight">SCPI</h1>
+            <p class="text-gray-600 text-[10px] font-black uppercase tracking-widest">Admin Portal</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <nav id="sidebar-nav" class="flex-1 p-3 space-y-1 overflow-y-auto"></nav>
+
+      <!-- User profile + logout -->
+      <div class="p-3 border-t border-white/5 flex-shrink-0 space-y-1">
+        <div class="px-4 py-3 rounded-2xl bg-surface border border-white/5">
+          <p class="font-black text-sm truncate" id="sidebar-username"></p>
+          <p class="text-[10px] font-black text-gray-600 uppercase tracking-widest mt-0.5">Administrador</p>
+        </div>
+        <button id="logout-btn"
+          class="w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all">
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main area -->
+    <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+
+      <!-- Header -->
+      <header class="bg-card border-b border-white/5 px-4 sm:px-6 py-4 flex items-center justify-between gap-3 flex-shrink-0">
+        <div class="flex items-center gap-3 min-w-0">
+          <!-- Hamburger -->
+          <button id="hamburger"
+            class="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/5 text-gray-500 hover:text-white transition-colors flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+          </button>
+          <div class="min-w-0">
+            <h2 id="header-title" class="font-black text-base sm:text-lg leading-tight truncate"></h2>
+            <p id="header-subtitle" class="text-[10px] sm:text-xs text-gray-500 font-bold hidden sm:block"></p>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <div class="flex bg-surface rounded-2xl p-1 border border-white/5">
+            <button data-turno="Matutino" class="turno-btn px-3 sm:px-4 py-2 rounded-xl font-black text-xs transition-all">Mat</button>
+            <button data-turno="Noturno" class="turno-btn px-3 sm:px-4 py-2 rounded-xl font-black text-xs transition-all">Not</button>
+          </div>
+          <select id="semestre-filter"
+            class="bg-surface border border-white/10 rounded-2xl px-2 sm:px-3 py-2 text-xs sm:text-sm font-black text-white focus:outline-none focus:border-accent/50 transition-colors cursor-pointer">
+            <option value="Todos">Todos</option>
+            <option value="1">1º</option>
+            <option value="2">2º</option>
+            <option value="3">3º</option>
+            <option value="4">4º</option>
+            <option value="5">5º</option>
+            <option value="6">6º</option>
+          </select>
+        </div>
+      </header>
+
+      <!-- Tab content -->
+      <main id="tab-content" class="flex-1 overflow-hidden p-4 sm:p-6 min-h-0 flex flex-col gap-4"></main>
+    </div>
+  </div>
+
+  <!-- ============================== MODAL ============================== -->
+  <div id="modal-overlay" class="hidden fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+    <div id="modal-box" class="w-full max-w-lg bg-card rounded-3xl border border-white/10 shadow-2xl shadow-black/60 overflow-hidden max-h-[90vh] flex flex-col"></div>
+  </div>
+
+  <!-- ============================== CONFIRM ============================== -->
+  <div id="confirm-overlay" class="hidden fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+    <div class="w-full max-w-sm bg-card rounded-3xl border border-white/10 shadow-2xl p-6">
+      <div class="w-12 h-12 bg-red-500/10 rounded-2xl flex items-center justify-center mb-4 text-red-500">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      </div>
+      <h3 id="confirm-title" class="font-black text-lg mb-2"></h3>
+      <p id="confirm-message" class="text-gray-400 font-bold text-sm mb-6 leading-relaxed"></p>
+      <div class="flex gap-3">
+        <button id="confirm-cancel"
+          class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">
+          Cancelar
+        </button>
+        <button id="confirm-ok"
+          class="flex-1 py-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-black text-sm transition-colors">
+          Confirmar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== TOASTS ============================== -->
+  <div id="toast-container" class="fixed top-4 right-4 z-[80] flex flex-col gap-2 pointer-events-none max-w-sm w-full"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

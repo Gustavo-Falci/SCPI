@@ -1,0 +1,70 @@
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* Toast animation */
+@keyframes toast-in { from { transform: translateX(calc(100% + 1rem)); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes toast-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.toast-item { animation: toast-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+/* Spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; display: inline-flex; }
+.spin svg { display: block; }
+
+/* Modal scale-in */
+@keyframes modal-in { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+#modal-box { animation: modal-in 0.2s ease forwards; }
+
+/* Scpi input base */
+.scpi-input {
+  width: 100%;
+  background: #0C0C12;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 1rem;
+  padding: 0.625rem 1rem;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.scpi-input:focus { border-color: rgba(75, 57, 239, 0.5); }
+.scpi-input::placeholder { color: rgba(255,255,255,0.2); font-weight: 600; }
+select.scpi-input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 1rem; padding-right: 2.5rem; }
+select.scpi-input option { background: #151718; color: #fff; }
+
+/* Custom checkbox */
+.custom-checkbox { position: relative; display: inline-flex; align-items: center; }
+.checkbox-ui { width: 16px; height: 16px; border-radius: 4px; border: 2px solid rgba(255,255,255,0.2); background: transparent; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; cursor: pointer; }
+.sr-only:checked + .checkbox-ui { background: #4B39EF; border-color: #4B39EF; }
+.sr-only:checked + .checkbox-ui::after { content: ''; display: block; width: 8px; height: 5px; border-left: 2px solid white; border-bottom: 2px solid white; transform: rotate(-45deg) translateY(-1px); }
+.checkbox-ui.indeterminate { background: #4B39EF; border-color: #4B39EF; }
+.checkbox-ui.indeterminate::after { content: ''; display: block; width: 8px; height: 2px; background: white; }
+
+/* Group hover for rostos buttons */
+.group-row:hover .group-hover-btn { opacity: 1 !important; }
+
+/* Login bg gradient */
+#view-login { background: radial-gradient(ellipse at top, rgba(75,57,239,0.15) 0%, #0C0C12 60%); }
+
+/* Sidebar transition */
+#sidebar { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Responsive table for relatorios detail */
+@media (max-width: 640px) {
+  .rel-detail-grid { grid-template-columns: 1fr auto auto !important; }
+}
+
+/* Turno active button */
+.turno-btn { user-select: none; }
+
+/* Loader button state */
+button:disabled { cursor: not-allowed; }
+
+/* Accent color (mirrors tailwind config) */
+:root { --accent: #4B39EF; --accent-dark: #3D2DD4; }

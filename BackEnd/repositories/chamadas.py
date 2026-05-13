@@ -230,8 +230,6 @@ def fechar_chamadas_expiradas(agora=None):
 
     return fechadas
 
-    return fechadas
-
 
 def listar_relatorios_chamadas(professor_id=None, turma_id=None, limit=200, offset=0):
     sql = """
