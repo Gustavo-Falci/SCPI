@@ -86,6 +86,7 @@ function switchTab(tabId) {
   setState({ activeTab: tabId });
   setActiveNav(tabId);
   updateHeader(tab);
+  updateFiltersVisibility(tabId);
   closeSidebar();
 
   const content = document.getElementById('tab-content');
@@ -134,23 +135,53 @@ function showLogin() {
   clearSession();
 }
 
+const FILTER_TABS = new Set(['turmas', 'horarios', 'relatorios']);
+
+function updateTurnoUI(turno) {
+  document.querySelectorAll('.turno-btn').forEach(btn => {
+    const isMat = btn.dataset.turno === 'Matutino';
+    const isActive = btn.dataset.turno === turno;
+    btn.classList.remove('active-mat', 'active-not');
+    if (isActive) btn.classList.add(isMat ? 'active-mat' : 'active-not');
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
+
+function updateSemestreUI(semestre) {
+  document.querySelectorAll('.sem-btn').forEach(btn => {
+    const isActive = btn.dataset.sem === semestre;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    if (isActive) btn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  });
+}
+
+function updateFiltersVisibility(tabId) {
+  const row = document.getElementById('filters-row');
+  if (!row) return;
+  row.classList.toggle('inactive', !FILTER_TABS.has(tabId));
+}
+
 function initFilters() {
   const state = getState();
+  updateTurnoUI(state.turno);
+  updateSemestreUI(state.semestre);
+
   document.querySelectorAll('.turno-btn').forEach(btn => {
-    const active = btn.dataset.turno === state.turno;
-    btn.className = `turno-btn px-3 sm:px-4 py-2 rounded-xl font-black text-xs transition-all ${active ? 'bg-accent text-white' : 'text-gray-500 hover:text-white'}`;
     btn.addEventListener('click', () => {
       setState({ turno: btn.dataset.turno });
-      document.querySelectorAll('.turno-btn').forEach(b => {
-        const a = b.dataset.turno === btn.dataset.turno;
-        b.className = `turno-btn px-3 sm:px-4 py-2 rounded-xl font-black text-xs transition-all ${a ? 'bg-accent text-white' : 'text-gray-500 hover:text-white'}`;
-      });
+      updateTurnoUI(btn.dataset.turno);
       switchTab(getState().activeTab);
     });
   });
-  const sel = document.getElementById('semestre-filter');
-  sel.value = state.semestre;
-  sel.addEventListener('change', () => { setState({ semestre: sel.value }); switchTab(getState().activeTab); });
+
+  document.querySelectorAll('.sem-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setState({ semestre: btn.dataset.sem });
+      updateSemestreUI(btn.dataset.sem);
+      switchTab(getState().activeTab);
+    });
+  });
 }
 
 async function initLogin() {

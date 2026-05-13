@@ -132,21 +132,31 @@
         </div>
 
         <!-- Filters -->
-        <div class="flex items-center gap-2 flex-shrink-0">
-          <div class="flex bg-surface rounded-2xl p-1 border border-white/5">
-            <button data-turno="Matutino" class="turno-btn px-3 sm:px-4 py-2 rounded-xl font-black text-xs transition-all">Mat</button>
-            <button data-turno="Noturno" class="turno-btn px-3 sm:px-4 py-2 rounded-xl font-black text-xs transition-all">Not</button>
+        <div id="filters-row" class="flex items-center gap-2 flex-shrink-0 transition-all duration-200">
+
+          <!-- Turno: segmented control com cores semânticas -->
+          <div id="turno-control" class="relative flex bg-surface rounded-2xl p-1 border border-white/5 flex-shrink-0">
+            <button data-turno="Matutino" class="turno-btn relative z-10 px-3 sm:px-4 py-2 rounded-xl font-black text-xs transition-all duration-200 whitespace-nowrap" aria-pressed="false">
+              <span class="hidden sm:inline">☀ Matutino</span>
+              <span class="sm:hidden">☀ Mat.</span>
+            </button>
+            <button data-turno="Noturno" class="turno-btn relative z-10 px-3 sm:px-4 py-2 rounded-xl font-black text-xs transition-all duration-200 whitespace-nowrap" aria-pressed="false">
+              <span class="hidden sm:inline">☾ Noturno</span>
+              <span class="sm:hidden">☾ Not.</span>
+            </button>
           </div>
-          <select id="semestre-filter"
-            class="bg-surface border border-white/10 rounded-2xl px-2 sm:px-3 py-2 text-xs sm:text-sm font-black text-white focus:outline-none focus:border-accent/50 transition-colors cursor-pointer">
-            <option value="Todos">Todos</option>
-            <option value="1">1º</option>
-            <option value="2">2º</option>
-            <option value="3">3º</option>
-            <option value="4">4º</option>
-            <option value="5">5º</option>
-            <option value="6">6º</option>
-          </select>
+
+          <!-- Semestre: pills horizontais (substitui select) -->
+          <div id="semestre-pills" class="flex items-center gap-0.5 bg-surface rounded-2xl p-1 border border-white/5 overflow-x-auto flex-shrink-0" style="scrollbar-width:none;-webkit-overflow-scrolling:touch">
+            <button data-sem="Todos" class="sem-btn px-2.5 py-2 rounded-xl font-black text-xs transition-all duration-200 whitespace-nowrap flex-shrink-0" aria-pressed="true">Todos</button>
+            <button data-sem="1"     class="sem-btn px-2.5 py-2 rounded-xl font-black text-xs transition-all duration-200 whitespace-nowrap flex-shrink-0" aria-pressed="false">1º</button>
+            <button data-sem="2"     class="sem-btn px-2.5 py-2 rounded-xl font-black text-xs transition-all duration-200 whitespace-nowrap flex-shrink-0" aria-pressed="false">2º</button>
+            <button data-sem="3"     class="sem-btn px-2.5 py-2 rounded-xl font-black text-xs transition-all duration-200 whitespace-nowrap flex-shrink-0" aria-pressed="false">3º</button>
+            <button data-sem="4"     class="sem-btn px-2.5 py-2 rounded-xl font-black text-xs transition-all duration-200 whitespace-nowrap flex-shrink-0" aria-pressed="false">4º</button>
+            <button data-sem="5"     class="sem-btn px-2.5 py-2 rounded-xl font-black text-xs transition-all duration-200 whitespace-nowrap flex-shrink-0" aria-pressed="false">5º</button>
+            <button data-sem="6"     class="sem-btn px-2.5 py-2 rounded-xl font-black text-xs transition-all duration-200 whitespace-nowrap flex-shrink-0" aria-pressed="false">6º</button>
+          </div>
+
         </div>
       </header>
 

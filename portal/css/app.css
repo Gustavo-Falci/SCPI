@@ -64,7 +64,38 @@ select.scpi-input option { background: #151718; color: #fff; }
 }
 
 /* Turno active button */
-.turno-btn { user-select: none; }
+/* ── Turno segmented control ── */
+.turno-btn {
+  user-select: none;
+  color: rgba(255,255,255,0.35);
+}
+.turno-btn.active-mat {
+  background: rgba(245,158,11,0.15);
+  color: #f59e0b;
+  box-shadow: inset 0 0 0 1px rgba(245,158,11,0.2);
+}
+.turno-btn.active-not {
+  background: rgba(99,102,241,0.18);
+  color: #818cf8;
+  box-shadow: inset 0 0 0 1px rgba(99,102,241,0.2);
+}
+
+/* ── Semestre pills ── */
+.sem-btn {
+  user-select: none;
+  color: rgba(255,255,255,0.35);
+  min-width: 34px;
+  text-align: center;
+}
+.sem-btn.active {
+  background: rgba(75,57,239,0.15);
+  color: #4B39EF;
+  box-shadow: inset 0 0 0 1px rgba(75,57,239,0.25);
+}
+#semestre-pills::-webkit-scrollbar { display: none; }
+
+/* ── Filters fade when tab doesn't use them ── */
+#filters-row.inactive { opacity: 0.18; pointer-events: none; }
 
 /* Loader button state */
 button:disabled { cursor: not-allowed; }
