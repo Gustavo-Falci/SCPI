@@ -200,7 +200,7 @@ export async function mount(container) {
   selectedRek = new Set(); selectedS3 = new Set(); expandedRek = new Set(); expandedS3 = new Set();
 
   container.innerHTML = `
-    <div class="flex-1 overflow-hidden flex flex-col gap-3 min-h-0">
+    <div class="flex-1 overflow-hidden flex flex-col gap-3 min-h-0 tab-anim">
       <!-- Bulk bar -->
       <div id="bulk-bar" class="hidden flex-shrink-0 flex items-center justify-between px-4 py-3 bg-accent/10 border border-accent/20 rounded-2xl">
         <span id="bulk-count" class="font-black text-accent text-sm"></span>

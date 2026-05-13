@@ -2,9 +2,11 @@ import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { confirm } from '../confirm.js';
 import { icon } from '../icons.js';
+import { avatar, debounce } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState, invalidate } from '../state.js';
-import { openModal, closeModal } from '../main.js';
+import { openModal, closeModal, animateRemove } from '../main.js';
+import { setCreate } from '../registry.js';
 
 const PER_PAGE = 10;
 let page = 1;
@@ -26,7 +28,7 @@ function filtered() {
 function turnoBadge(turno) {
   if (!turno) return '';
   const cls = turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500';
-  return `<span class="${cls} text-xs font-black px-2 py-0.5 rounded-md uppercase tracking-tighter">${turno}</span>`;
+  return `<span class="${cls} text-[10px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tighter">${turno}</span>`;
 }
 
 function renderList(container) {
@@ -37,10 +39,17 @@ function renderList(container) {
   const pag = container.querySelector('#alunos-pagination');
 
   if (!items.length) {
-    list.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-gray-600">${icon('user', 40)}<p class="mt-3 font-black text-sm">Nenhum aluno encontrado</p></div>`;
+    list.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-16 text-gray-600 gap-3">
+        ${icon('user', 40)}
+        <p class="font-black text-sm">${search ? 'Nenhum aluno encontrado' : 'Nenhum aluno cadastrado'}</p>
+        ${!search ? `<button id="cta-create-aluno" class="mt-1 px-4 py-2 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent font-black text-xs flex items-center gap-1.5 transition-colors">${icon('plus', 14)} Criar primeiro aluno</button>` : ''}
+      </div>`;
+    document.getElementById('cta-create-aluno')?.addEventListener('click', () => document.querySelector('#aluno-form [name=nome]')?.focus());
   } else {
-    list.innerHTML = items.map(a => `
-      <div class="group bg-[#151718] hover:bg-[#1A1C1E] px-5 py-4 rounded-2xl border border-white/5 flex items-center justify-between gap-4 transition-all hover:border-white/10">
+    list.innerHTML = items.map((a, i) => `
+      <div data-aluno-id="${a.aluno_id}" class="anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-5 py-4 rounded-2xl border border-white/5 flex items-center gap-4 transition-all hover:border-white/10" style="animation-delay:${i * 45}ms">
+        ${avatar(a.nome, 38)}
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 mb-0.5">
             <p class="font-black text-white text-sm truncate">${a.nome}</p>
@@ -52,8 +61,7 @@ function renderList(container) {
           <button data-id="${a.aluno_id}" class="edit-btn w-8 h-8 rounded-xl bg-accent/10 hover:bg-accent/20 flex items-center justify-center text-accent transition-all">${icon('pencil', 14)}</button>
           <button data-id="${a.aluno_id}" class="del-btn w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all">${icon('trash-2', 14)}</button>
         </div>
-      </div>
-    `).join('');
+      </div>`).join('');
     list.querySelectorAll('.edit-btn').forEach(btn => {
       const aluno = data.find(a => String(a.aluno_id) === String(btn.dataset.id));
       btn.addEventListener('click', () => showEditModal(aluno, container));
@@ -64,15 +72,17 @@ function renderList(container) {
 }
 
 async function deleteAluno(id, container) {
-  const ok = await confirm.show('Excluir Aluno', 'Esta ação remove o aluno permanentemente. Continuar?');
+  const ok = await confirm.show('Excluir Aluno', 'Remove o aluno permanentemente. Continuar?');
   if (!ok) return;
+  const el = container.querySelector(`[data-aluno-id="${id}"]`);
+  await animateRemove(el);
   try {
     await api.del(`/admin/alunos/${id}`);
     invalidate('alunos');
     await load();
     renderList(container);
     toast.success('Aluno excluído.');
-  } catch (err) { toast.error(extractError(err)); }
+  } catch (err) { toast.error(extractError(err)); await load(); renderList(container); }
 }
 
 function showEditModal(aluno, container) {
@@ -80,55 +90,34 @@ function showEditModal(aluno, container) {
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
-        <h3 class="font-black text-lg">Editar Aluno</h3>
+        <div class="flex items-center gap-3">${avatar(aluno.nome, 40)}<div><h3 class="font-black text-lg">Editar Aluno</h3><p class="text-gray-500 text-xs font-bold">${aluno.ra || ''}</p></div></div>
         <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <form id="edit-aluno-form" class="space-y-4">
-        <div>
-          <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome Completo</label>
-          <input name="nome" type="text" value="${aluno.nome || ''}" class="scpi-input" required>
-        </div>
-        <div>
-          <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email</label>
-          <input name="email" type="email" value="${aluno.email || ''}" class="scpi-input" required>
-        </div>
-        <div>
-          <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">RA</label>
-          <input name="ra" type="text" value="${aluno.ra || ''}" class="scpi-input">
-        </div>
-        <div>
-          <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label>
-          <select name="turno" class="scpi-input">
-            <option value="">Não definido</option>
-            <option value="Matutino" ${aluno.turno === 'Matutino' ? 'selected' : ''}>Matutino</option>
-            <option value="Noturno" ${aluno.turno === 'Noturno' ? 'selected' : ''}>Noturno</option>
-          </select>
-        </div>
+        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome</label><input name="nome" type="text" value="${aluno.nome || ''}" class="scpi-input" required></div>
+        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email</label><input name="email" type="email" value="${aluno.email || ''}" class="scpi-input" required></div>
+        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">RA</label><input name="ra" type="text" value="${aluno.ra || ''}" class="scpi-input"></div>
+        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label>
+          <select name="turno" class="scpi-input"><option value="">Não definido</option><option value="Matutino" ${aluno.turno === 'Matutino' ? 'selected' : ''}>Matutino</option><option value="Noturno" ${aluno.turno === 'Noturno' ? 'selected' : ''}>Noturno</option></select></div>
         <div class="flex gap-3 pt-2">
           <button type="button" onclick="closeModal()" class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
-          <button type="submit" id="edit-btn" class="flex-1 py-3 rounded-2xl bg-accent hover:bg-accent-dark text-white font-black text-sm transition-colors">Salvar</button>
+          <button type="submit" id="edit-btn" class="flex-1 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Salvar</button>
         </div>
       </form>
-    </div>
-  `);
-
+    </div>`);
   document.getElementById('edit-aluno-form').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = document.getElementById('edit-btn');
     btn.disabled = true; btn.textContent = 'Salvando…';
-    const form = e.target;
     try {
       await api.patch(`/admin/alunos/${aluno.aluno_id}`, {
-        nome: form.querySelector('[name=nome]').value.trim(),
-        email: form.querySelector('[name=email]').value.trim(),
-        ra: form.querySelector('[name=ra]').value.trim() || null,
-        turno: form.querySelector('[name=turno]').value || null,
+        nome: e.target.querySelector('[name=nome]').value.trim(),
+        email: e.target.querySelector('[name=email]').value.trim(),
+        ra: e.target.querySelector('[name=ra]').value.trim() || null,
+        turno: e.target.querySelector('[name=turno]').value || null,
       });
-      invalidate('alunos');
-      await load();
-      renderList(container);
-      closeModal();
-      toast.success('Aluno atualizado.');
+      invalidate('alunos'); await load(); renderList(container);
+      closeModal(); toast.success('Aluno atualizado.');
     } catch (err) { toast.error(extractError(err)); btn.disabled = false; btn.textContent = 'Salvar'; }
   });
 }
@@ -151,65 +140,51 @@ function showPasswordModal(email, senha) {
           </div>
         </div>
       </div>
-      <p class="text-yellow-400 text-xs font-bold mt-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">Compartilhe estas credenciais com o aluno.</p>
-      <button onclick="closeModal()" class="w-full mt-4 py-3 rounded-2xl bg-accent hover:bg-accent-dark text-white font-black text-sm transition-colors">Fechar</button>
-    </div>
-  `);
+      <p class="text-yellow-400 text-xs font-bold mt-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">Compartilhe com o aluno.</p>
+      <button onclick="closeModal()" class="w-full mt-4 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Fechar</button>
+    </div>`);
   document.getElementById('copy-btn').addEventListener('click', () => navigator.clipboard.writeText(senha).then(() => toast.success('Senha copiada!')));
 }
 
-async function createAluno(e, container) {
-  e.preventDefault();
-  const btn = document.getElementById('aluno-create-btn');
-  const form = document.getElementById('aluno-form');
-  btn.disabled = true; btn.textContent = 'Criando…';
+function formHTML() {
+  return `
+    <form id="aluno-form" class="space-y-4">
+      <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome Completo *</label><input name="nome" type="text" placeholder="Maria Santos" class="scpi-input" required></div>
+      <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email *</label><input name="email" type="email" placeholder="maria@escola.com" class="scpi-input" required></div>
+      <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">RA</label><input name="ra" type="text" placeholder="2024001" class="scpi-input"></div>
+      <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label>
+        <select name="turno" class="scpi-input"><option value="">Não definido</option><option value="Matutino">Matutino</option><option value="Noturno">Noturno</option></select></div>
+      <button id="aluno-create-btn" type="submit" class="w-full py-3 rounded-2xl bg-accent text-white font-black text-sm transition-all flex items-center justify-center gap-2">${icon('plus', 16)}<span>Criar Aluno</span></button>
+    </form>`;
+}
+
+async function handleCreate(form, container) {
+  const btn = form.querySelector('[type=submit]');
+  btn.disabled = true; btn.querySelector('span').textContent = 'Criando…';
   try {
+    const email = form.querySelector('[name=email]').value.trim();
     const res = await api.post('/admin/usuarios/aluno', {
       nome: form.querySelector('[name=nome]').value.trim(),
-      email: form.querySelector('[name=email]').value.trim(),
+      email,
       ra: form.querySelector('[name=ra]').value.trim() || null,
       turno: form.querySelector('[name=turno]').value || null,
     });
     form.reset();
-    invalidate('alunos');
-    await load();
-    page = 1;
-    renderList(container);
+    invalidate('alunos'); await load(); page = 1;
+    if (container) renderList(container);
     const senha = res.senha_temporaria || res.password;
-    if (senha) showPasswordModal(form.querySelector('[name=email]').value || res.email, senha);
-    else toast.success('Aluno criado com sucesso!');
+    if (senha) showPasswordModal(email, senha);
+    else toast.success('Aluno criado!');
   } catch (err) { toast.error(extractError(err)); }
-  finally { btn.disabled = false; btn.textContent = 'Criar Aluno'; }
+  finally { btn.disabled = false; btn.querySelector('span').textContent = 'Criar Aluno'; }
 }
 
 export async function mount(container) {
   container.innerHTML = `
-    <div class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden">
-      <div class="lg:w-72 xl:w-80 flex-shrink-0 bg-[#151718] rounded-3xl p-6 border border-white/5 overflow-y-auto">
+    <div class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden tab-anim">
+      <div class="hidden lg:block lg:w-72 xl:w-80 flex-shrink-0 bg-[#151718] rounded-3xl p-6 border border-white/5 overflow-y-auto">
         <h3 class="font-black text-base mb-5 flex items-center gap-2">${icon('plus', 16)}<span>Novo Aluno</span></h3>
-        <form id="aluno-form" class="space-y-4">
-          <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome Completo *</label>
-            <input name="nome" type="text" placeholder="Maria Santos" class="scpi-input" required>
-          </div>
-          <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email *</label>
-            <input name="email" type="email" placeholder="maria@escola.com" class="scpi-input" required>
-          </div>
-          <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">RA</label>
-            <input name="ra" type="text" placeholder="2024001" class="scpi-input">
-          </div>
-          <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label>
-            <select name="turno" class="scpi-input">
-              <option value="">Não definido</option>
-              <option value="Matutino">Matutino</option>
-              <option value="Noturno">Noturno</option>
-            </select>
-          </div>
-          <button id="aluno-create-btn" type="submit" class="w-full py-3 rounded-2xl bg-accent hover:bg-accent-dark text-white font-black text-sm transition-colors flex items-center justify-center gap-2">${icon('plus', 16)}<span>Criar Aluno</span></button>
-        </form>
+        ${formHTML()}
       </div>
       <div class="flex-1 flex flex-col overflow-hidden gap-3 min-h-0">
         <div class="relative flex-shrink-0">
@@ -219,9 +194,27 @@ export async function mount(container) {
         <div id="alunos-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
         <div id="alunos-pagination" class="flex-shrink-0"></div>
       </div>
-    </div>
-  `;
-  container.querySelector('#aluno-form').addEventListener('submit', e => createAluno(e, container));
-  container.querySelector('#alunos-search').addEventListener('input', e => { search = e.target.value; page = 1; renderList(container); });
+    </div>`;
+
+  container.querySelector('#aluno-form').addEventListener('submit', e => { e.preventDefault(); handleCreate(e.target, container); });
+  container.querySelector('#alunos-search').addEventListener('input', debounce(e => { search = e.target.value; page = 1; renderList(container); }, 200));
+
+  setCreate(() => {
+    window.closeModal = closeModal;
+    openModal(`
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="font-black text-lg">Novo Aluno</h3>
+          <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        </div>
+        ${formHTML()}
+      </div>`);
+    document.getElementById('aluno-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      await handleCreate(e.target, container);
+      if (!document.getElementById('aluno-form')) closeModal();
+    });
+  });
+
   try { await load(); renderList(container); } catch (err) { toast.error(extractError(err)); }
 }

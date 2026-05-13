@@ -138,7 +138,7 @@ function showAddModal(diaIdx, container) {
 
 export async function mount(container) {
   container.innerHTML = `
-    <div class="flex-1 overflow-hidden min-h-0">
+    <div class="flex-1 overflow-hidden min-h-0 tab-anim">
       <div class="bg-[#151718] rounded-3xl border border-white/5 shadow-2xl shadow-black/40 h-full overflow-auto p-6">
         <div id="horarios-grid" class="grid gap-4" style="grid-template-columns: repeat(7, minmax(140px, 1fr))"></div>
       </div>

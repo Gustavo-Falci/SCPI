@@ -68,3 +68,105 @@ button:disabled { cursor: not-allowed; }
 
 /* Accent color (mirrors tailwind config) */
 :root { --accent: #4B39EF; --accent-dark: #3D2DD4; }
+
+/* ── Gradient accent buttons ── */
+.bg-accent {
+  background: linear-gradient(135deg, #6257FF 0%, #4B39EF 60%, #3D2DD4 100%) !important;
+  box-shadow: 0 4px 18px rgba(75, 57, 239, 0.35);
+}
+.bg-accent:hover, .hover\:bg-accent-dark:hover {
+  background: linear-gradient(135deg, #7267FF 0%, #5B49FF 60%, #4B39EF 100%) !important;
+  box-shadow: 0 6px 24px rgba(75, 57, 239, 0.45);
+}
+
+/* ── Mobile bottom nav spacing ── */
+@media (max-width: 1023px) {
+  #tab-content { padding-bottom: 5.5rem !important; }
+}
+
+/* ── Bottom nav items ── */
+.bnav-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  flex: 1; padding: 0.5rem 0.25rem; gap: 0.2rem;
+  font-size: 0.6rem; font-weight: 900; letter-spacing: 0.03em;
+  color: rgba(255,255,255,0.35); text-transform: uppercase;
+  transition: color 0.2s; cursor: pointer; border: none; background: none;
+}
+.bnav-item.active { color: #4B39EF; }
+.bnav-item svg { transition: transform 0.2s; }
+.bnav-item.active svg { transform: translateY(-1px); }
+.bnav-dot {
+  width: 4px; height: 4px; border-radius: 9999px; background: #4B39EF;
+  opacity: 0; margin-top: 1px; transition: opacity 0.2s;
+}
+.bnav-item.active .bnav-dot { opacity: 1; }
+
+/* ── FAB pulse ── */
+@keyframes fab-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(75,57,239,0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(75,57,239,0); }
+}
+#fab:not(.hidden) { animation: fab-pulse 2.5s ease-in-out infinite; }
+
+/* ── Delete slide-out ── */
+@keyframes item-remove {
+  to { opacity: 0; transform: translateX(-10px); max-height: 0; margin-bottom: 0; }
+}
+.removing { animation: item-remove 0.2s ease forwards; pointer-events: none; overflow: hidden; }
+
+/* ── Progress bar fill animation ── */
+.prog-bar-fill { transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* ── Horarios mobile scroll hint ── */
+.horarios-scroll-hint::after {
+  content: ''; position: absolute; right: 0; top: 0; bottom: 0;
+  width: 40px; pointer-events: none;
+  background: linear-gradient(to right, transparent, #151718);
+  border-radius: 0 1.5rem 1.5rem 0;
+}
+
+/* ── Skeleton shimmer ── */
+@keyframes shimmer {
+  0%   { background-position: -400% 0; }
+  100% { background-position:  400% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.04) 0%,
+    rgba(255,255,255,0.09) 50%,
+    rgba(255,255,255,0.04) 100%);
+  background-size: 400% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* ── Tab content enter ── */
+@keyframes tab-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.tab-anim { animation: tab-enter 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+/* ── List item stagger ── */
+@keyframes item-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.anim-item {
+  opacity: 0;
+  animation: item-fade-up 0.22s ease forwards;
+}
+
+/* ── Button press micro-interaction ── */
+button:not(:disabled):active { transform: scale(0.97); }
+
+/* ── Nav item smooth indicator ── */
+.nav-item { position: relative; transition: color 0.2s, background 0.2s; }
+
+/* ── Card hover lift ── */
+.hover-lift { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.hover-lift:hover { transform: translateY(-1px); }
+
+/* ── Smooth modal overlay fade ── */
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+#modal-overlay:not(.hidden) { animation: overlay-in 0.2s ease forwards; }
+#confirm-overlay:not(.hidden) { animation: overlay-in 0.2s ease forwards; }

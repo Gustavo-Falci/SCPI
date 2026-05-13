@@ -179,6 +179,20 @@
   <!-- ============================== TOASTS ============================== -->
   <div id="toast-container" class="fixed top-4 right-4 z-[80] flex flex-col gap-2 pointer-events-none max-w-sm w-full"></div>
 
+  <!-- ============================== BOTTOM NAV (mobile) ============================== -->
+  <nav id="bottom-nav"
+    class="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-white/5 flex items-stretch"
+    style="background:rgba(21,23,24,0.97);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);height:56px">
+    <!-- Populated by main.js buildBottomNav() -->
+  </nav>
+
+  <!-- ============================== FAB (mobile) ============================== -->
+  <button id="fab"
+    class="hidden lg:hidden fixed bottom-20 right-4 z-40 w-14 h-14 rounded-2xl flex items-center justify-center text-white transition-all active:scale-90"
+    style="background:linear-gradient(135deg,#6257FF,#4B39EF)">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+  </button>
+
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

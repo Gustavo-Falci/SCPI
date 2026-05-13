@@ -1,6 +1,7 @@
 import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { icon } from '../icons.js';
+import { debounce } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState } from '../state.js';
 import { openModal, closeModal } from '../main.js';
@@ -32,17 +33,17 @@ function renderList(container) {
   const pag = container.querySelector('#rel-pagination');
 
   if (!items.length) {
-    list.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-gray-600">${icon('file-text', 40)}<p class="mt-3 font-black text-sm">Nenhuma chamada para este filtro</p></div>`;
+    list.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-gray-600 gap-2">${icon('file-text', 40)}<p class="font-black text-sm">Nenhuma chamada para este filtro</p><p class="text-xs text-gray-700">Tente mudar o turno ou semestre</p></div>`;
   } else {
     const isNight = getState().turno === 'Noturno';
     const colorBadge = isNight ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-500';
     const colorSem = isNight ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-500';
 
-    list.innerHTML = items.map(r => {
+    list.innerHTML = items.map((r, i) => {
       const freq = r.percentual ?? 0;
       const freqColor = freq >= 75 ? 'text-green-400' : 'text-red-400';
       return `
-        <button data-id="${r.chamada_id}" class="group rel-item w-full bg-[#151718] hover:bg-[#1A1C1E] px-5 py-3 rounded-2xl border border-white/5 flex items-center justify-between gap-4 transition-all hover:border-accent/20 text-left flex-shrink-0">
+        <button data-id="${r.chamada_id}" class="anim-item group rel-item w-full bg-[#151718] hover:bg-[#1A1C1E] px-5 py-3 rounded-2xl border border-white/5 flex items-center justify-between gap-4 transition-all hover:border-accent/20 text-left flex-shrink-0" style="animation-delay:${i * 55}ms">
           <div class="flex items-center gap-4 min-w-0">
             <div class="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg flex-shrink-0 ${colorSem}">${r.semestre}º</div>
             <div class="min-w-0">
@@ -60,9 +61,16 @@ function renderList(container) {
               ${statCard('Ausentes', r.ausentes_alunos ?? '—', 'text-red-400')}
               ${statCard('Parciais', r.parciais_alunos ?? '—', 'text-yellow-400')}
             </div>
-            <div class="text-center min-w-[50px]">
-              <p class="text-lg font-black ${freqColor}">${freq}%</p>
-              <p class="text-xs text-gray-600 font-black uppercase tracking-widest">Freq.</p>
+            <div class="flex md:hidden items-center gap-2 text-xs font-black">
+              <span class="text-green-400">${r.presentes_alunos ?? 0}P</span>
+              <span class="text-gray-700">/</span>
+              <span class="text-red-400">${r.ausentes_alunos ?? 0}A</span>
+            </div>
+            <div class="text-center min-w-[54px]">
+              <p class="text-base font-black ${freqColor}">${freq}%</p>
+              <div class="mt-1 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div class="prog-bar-fill h-full rounded-full" style="width:${freq}%;background:${freq >= 75 ? '#4ade80' : freq >= 50 ? '#facc15' : '#f87171'}"></div>
+              </div>
             </div>
             <span class="text-gray-600 group-hover:text-accent transition-colors">${icon('chevron-right', 16)}</span>
           </div>
@@ -134,7 +142,7 @@ async function openDetalhe(chamadaId) {
 
 export async function mount(container) {
   container.innerHTML = `
-    <div class="flex-1 overflow-hidden flex flex-col gap-3 min-h-0">
+    <div class="flex-1 overflow-hidden flex flex-col gap-3 min-h-0 tab-anim">
       <div id="rel-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
       <div id="rel-pagination" class="flex-shrink-0"></div>
     </div>

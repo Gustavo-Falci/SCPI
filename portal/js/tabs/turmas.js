@@ -2,9 +2,11 @@ import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { confirm } from '../confirm.js';
 import { icon } from '../icons.js';
+import { debounce } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState, invalidate } from '../state.js';
-import { openModal, closeModal } from '../main.js';
+import { openModal, closeModal, animateRemove } from '../main.js';
+import { setCreate } from '../registry.js';
 import { SEMESTRES, TURNOS, PERIODOS } from '../config.js';
 
 const PER_PAGE = 8;
@@ -39,10 +41,16 @@ function renderList(container) {
   const colorBadge = isNight ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-500';
 
   if (!items.length) {
-    list.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-gray-600">${icon('graduation-cap', 40)}<p class="mt-3 font-black text-sm">Nenhuma turma encontrada</p></div>`;
+    list.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-16 text-gray-600 gap-3">
+        ${icon('graduation-cap', 40)}
+        <p class="font-black text-sm">${search ? 'Nenhuma turma encontrada' : 'Nenhuma turma cadastrada'}</p>
+        ${!search ? `<button id="cta-create-turma" class="mt-1 px-4 py-2 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent font-black text-xs flex items-center gap-1.5 transition-colors">${icon('plus', 14)} Criar primeira turma</button>` : ''}
+      </div>`;
+    document.getElementById('cta-create-turma')?.addEventListener('click', () => document.querySelector('#turma-form [name=nome_disciplina]')?.focus());
   } else {
-    list.innerHTML = items.map(t => `
-      <div class="group bg-[#151718] hover:bg-[#1A1C1E] px-5 py-4 rounded-2xl border border-white/5 flex items-center justify-between gap-4 transition-all hover:border-white/10">
+    list.innerHTML = items.map((t, i) => `
+      <div data-turma-id="${t.turma_id}" class="anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-5 py-4 rounded-2xl border border-white/5 flex items-center justify-between gap-4 transition-all hover:border-white/10" style="animation-delay:${i * 45}ms">
         <div class="flex items-center gap-4 min-w-0 flex-1">
           <div class="w-10 h-10 rounded-2xl flex items-center justify-center font-black text-base flex-shrink-0 ${colorBadge}">${t.semestre}º</div>
           <div class="min-w-0">
@@ -71,15 +79,16 @@ function renderList(container) {
 }
 
 async function deleteTurma(id, container) {
-  const ok = await confirm.show('Excluir Turma', 'Esta ação remove a turma e todos os horários e matrículas associados. Continuar?');
+  const ok = await confirm.show('Excluir Turma', 'Remove a turma e todos os horários e matrículas associados. Continuar?');
   if (!ok) return;
+  const el = container.querySelector(`[data-turma-id="${id}"]`);
+  await animateRemove(el);
   try {
     await api.del(`/admin/turmas/${id}`);
     invalidate('turmas', 'grade');
-    await load();
-    renderList(container);
+    await load(); renderList(container);
     toast.success('Turma excluída.');
-  } catch (err) { toast.error(extractError(err)); }
+  } catch (err) { toast.error(extractError(err)); await load(); renderList(container); }
 }
 
 function showProfModal(turma, container) {
@@ -268,8 +277,8 @@ async function createTurma(e, container) {
 
 export async function mount(container) {
   container.innerHTML = `
-    <div class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden">
-      <div class="lg:w-72 xl:w-80 flex-shrink-0 bg-[#151718] rounded-3xl p-6 border border-white/5 overflow-y-auto">
+    <div class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden tab-anim">
+      <div class="hidden lg:block lg:w-72 xl:w-80 flex-shrink-0 bg-[#151718] rounded-3xl p-6 border border-white/5 overflow-y-auto">
         <h3 class="font-black text-base mb-5 flex items-center gap-2">${icon('plus', 16)}<span>Nova Turma</span></h3>
         <form id="turma-form" class="space-y-4">
           <div>
@@ -318,6 +327,46 @@ export async function mount(container) {
     </div>
   `;
   container.querySelector('#turma-form').addEventListener('submit', e => createTurma(e, container));
-  container.querySelector('#turmas-search').addEventListener('input', e => { search = e.target.value; page = 1; renderList(container); });
+  container.querySelector('#turmas-search').addEventListener('input', debounce(e => { search = e.target.value; page = 1; renderList(container); }, 200));
+
+  setCreate(() => {
+    window.closeModal = closeModal;
+    openModal(`
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="font-black text-lg">Nova Turma</h3>
+          <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        </div>
+        <form id="turma-form-modal" class="space-y-4">
+          <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Disciplina *</label><input name="nome_disciplina" class="scpi-input" placeholder="Engenharia de Software" required></div>
+          <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Código *</label><input name="codigo_turma" class="scpi-input" placeholder="ES-2025-1" required></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Semestre</label><select name="semestre" class="scpi-input">${SEMESTRES.map(s => `<option value="${s}">${s}º</option>`).join('')}</select></div>
+            <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label><select name="turno" class="scpi-input">${TURNOS.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
+          </div>
+          <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Sala</label><input name="sala_padrao" class="scpi-input" placeholder="Lab 01"></div>
+          <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Período</label><select name="periodo_letivo" class="scpi-input">${PERIODOS.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>
+          <button type="submit" class="w-full py-3 rounded-2xl bg-accent text-white font-black text-sm transition-all flex items-center justify-center gap-2">${icon('plus', 16)}<span>Criar Turma</span></button>
+        </form>
+      </div>`);
+    document.getElementById('turma-form-modal').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = e.target.querySelector('[type=submit] span');
+      btn.textContent = 'Criando…';
+      try {
+        await api.post('/admin/turmas', {
+          nome_disciplina: e.target.querySelector('[name=nome_disciplina]').value.trim(),
+          codigo_turma: e.target.querySelector('[name=codigo_turma]').value.trim(),
+          semestre: +e.target.querySelector('[name=semestre]').value,
+          turno: e.target.querySelector('[name=turno]').value,
+          sala_padrao: e.target.querySelector('[name=sala_padrao]').value.trim() || null,
+          periodo_letivo: e.target.querySelector('[name=periodo_letivo]').value,
+        });
+        invalidate('turmas'); await load(); page = 1; renderList(container);
+        closeModal(); toast.success('Turma criada!');
+      } catch (err) { toast.error(extractError(err)); btn.textContent = 'Criar Turma'; }
+    });
+  });
+
   try { await load(); renderList(container); } catch (err) { toast.error(extractError(err)); }
 }
