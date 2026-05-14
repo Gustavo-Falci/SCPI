@@ -82,12 +82,11 @@ export default function RevisarChamada() {
     );
   };
 
-  const totalPresencas = alunos.reduce(
-    (sum, a) => sum + a.aulasPresentes.filter(Boolean).length,
-    0
-  );
-  const totalPossivel = alunos.length * totalAulas;
-  const totalFaltas = totalPossivel - totalPresencas;
+  const totalPresencas = alunos.filter((a) => a.aulasPresentes.every(Boolean)).length;
+  const totalFaltas = alunos.filter((a) => a.aulasPresentes.every((v) => !v)).length;
+  const totalParcial = alunos.filter(
+    (a) => a.aulasPresentes.some(Boolean) && !a.aulasPresentes.every(Boolean)
+  ).length;
 
   const salvar = async () => {
     if (saving) return;
@@ -179,6 +178,11 @@ export default function RevisarChamada() {
             <View style={styles.statBox}>
               <Text style={[styles.statValue, { color: "#22C55E" }]}>{totalPresencas}</Text>
               <Text style={styles.statLabel}>Presenças</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={[styles.statValue, { color: "#EAB308" }]}>{totalParcial}</Text>
+              <Text style={styles.statLabel}>Parciais</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
