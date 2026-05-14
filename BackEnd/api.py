@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import sys
+from logging.handlers import TimedRotatingFileHandler
 
 from dotenv import load_dotenv, find_dotenv
 
@@ -31,7 +32,34 @@ from routers import (
     turmas,
 )
 
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(name)s: %(message)s")
+_LOG_FORMAT = "[%(asctime)s] [%(levelname)s] %(name)s: %(message)s"
+_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+os.makedirs(_LOG_DIR, exist_ok=True)
+
+
+def _make_rotating_handler(filename: str) -> TimedRotatingFileHandler:
+    h = TimedRotatingFileHandler(
+        os.path.join(_LOG_DIR, filename),
+        when="midnight",
+        backupCount=90,
+        encoding="utf-8",
+    )
+    h.setFormatter(logging.Formatter(_LOG_FORMAT))
+    return h
+
+
+# Console handler para desenvolvimento
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+
+# Configurar root logger (console) + loggers específicos (arquivo)
+logging.basicConfig(level=logging.INFO, handlers=[_console_handler])
+
+logging.getLogger("scpi").addHandler(_make_rotating_handler("scpi.log"))
+_audit_logger = logging.getLogger("scpi.audit")
+_audit_logger.addHandler(_make_rotating_handler("scpi_audit.log"))
+_audit_logger.propagate = False  # audit events must not duplicate into scpi.log
+
 logger = logging.getLogger("scpi.api")
 
 

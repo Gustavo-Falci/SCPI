@@ -140,7 +140,8 @@ def reconhecer_aluno_por_bytes(image_bytes: bytes, face_match_threshold: int = 8
             match = response["FaceMatches"][0]
             aluno_id = match["Face"]["ExternalImageId"]
             confidence = match["Similarity"]
-            logger.info(f"✅ Aluno reconhecido: {aluno_id} com confiança de {confidence:.2f}%")
+            aluno_masked = aluno_id[:6] + "***" if len(aluno_id) > 6 else "***"
+            logger.info(f"✅ Aluno reconhecido: {aluno_masked} com confiança de {confidence:.2f}%")
             return aluno_id
 
         else:

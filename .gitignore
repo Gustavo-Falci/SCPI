@@ -1,5 +1,7 @@
 .vscode/
 .env
+# Logs de aplicação (retenção 90 dias via TimedRotatingFileHandler)
+BackEnd/logs/
 logs/
 __pycache__/
 *.pyc

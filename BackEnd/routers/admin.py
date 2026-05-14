@@ -10,8 +10,9 @@ from pydantic import BaseModel
 from core.auth_utils import get_password_hash
 from core.config import BUCKET_NAME, COLLECTION_ID
 from core.helpers import gerar_senha_temporaria, internal_error
-from core.security import require_role
+from core.security import get_current_user, require_role
 from infra.aws_clientes import rekognition_client, s3_client
+from infra.rekognition_aws import deletar_rosto
 from infra.notificacoes import send_email_senha_temporaria
 from repositories.alunos import (
     atualizar_aluno,
@@ -22,6 +23,7 @@ from repositories.alunos import (
     listar_alunos_para_admin,
     listar_alunos_por_ids,
 )
+from repositories.rostos import listar_rostos_ativos_por_aluno
 from repositories.horarios import (
     excluir_horario,
     inserir_horario,
@@ -159,11 +161,25 @@ def admin_atualizar_aluno(aluno_id: str, dados: AtualizarAlunoAdmin):
 
 
 @router.delete("/alunos/{aluno_id}")
-def admin_excluir_aluno(aluno_id: str):
+def admin_excluir_aluno(aluno_id: str, current_user: dict = Depends(require_role("Admin"))):
     try:
+        rostos = listar_rostos_ativos_por_aluno(aluno_id)
+        for rosto in rostos:
+            try:
+                deletar_rosto(rosto["face_id_rekognition"])
+            except Exception as e:
+                logger.warning("Falha Rekognition ao excluir aluno %s: %s", aluno_id, e)
+            try:
+                if rosto.get("s3_path_cadastro"):
+                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=rosto["s3_path_cadastro"])
+            except Exception as e:
+                logger.warning("Falha S3 ao excluir aluno %s: %s", aluno_id, e)
+
         usuario_id = excluir_aluno_em_cascata(aluno_id)
         if not usuario_id:
             raise HTTPException(status_code=404, detail="Aluno não encontrado")
+
+        audit_logger.info("Aluno excluído admin=%s aluno_id=%s", current_user.get("sub"), aluno_id)
         return {"mensagem": "Aluno excluído com sucesso"}
     except HTTPException:
         raise

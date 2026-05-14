@@ -18,6 +18,7 @@ from infra.rekognition_aws import deletar_rosto, indexar_rosto_da_imagem_s3
 from repositories.alunos import (
     aluno_pertence_turma,
     buscar_aluno_por_usuario_id,
+    buscar_dados_titular,
     listar_frequencias_por_aluno,
     obter_dashboard_aluno,
 )
@@ -307,3 +308,19 @@ def revogar_biometria(usuario_id: str, current_user: dict = Depends(get_current_
         raise
     except Exception as e:
         raise internal_error(e, "revogar_biometria")
+
+
+@router.get("/aluno/meus-dados/{usuario_id}")
+def exportar_meus_dados(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    """Retorna todos os dados pessoais do titular — LGPD Art. 18 §1."""
+    require_self_or_admin(usuario_id, current_user)
+    try:
+        dados = buscar_dados_titular(usuario_id)
+        if not dados:
+            raise HTTPException(status_code=404, detail="Dados não encontrados para este usuário.")
+        dados["gerado_em"] = datetime.datetime.now(tz=zoneinfo.ZoneInfo("America/Sao_Paulo")).isoformat()
+        return dados
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "exportar_meus_dados")

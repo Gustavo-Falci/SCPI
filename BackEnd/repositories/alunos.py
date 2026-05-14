@@ -307,3 +307,85 @@ def importar_aluno_csv(turma_id, nome, email, ra, turno, senha_hash):
         )
 
         return (novo_usuario, email)
+
+
+def buscar_dados_titular(usuario_id: str) -> dict | None:
+    """Agrega todos os dados pessoais do titular para exercício do Art. 18 §1 LGPD."""
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+
+        # Dados cadastrais
+        cur.execute(
+            """
+            SELECT u.nome, u.email, u.tipo_usuario, a.ra, a.turno, a.aluno_id
+            FROM Usuarios u
+            JOIN Alunos a ON u.usuario_id = a.usuario_id
+            WHERE u.usuario_id = %s
+            """,
+            (usuario_id,),
+        )
+        titular_row = cur.fetchone()
+        if not titular_row:
+            return None
+
+        aluno_id = titular_row["aluno_id"]
+
+        # Status biometria (sem face_id nem s3_path — dados internos)
+        cur.execute(
+            """
+            SELECT angulo,
+                   consentimento_biometrico,
+                   consentimento_data,
+                   revogado_em
+            FROM Colecao_Rostos
+            WHERE aluno_id = %s
+            ORDER BY consentimento_data DESC
+            """,
+            (aluno_id,),
+        )
+        rostos = cur.fetchall()
+
+        # Histórico de presenças
+        cur.execute(
+            """
+            SELECT t.nome_disciplina AS turma,
+                   to_char(c.data_chamada, 'YYYY-MM-DD') AS data,
+                   to_char(p.hora_registro, 'HH24:MI:SS') AS hora_registro
+            FROM Presencas p
+            JOIN Chamadas c ON p.chamada_id = c.chamada_id
+            JOIN Turmas t ON c.turma_id = t.turma_id
+            WHERE p.aluno_id = %s
+            ORDER BY c.data_chamada DESC, p.hora_registro DESC
+            """,
+            (aluno_id,),
+        )
+        presencas = cur.fetchall()
+
+    angulos_cadastrados = [
+        r["angulo"] for r in rostos if r["consentimento_biometrico"] and not r["revogado_em"]
+    ]
+    biometria_registrada = len(angulos_cadastrados) > 0
+    consentimento_data = next(
+        (r["consentimento_data"] for r in rostos if r["consentimento_data"]), None
+    )
+    revogado_em = next(
+        (r["revogado_em"] for r in rostos if r["revogado_em"]), None
+    )
+
+    return {
+        "titular": {
+            "nome": titular_row["nome"],
+            "email": titular_row["email"],
+            "ra": titular_row["ra"],
+            "turno": titular_row["turno"],
+            "tipo_usuario": titular_row["tipo_usuario"],
+        },
+        "biometria": {
+            "registrada": biometria_registrada,
+            "angulos_cadastrados": angulos_cadastrados,
+            "consentimento_data": consentimento_data.isoformat() if consentimento_data else None,
+            "revogado_em": revogado_em.isoformat() if revogado_em else None,
+        },
+        "presencas": [dict(p) for p in presencas],
+    }

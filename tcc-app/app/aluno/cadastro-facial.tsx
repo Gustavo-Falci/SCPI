@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import * as WebBrowser from 'expo-web-browser';
 import React, { useRef, useState, useEffect } from "react";
 import {
   StyleSheet,
@@ -260,7 +261,14 @@ export default function CadastroFacial() {
                 </View>
                 <Text style={styles.consentBody}>
                   Autorizo o SCPI a coletar e processar minha imagem facial para{" "}
-                  <Text style={styles.consentBodyStrong}>controle de presença nas aulas</Text>. Os dados são armazenados de forma segura (AWS Rekognition + S3) e posso revogar este consentimento a qualquer momento pelo meu perfil. (LGPD art. 11)
+                  <Text style={styles.consentBodyStrong}>controle de presença nas aulas</Text>{" "}
+                  (LGPD Art. 11, II, 'a'). Dados armazenados em servidores AWS (us-east-1, EUA) sob o DPA da AWS — LGPD Art. 33, II. Posso revogar este consentimento a qualquer momento pelo meu perfil.{" "}
+                  <Text
+                    style={{ color: Colors.brand.primary, textDecorationLine: "underline" }}
+                    onPress={() => WebBrowser.openBrowserAsync(process.env.EXPO_PUBLIC_PRIVACY_URL ?? "")}
+                  >
+                    Ver Política de Privacidade.
+                  </Text>
                 </Text>
                 <TouchableOpacity
                   style={styles.consentRow}

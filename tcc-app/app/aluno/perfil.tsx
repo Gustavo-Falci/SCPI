@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   StatusBar,
   ScrollView,
+  Share,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,12 +16,14 @@ import { storage } from "../../services/storage";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 import { Button } from "../../components/ui/button";
+import { apiGet } from "../../services/api";
 
 export default function PerfilAluno() {
   const router = useRouter();
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [ra, setRa] = useState("");
+  const [exportando, setExportando] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -36,6 +40,27 @@ export default function PerfilAluno() {
   const handleLogout = async () => {
     await storage.clear();
     router.replace("/auth/login");
+  };
+
+  const handleExportarDados = async () => {
+    const userId = await storage.getItem("user_id");
+    if (!userId) {
+      Alert.alert("Erro", "Usuário não identificado.");
+      return;
+    }
+    setExportando(true);
+    try {
+      const dados = await apiGet(`/aluno/meus-dados/${userId}`);
+      const json = JSON.stringify(dados, null, 2);
+      await Share.share({
+        message: json,
+        title: "Meus dados SCPI (LGPD Art. 18)",
+      });
+    } catch (err: any) {
+      Alert.alert("Erro", "Não foi possível exportar seus dados. Tente novamente.");
+    } finally {
+      setExportando(false);
+    }
   };
 
   const menuItems: any[] = [
@@ -105,10 +130,17 @@ export default function PerfilAluno() {
         </View>
 
         <View style={styles.actionsSection}>
-          <Button 
-            title="Sair da Conta" 
-            onPress={handleLogout} 
-            variant="outline" 
+          <Button
+            title={exportando ? "Exportando..." : "Exportar meus dados (LGPD)"}
+            onPress={handleExportarDados}
+            variant="outline"
+            style={[styles.logoutBtn, { marginBottom: 12 }]}
+            disabled={exportando}
+          />
+          <Button
+            title="Sair da Conta"
+            onPress={handleLogout}
+            variant="outline"
             style={styles.logoutBtn}
             textStyle={{ color: Colors.brand.error }}
           />

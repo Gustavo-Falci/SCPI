@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Política de Privacidade — SCPI</title>
+  <link rel="stylesheet" href="css/app.css" />
+  <style>
+    .privacy-container { max-width: 860px; margin: 40px auto; padding: 0 24px 80px; }
+    .privacy-container h1 { font-size: 1.8rem; margin-bottom: 8px; }
+    .privacy-container h2 { font-size: 1.2rem; margin-top: 32px; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+    .privacy-container p, .privacy-container li { line-height: 1.7; color: #374151; }
+    .privacy-container ul { padding-left: 20px; }
+    .privacy-container .badge { display: inline-block; background: #eff6ff; color: #1d4ed8; font-size: 0.78rem; padding: 2px 8px; border-radius: 4px; margin-left: 6px; }
+    .privacy-container table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .privacy-container th, .privacy-container td { text-align: left; padding: 8px 12px; border: 1px solid #e5e7eb; font-size: 0.9rem; }
+    .privacy-container th { background: #f9fafb; font-weight: 600; }
+    .privacy-container .updated { color: #6b7280; font-size: 0.85rem; margin-bottom: 24px; }
+    .back-link { display: inline-block; margin-bottom: 24px; color: #2563eb; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="privacy-container">
+    <a href="index.html" class="back-link">← Voltar ao Portal</a>
+    <h1>Política de Privacidade</h1>
+    <p class="updated">Última atualização: <!-- PREENCHER DATA DE PUBLICAÇÃO --></p>
+
+    <h2>1. Controlador dos Dados</h2>
+    <p>
+      <strong>Nome da Instituição:</strong> <!-- PREENCHER NOME DA INSTITUIÇÃO --><br />
+      <strong>CNPJ:</strong> <!-- PREENCHER CNPJ --><br />
+      <strong>Endereço:</strong> <!-- PREENCHER ENDEREÇO --><br />
+      <strong>E-mail de contato:</strong> <!-- PREENCHER E-MAIL -->
+    </p>
+
+    <h2>2. Encarregado de Dados (DPO)</h2>
+    <p>
+      <strong>Nome:</strong> <!-- PREENCHER NOME DO DPO --><br />
+      <strong>E-mail:</strong> <!-- PREENCHER E-MAIL DPO --><br />
+      <strong>Telefone:</strong> <!-- PREENCHER TELEFONE (opcional) -->
+    </p>
+
+    <h2>3. Dados Coletados e Finalidade</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Categoria</th>
+          <th>Dados</th>
+          <th>Finalidade</th>
+          <th>Base Legal</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Cadastrais</td>
+          <td>Nome, e-mail, RA, turno</td>
+          <td>Identificação e acesso ao sistema</td>
+          <td>Art. 7, V (execução de contrato) <span class="badge">LGPD</span></td>
+        </tr>
+        <tr>
+          <td>Biométricos</td>
+          <td>Imagem facial (foto), vetor biométrico (AWS Rekognition)</td>
+          <td>Reconhecimento facial para controle de presença</td>
+          <td>Art. 11, II, 'a' (consentimento explícito) <span class="badge">LGPD</span></td>
+        </tr>
+        <tr>
+          <td>Frequência</td>
+          <td>Data, hora e disciplina de cada presença registrada</td>
+          <td>Controle acadêmico de frequência</td>
+          <td>Art. 7, V (execução de contrato) <span class="badge">LGPD</span></td>
+        </tr>
+        <tr>
+          <td>Acesso</td>
+          <td>E-mail mascarado, IP, timestamp de login</td>
+          <td>Auditoria de segurança</td>
+          <td>Art. 7, II (obrigação legal) <span class="badge">LGPD</span></td>
+        </tr>
+        <tr>
+          <td>Notificações</td>
+          <td>Token de push (Expo)</td>
+          <td>Envio de notificações do sistema</td>
+          <td>Art. 7, V (execução de contrato) <span class="badge">LGPD</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. Transferência Internacional de Dados</h2>
+    <p>
+      Os dados biométricos (imagens faciais e vetores) são armazenados em servidores
+      <strong>Amazon Web Services (AWS)</strong>, região <strong>us-east-1 (Virgínia do Norte, EUA)</strong>.
+      A transferência é realizada com base no <strong>Acordo de Processamento de Dados (DPA) da AWS</strong>,
+      nos termos do Art. 33, II da LGPD. A AWS é certificada pelos frameworks ISO 27001 e SOC 2 Type II.
+    </p>
+
+    <h2>5. Prazo de Retenção</h2>
+    <table>
+      <thead>
+        <tr><th>Dado</th><th>Prazo</th><th>Eliminação</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Dados cadastrais</td><td>Durante o vínculo acadêmico + 5 anos</td><td>Mediante solicitação ou encerramento do vínculo</td></tr>
+        <tr><td>Dados biométricos</td><td>Até revogação do consentimento</td><td>Automática após revogação (Rekognition + S3 + banco)</td></tr>
+        <tr><td>Registros de frequência</td><td>5 anos após encerramento do semestre</td><td>Por solicitação ou prazo legal</td></tr>
+        <tr><td>Logs de auditoria</td><td>90 dias</td><td>Automática via rotação de arquivos</td></tr>
+      </tbody>
+    </table>
+
+    <h2>6. Direitos do Titular (LGPD Art. 18)</h2>
+    <ul>
+      <li><strong>Confirmação e Acesso:</strong> exportar seus dados no app mobile (Perfil → "Exportar meus dados")</li>
+      <li><strong>Correção:</strong> solicitar correção via e-mail ao DPO</li>
+      <li><strong>Eliminação:</strong> revogar biometria no app (Perfil → Biometria → Revogar); exclusão completa via DPO</li>
+      <li><strong>Portabilidade:</strong> exportar dados em formato JSON (app mobile)</li>
+      <li><strong>Revogação do Consentimento:</strong> disponível a qualquer momento no app (Perfil)</li>
+      <li><strong>Oposição:</strong> contestar tratamento via e-mail ao DPO</li>
+    </ul>
+
+    <h2>7. Segurança</h2>
+    <p>
+      O sistema adota as seguintes medidas técnicas de segurança:
+    </p>
+    <ul>
+      <li>Autenticação por JWT com expiração de 60 minutos e refresh token com rotação</li>
+      <li>Senhas armazenadas com bcrypt + pbkdf2_sha256</li>
+      <li>Comunicação via HTTPS (TLS 1.2+) em produção</li>
+      <li>Imagens faciais acessíveis apenas via URL pré-assinada com expiração de 300 segundos</li>
+      <li>Rate limiting em endpoints críticos (login: 10/min, upload biométrico: 10/min)</li>
+      <li>Logs de auditoria com e-mails mascarados</li>
+    </ul>
+
+    <h2>8. Contato e Incidentes</h2>
+    <p>
+      Para exercer seus direitos, reportar incidentes ou tirar dúvidas, entre em contato com o DPO:
+      <strong><!-- PREENCHER E-MAIL DPO --></strong>.<br />
+      Em caso de incidente de segurança, notificaremos os titulares afetados em até 72 horas,
+      conforme Art. 48 da LGPD.
+    </p>
+
+    <h2>9. Alterações nesta Política</h2>
+    <p>
+      Esta política pode ser atualizada periodicamente. A data de vigência é indicada no topo desta página.
+      Alterações significativas serão comunicadas pelo app.
+    </p>
+  </div>
+</body>
+</html>
