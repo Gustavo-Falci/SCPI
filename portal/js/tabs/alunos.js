@@ -55,7 +55,7 @@ function renderList(container) {
             <p class="font-black text-white text-sm truncate">${a.nome}</p>
             ${turnoBadge(a.turno)}
           </div>
-          <p class="text-gray-500 font-bold text-xs truncate">${a.email}${a.ra ? ` · RA: ${a.ra}` : ''}</p>
+          <p class="text-gray-500 font-bold text-xs truncate">${a.email}${a.ra ? ` · RA/CPF: ${a.ra}` : ''}</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <button data-id="${a.aluno_id}" class="edit-btn w-8 h-8 rounded-xl bg-accent/10 hover:bg-accent/20 flex items-center justify-center text-accent transition-all">${icon('pencil', 14)}</button>
@@ -151,7 +151,7 @@ function formHTML() {
     <form id="aluno-form" class="space-y-4">
       <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome Completo *</label><input name="nome" type="text" placeholder="Maria Santos" class="scpi-input" required></div>
       <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email *</label><input name="email" type="email" placeholder="maria@escola.com" class="scpi-input" required></div>
-      <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">RA</label><input name="ra" type="text" placeholder="2024001" class="scpi-input"></div>
+      <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">RA/CPF</label><input name="ra" type="text" placeholder="2024001" class="scpi-input"></div>
       <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label>
         <select name="turno" class="scpi-input"><option value="">Não definido</option><option value="Matutino">Matutino</option><option value="Noturno">Noturno</option></select></div>
       <button id="aluno-create-btn" type="submit" class="w-full py-3 rounded-2xl bg-accent text-white font-black text-sm transition-all flex items-center justify-center gap-2">${icon('plus', 16)}<span>Criar Aluno</span></button>
