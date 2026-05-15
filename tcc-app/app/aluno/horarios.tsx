@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   todayTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
   todayDate: { color: Colors.brand.textSecondary, fontSize: 14, marginTop: 4 },
   timeline: { paddingLeft: 4 },
-  timelineItem: { flexDirection: "row", alignItems: "stretch" },
+  timelineItem: { flexDirection: "row", alignItems: "stretch", marginBottom: 8 },
   timeColumn: { alignItems: "center", width: 50, marginRight: 16 },
   timeText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   timelineLine: { width: 2, flex: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 6 },
