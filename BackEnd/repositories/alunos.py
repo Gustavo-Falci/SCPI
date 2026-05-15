@@ -157,7 +157,7 @@ def listar_frequencias_por_aluno(aluno_id):
             FROM Turma_Alunos ta
             JOIN Turmas t ON ta.turma_id = t.turma_id
             WHERE ta.aluno_id = %s
-            GROUP BY t.turma_id, t.nome_disciplina, t.codigo_turma
+            GROUP BY t.turma_id, t.nome_disciplina, t.codigo_turma, ta.aluno_id
             """,
             (aluno_id,),
         )
