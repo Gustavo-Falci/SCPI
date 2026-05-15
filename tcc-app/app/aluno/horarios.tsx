@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,6 +17,32 @@ import { storage } from "../../services/storage";
 import { apiGet } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
+
+function isAulaAoVivo(horario: string): boolean {
+  const parts = horario.split(' - ');
+  if (parts.length !== 2) return false;
+  const [inicioStr, fimStr] = parts;
+  const now = new Date();
+  const [hI, mI] = inicioStr.split(':').map(Number);
+  const [hF, mF] = fimStr.split(':').map(Number);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const inicioMin = hI * 60 + mI;
+  const fimMin = hF * 60 + mF;
+  return nowMin >= inicioMin && nowMin <= fimMin;
+}
+
+function PulsingDot() {
+  const anim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 0.2, duration: 700, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  return <Animated.View style={[styles.dot, { opacity: anim }]} />;
+}
 
 export default function Horarios() {
   const router = useRouter();
@@ -98,31 +125,60 @@ export default function Horarios() {
 
         <View style={styles.timeline}>
           {aulas.length > 0 ? (
-            aulas.map((aula, index) => (
-              <View key={aula.id} style={styles.timelineItem}>
-                <View style={styles.timeColumn}>
-                  <Text style={styles.timeText}>{aula.horario.split(' - ')[0]}</Text>
-                  <View style={[styles.timelineLine, index === aulas.length - 1 && { backgroundColor: 'transparent' }]} />
-                </View>
+            <>
+              {aulas.map((aula, index) => {
+                const aoVivo = isAulaAoVivo(aula.horario);
+                const [inicio, fim] = aula.horario.split(' - ');
+                const nextAula = aulas[index + 1];
+                const hasGap = nextAula != null && fim !== nextAula.horario.split(' - ')[0];
+                return (
+                  <React.Fragment key={aula.id}>
+                    <View style={styles.timelineItem}>
+                      <View style={styles.timeColumn}>
+                        <Text style={[styles.timeText, aoVivo && styles.timeTextLive]}>{inicio}</Text>
+                        <View style={[styles.timelineLine, aoVivo && styles.timelineLineLive]} />
+                      </View>
 
-                <View style={styles.classCard}>
-                  <View style={styles.cardHeader}>
-                    <Text style={styles.className}>{aula.nome}</Text>
-                  </View>
-                  
-                  <View style={styles.cardFooter}>
-                    <View style={styles.infoRow}>
-                      <Ionicons name="location-outline" size={14} color={Colors.brand.textSecondary} />
-                      <Text style={styles.infoText}>{aula.sala}</Text>
+                      <View style={[styles.classCard, aoVivo && styles.classCardLive]}>
+                        <View style={styles.cardHeader}>
+                          <Text style={styles.className}>{aula.nome}</Text>
+                          {aoVivo && (
+                            <View style={styles.liveBadge}>
+                              <PulsingDot />
+                              <Text style={styles.liveBadgeText}>AO VIVO</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        <View style={styles.cardFooter}>
+                          <View style={styles.infoRow}>
+                            <Ionicons name="location-outline" size={14} color={aoVivo ? '#4ade80' : Colors.brand.textSecondary} />
+                            <Text style={[styles.infoText, aoVivo && styles.infoTextLive]}>{aula.sala}</Text>
+                          </View>
+                        </View>
+                      </View>
                     </View>
-                    <View style={styles.infoRow}>
-                      <Ionicons name="time-outline" size={14} color={Colors.brand.textSecondary} />
-                      <Text style={styles.infoText}>{aula.horario}</Text>
-                    </View>
-                  </View>
-                </View>
+
+                    {hasGap && (
+                      <View style={styles.gapSection}>
+                        <View style={styles.timeColumn}>
+                          <Text style={styles.timeText}>{fim}</Text>
+                          <View style={styles.gapDottedLine} />
+                        </View>
+                        <View style={styles.gapLabelContainer}>
+                          <Text style={styles.gapLabelText}>intervalo</Text>
+                        </View>
+                      </View>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+              <View style={styles.timelineEnd}>
+                <Text style={styles.timeText}>
+                  {aulas[aulas.length - 1].horario.split(' - ')[1]}
+                </Text>
               </View>
-            ))
+            </>
           ) : (
             <View style={styles.emptyContainer}>
               <Ionicons name="cafe-outline" size={50} color={Colors.brand.textSecondary} />
@@ -154,10 +210,21 @@ const styles = StyleSheet.create({
   todayTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
   todayDate: { color: Colors.brand.textSecondary, fontSize: 14, marginTop: 4 },
   timeline: { paddingLeft: 4 },
-  timelineItem: { flexDirection: "row", marginBottom: 12 },
+  timelineItem: { flexDirection: "row", alignItems: "stretch" },
   timeColumn: { alignItems: "center", width: 50, marginRight: 16 },
-  timeText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  timelineLine: { width: 2, flex: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 8 },
+  timeText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  timelineLine: { width: 2, flex: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 6 },
+  timelineLineLive: { backgroundColor: "rgba(74,222,128,0.4)" },
+  timelineEnd: { width: 50, alignItems: "center" },
+  gapSection: { flexDirection: "row", alignItems: "center" },
+  gapDottedLine: {
+    width: 2, height: 28,
+    borderLeftWidth: 2, borderStyle: "dashed",
+    borderColor: "rgba(255,255,255,0.2)",
+    marginVertical: 4,
+  },
+  gapLabelContainer: { flex: 1, marginLeft: 16, justifyContent: "center" },
+  gapLabelText: { color: "rgba(255,255,255,0.25)", fontSize: 11, fontStyle: "italic" },
   classCard: {
     flex: 1, backgroundColor: Colors.brand.card, borderRadius: 20, padding: 16,
     borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
@@ -173,4 +240,17 @@ const styles = StyleSheet.create({
     borderStyle: "dashed", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
   },
   emptyText: { color: Colors.brand.textSecondary, fontSize: 14, marginTop: 12, textAlign: 'center', paddingHorizontal: 24 },
+  classCardLive: {
+    borderColor: "#4ade80",
+    borderWidth: 1.5,
+  },
+  timeTextLive: { color: "#4ade80" },
+  liveBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(74,222,128,0.15)", borderRadius: 20,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  liveBadgeText: { color: "#4ade80", fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#4ade80" },
+  infoTextLive: { color: "#4ade80" },
 });

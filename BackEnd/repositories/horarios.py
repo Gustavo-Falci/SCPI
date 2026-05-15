@@ -73,6 +73,7 @@ def listar_aulas_hoje_por_aluno(aluno_id, dia_semana, turno=None):
                 WHERE ta.aluno_id = %s
                 AND h.dia_semana = %s
                 AND t.turno = %s
+                ORDER BY h.horario_inicio ASC
                 """,
                 (aluno_id, dia_semana, turno),
             )
@@ -87,6 +88,7 @@ def listar_aulas_hoje_por_aluno(aluno_id, dia_semana, turno=None):
                 JOIN turma_alunos ta ON t.turma_id = ta.turma_id
                 WHERE ta.aluno_id = %s
                 AND h.dia_semana = %s
+                ORDER BY h.horario_inicio ASC
                 """,
                 (aluno_id, dia_semana),
             )
