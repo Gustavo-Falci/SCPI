@@ -139,6 +139,10 @@ def get_historico_chamadas_aluno(
 
         total_slots = sum(c.get("total_aulas", 1) for c in chamadas)
         presentes_slots = sum(c.get("aulas_presentes_count", 0) for c in chamadas)
+        parciais = sum(
+            1 for c in chamadas
+            if 0 < c.get("aulas_presentes_count", 0) < c.get("total_aulas", 1)
+        )
         return {
             "turma_id": turma_id,
             "nome_disciplina": turma["nome_disciplina"],
@@ -146,6 +150,7 @@ def get_historico_chamadas_aluno(
             "total": total_slots,
             "presentes": presentes_slots,
             "ausentes": total_slots - presentes_slots,
+            "parciais": parciais,
             "percentual": round(presentes_slots / total_slots * 100) if total_slots > 0 else 0,
             "chamadas": chamadas,
         }

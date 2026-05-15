@@ -136,6 +136,18 @@ export default function FrequenciaDetalhe() {
               </Text>
               <Text style={styles.statLabel}>Faltas</Text>
             </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text
+                style={[
+                  styles.statValue,
+                  detalhe.parciais > 0 && { color: "#F59E0B" },
+                ]}
+              >
+                {detalhe.parciais ?? 0}
+              </Text>
+              <Text style={styles.statLabel}>Parciais</Text>
+            </View>
           </View>
 
           {/* Call history */}
