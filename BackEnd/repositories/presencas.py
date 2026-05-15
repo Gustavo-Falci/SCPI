@@ -5,7 +5,10 @@ def contar_presentes_por_chamada(chamada_id):
     with get_db_cursor() as cur:
         if not cur:
             return 0
-        cur.execute("SELECT COUNT(*) as presentes FROM Presencas WHERE chamada_id=%s", (chamada_id,))
+        cur.execute(
+            "SELECT COUNT(DISTINCT aluno_id) AS presentes FROM Presencas WHERE chamada_id=%s",
+            (chamada_id,),
+        )
         row = cur.fetchone()
         return row["presentes"] if row else 0
 
