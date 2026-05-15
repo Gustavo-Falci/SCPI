@@ -21,8 +21,11 @@ export default function Frequencia() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadFrequencias = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const userId = await storage.getItem("user_id");
       if (!userId) {
@@ -31,8 +34,9 @@ export default function Frequencia() {
       }
       const resp = await apiGet(`/aluno/frequencias/${userId}`);
       setData(resp);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao carregar frequencias aluno:", err);
+      setError(err?.message || "Erro ao carregar frequências.");
     } finally {
       setLoading(false);
     }
@@ -56,6 +60,32 @@ export default function Frequencia() {
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color={Colors.brand.primary} />
       </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <StatusBar barStyle="light-content" />
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Minhas Frequências</Text>
+          <View style={{ width: 44 }} />
+        </View>
+        <View style={[styles.center, { flex: 1 }]}>
+          <Ionicons name="warning-outline" size={48} color={Colors.brand.error} />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={loadFrequencias} activeOpacity={0.75}>
+            <Text style={styles.retryLabel}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -207,4 +237,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 24,
   },
+  errorText: {
+    color: Colors.brand.error,
+    fontSize: 14,
+    marginTop: 12,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  retryBtn: {
+    marginTop: 20,
+    backgroundColor: Colors.brand.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryLabel: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });
