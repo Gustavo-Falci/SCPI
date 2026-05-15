@@ -100,6 +100,41 @@ def ensure_reset_codes_table():
         logger.error("Falha ao criar tabela PasswordResetCodes: %s", e)
 
 
+def ensure_presenca_por_aula():
+    """Adiciona total_aulas em chamadas e num_aula em presencas (idempotente)."""
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                "ALTER TABLE chamadas ADD COLUMN IF NOT EXISTS total_aulas smallint NOT NULL DEFAULT 1"
+            )
+            cur.execute(
+                "ALTER TABLE presencas ADD COLUMN IF NOT EXISTS num_aula smallint NOT NULL DEFAULT 1"
+            )
+            cur.execute(
+                "ALTER TABLE presencas DROP CONSTRAINT IF EXISTS presencas_chamada_id_aluno_id_key"
+            )
+            cur.execute(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint c
+                        JOIN pg_class t ON c.conrelid = t.oid
+                        JOIN pg_namespace n ON t.relnamespace = n.oid
+                        WHERE c.conname = 'presencas_chamada_aluno_aula_key'
+                          AND n.nspname = current_schema()
+                    ) THEN
+                        ALTER TABLE presencas
+                          ADD CONSTRAINT presencas_chamada_aluno_aula_key
+                            UNIQUE (chamada_id, aluno_id, num_aula);
+                    END IF;
+                END$$;
+                """
+            )
+    except Exception as e:
+        logger.error("Falha ao aplicar migração presenca_por_aula: %s", e)
+
+
 def ensure_multi_angle_faces():
     try:
         with get_db_cursor(commit=True) as cur:
@@ -135,3 +170,4 @@ def run_all():
     ensure_push_tokens_table()
     ensure_primeiro_acesso_column()
     ensure_reset_codes_table()
+    ensure_presenca_por_aula()
