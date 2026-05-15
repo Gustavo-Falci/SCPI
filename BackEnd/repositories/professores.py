@@ -60,7 +60,7 @@ def obter_dashboard_professor(usuario_id):
         cur.execute(
             """
             WITH last_chamada AS (
-                SELECT c.chamada_id, c.turma_id
+                SELECT c.chamada_id, c.turma_id, c.total_aulas
                 FROM Chamadas c
                 JOIN Professores p ON c.professor_id = p.professor_id
                 WHERE p.usuario_id = %s
@@ -70,9 +70,21 @@ def obter_dashboard_professor(usuario_id):
                 u.nome AS prof_nome,
                 lc.chamada_id,
                 lc.turma_id,
+                lc.total_aulas,
                 t.nome_disciplina,
-                (SELECT COUNT(*) FROM Turma_Alunos WHERE turma_id = lc.turma_id) AS total,
-                (SELECT COUNT(*) FROM Presencas WHERE chamada_id = lc.chamada_id) AS presentes
+                (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = lc.turma_id) AS total,
+                (SELECT COUNT(*)
+                 FROM Turma_Alunos ta
+                 LEFT JOIN (SELECT aluno_id, COUNT(*) AS cnt FROM Presencas WHERE chamada_id = lc.chamada_id GROUP BY aluno_id) pc ON pc.aluno_id = ta.aluno_id
+                 WHERE ta.turma_id = lc.turma_id AND COALESCE(pc.cnt, 0) = lc.total_aulas) AS presentes,
+                (SELECT COUNT(*)
+                 FROM Turma_Alunos ta
+                 LEFT JOIN (SELECT aluno_id, COUNT(*) AS cnt FROM Presencas WHERE chamada_id = lc.chamada_id GROUP BY aluno_id) pc ON pc.aluno_id = ta.aluno_id
+                 WHERE ta.turma_id = lc.turma_id AND COALESCE(pc.cnt, 0) > 0 AND COALESCE(pc.cnt, 0) < lc.total_aulas) AS parciais,
+                (SELECT COUNT(*)
+                 FROM Turma_Alunos ta
+                 LEFT JOIN (SELECT aluno_id, COUNT(*) AS cnt FROM Presencas WHERE chamada_id = lc.chamada_id GROUP BY aluno_id) pc ON pc.aluno_id = ta.aluno_id
+                 WHERE ta.turma_id = lc.turma_id AND COALESCE(pc.cnt, 0) = 0) AS ausentes
             FROM Usuarios u
             LEFT JOIN last_chamada lc ON TRUE
             LEFT JOIN Turmas t ON t.turma_id = lc.turma_id

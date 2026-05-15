@@ -111,6 +111,9 @@ export default function HomeProfessor() {
 
         <View style={styles.sectionContainer}>
           <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>Resumo da Última Chamada</Text>
+          {data?.estatisticas?.disciplina && data.estatisticas.disciplina !== "Nenhuma chamada recente" && (
+            <Text style={styles.disciplinaLabel}>{data.estatisticas.disciplina}</Text>
+          )}
           <View style={styles.statsRow}>
              <View style={styles.statItem}>
                 <Text style={styles.statValue}>{data?.estatisticas?.total || 0}</Text>
@@ -118,11 +121,15 @@ export default function HomeProfessor() {
              </View>
              <View style={[styles.statItem, { borderColor: 'rgba(29, 185, 84, 0.3)' }]}>
                 <Text style={[styles.statValue, { color: '#1DB954' }]}>{data?.estatisticas?.presentes || 0}</Text>
-                <Text style={styles.statLabel}>Presentes</Text>
+                <Text style={styles.statLabel}>Presenças</Text>
+             </View>
+             <View style={[styles.statItem, { borderColor: 'rgba(234, 179, 8, 0.3)' }]}>
+                <Text style={[styles.statValue, { color: '#EAB308' }]}>{data?.estatisticas?.parciais || 0}</Text>
+                <Text style={styles.statLabel}>Parciais</Text>
              </View>
              <View style={[styles.statItem, { borderColor: 'rgba(255, 75, 75, 0.3)' }]}>
                 <Text style={[styles.statValue, { color: '#FF4B4B' }]}>{data?.estatisticas?.ausentes || 0}</Text>
-                <Text style={styles.statLabel}>Ausentes</Text>
+                <Text style={styles.statLabel}>Faltas</Text>
              </View>
           </View>
         </View>
@@ -224,10 +231,11 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   sectionTitle: { color: Colors.brand.text, fontSize: 18, fontWeight: "700" },
   seeAllText: { color: Colors.brand.primary, fontSize: 14, fontWeight: "600" },
-  statsRow: { flexDirection: "row", gap: 12 },
-  statItem: { flex: 1, backgroundColor: Colors.brand.card, borderRadius: 20, padding: 16, alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" },
-  statValue: { color: Colors.brand.text, fontSize: 22, fontWeight: "800" },
-  statLabel: { color: Colors.brand.textSecondary, fontSize: 12, marginTop: 4 },
+  disciplinaLabel: { color: Colors.brand.textSecondary, fontSize: 13, marginBottom: 12, fontWeight: "500" },
+  statsRow: { flexDirection: "row", gap: 8 },
+  statItem: { flex: 1, backgroundColor: Colors.brand.card, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 6, alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" },
+  statValue: { color: Colors.brand.text, fontSize: 20, fontWeight: "800" },
+  statLabel: { color: Colors.brand.textSecondary, fontSize: 11, marginTop: 4 },
   classCard: {
     backgroundColor: Colors.brand.card, borderRadius: 20, padding: 18,
     flexDirection: "row", alignItems: "center", marginBottom: 12,

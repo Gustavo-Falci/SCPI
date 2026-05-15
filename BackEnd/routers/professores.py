@@ -19,16 +19,15 @@ def get_dashboard(usuario_id: str, current_user: dict = Depends(get_current_user
         nome = row['prof_nome'] if row and row.get('prof_nome') else "Professor"
 
         if row and row.get('chamada_id'):
-            total = row['total'] or 0
-            presentes = row['presentes'] or 0
             estatisticas = {
-                "total": total,
-                "presentes": presentes,
-                "ausentes": total - presentes,
+                "total": row['total'] or 0,
+                "presentes": row['presentes'] or 0,
+                "parciais": row['parciais'] or 0,
+                "ausentes": row['ausentes'] or 0,
                 "disciplina": row['nome_disciplina'] or "Disciplina",
             }
         else:
-            estatisticas = {"total": 0, "presentes": 0, "ausentes": 0, "disciplina": "Nenhuma chamada recente"}
+            estatisticas = {"total": 0, "presentes": 0, "parciais": 0, "ausentes": 0, "disciplina": "Nenhuma chamada recente"}
 
         dia_hoje = datetime.datetime.now(zoneinfo.ZoneInfo("America/Sao_Paulo")).weekday()
         aulas_hoje = listar_aulas_hoje_por_professor(usuario_id, dia_hoje)
