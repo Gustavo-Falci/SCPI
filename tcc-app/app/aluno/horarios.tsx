@@ -139,21 +139,23 @@ export default function Horarios() {
                         <View style={[styles.timelineLine, aoVivo && styles.timelineLineLive]} />
                       </View>
 
-                      <View style={[styles.classCard, aoVivo && styles.classCardLive]}>
-                        <View style={styles.cardHeader}>
-                          <Text style={styles.className}>{aula.nome}</Text>
-                          {aoVivo && (
-                            <View style={styles.liveBadge}>
-                              <PulsingDot />
-                              <Text style={styles.liveBadgeText}>AO VIVO</Text>
-                            </View>
-                          )}
-                        </View>
+                      <View style={styles.cardWrapper}>
+                        <View style={[styles.classCard, aoVivo && styles.classCardLive]}>
+                          <View style={styles.cardHeader}>
+                            <Text style={styles.className}>{aula.nome}</Text>
+                            {aoVivo && (
+                              <View style={styles.liveBadge}>
+                                <PulsingDot />
+                                <Text style={styles.liveBadgeText}>AO VIVO</Text>
+                              </View>
+                            )}
+                          </View>
 
-                        <View style={styles.cardFooter}>
-                          <View style={styles.infoRow}>
-                            <Ionicons name="location-outline" size={14} color={aoVivo ? '#4ade80' : Colors.brand.textSecondary} />
-                            <Text style={[styles.infoText, aoVivo && styles.infoTextLive]}>{aula.sala}</Text>
+                          <View style={styles.cardFooter}>
+                            <View style={styles.infoRow}>
+                              <Ionicons name="location-outline" size={14} color={aoVivo ? '#4ade80' : Colors.brand.textSecondary} />
+                              <Text style={[styles.infoText, aoVivo && styles.infoTextLive]}>{aula.sala}</Text>
+                            </View>
                           </View>
                         </View>
                       </View>
@@ -210,7 +212,7 @@ const styles = StyleSheet.create({
   todayTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
   todayDate: { color: Colors.brand.textSecondary, fontSize: 14, marginTop: 4 },
   timeline: { paddingLeft: 4 },
-  timelineItem: { flexDirection: "row", alignItems: "stretch", marginBottom: 8 },
+  timelineItem: { flexDirection: "row", alignItems: "stretch", minHeight: 110, marginBottom: 8 },
   timeColumn: { alignItems: "center", width: 50, marginRight: 16 },
   timeText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   timelineLine: { width: 2, flex: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 6 },
@@ -226,9 +228,13 @@ const styles = StyleSheet.create({
   gapLabelContainer: { flex: 1, marginLeft: 16, justifyContent: "center" },
   gapLabelText: { color: "rgba(255,255,255,0.25)", fontSize: 11, fontStyle: "italic" },
   classCard: {
-    flex: 1, backgroundColor: Colors.brand.card, borderRadius: 20,
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)",
+    backgroundColor: Colors.brand.card, 
+    borderRadius: 20,
+    paddingHorizontal: 16, 
+    paddingVertical: 12,
+    borderWidth: 1,
+    minHeight: 80, 
+    borderColor: "rgba(255,255,255,0.05)",
   },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
   className: { color: "#fff", fontSize: 15, fontWeight: "700", flex: 1, marginRight: 8 },
@@ -254,4 +260,5 @@ const styles = StyleSheet.create({
   liveBadgeText: { color: "#4ade80", fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#4ade80" },
   infoTextLive: { color: "#4ade80" },
+  cardWrapper: { flex: 1, justifyContent: "center", paddingVertical: 12 },
 });
