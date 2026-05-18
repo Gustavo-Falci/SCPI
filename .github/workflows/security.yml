@@ -1,0 +1,97 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Toda segunda-feira 06:00 UTC (03:00 America/Sao_Paulo)
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  # -------------------------------------------------------------------------
+  # SAST Python — varre AST do BackEnd em busca de padrões inseguros
+  # -------------------------------------------------------------------------
+  bandit:
+    name: Bandit (SAST Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Bandit
+        run: pip install bandit==1.7.10
+
+      - name: Run Bandit
+        # -ll: reporta apenas LOW e acima; -ii: confiança MEDIUM+
+        # Falha o pipeline com severidade HIGH (B-codes críticos).
+        run: |
+          bandit -r BackEnd \
+            --exclude BackEnd/tests,BackEnd/__pycache__,BackEnd/logs \
+            --severity-level high \
+            --confidence-level medium
+
+  # -------------------------------------------------------------------------
+  # SCA Python — vulnerabilidades conhecidas em dependências (CVEs)
+  # -------------------------------------------------------------------------
+  pip-audit:
+    name: pip-audit (SCA Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit==2.7.3
+
+      - name: Audit BackEnd dependencies
+        run: pip-audit --requirement BackEnd/requirements.txt --strict
+
+  # -------------------------------------------------------------------------
+  # Detecção de segredos no código + histórico do git
+  # -------------------------------------------------------------------------
+  gitleaks:
+    name: Gitleaks (Secrets Scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # histórico completo para escanear commits antigos
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # -------------------------------------------------------------------------
+  # SCA Node — vulnerabilidades nas deps do app mobile (Expo/React Native)
+  # -------------------------------------------------------------------------
+  npm-audit-mobile:
+    name: npm audit (tcc-app)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: tcc-app/package-lock.json
+
+      - name: Install dependencies (no scripts)
+        working-directory: tcc-app
+        run: npm ci --ignore-scripts
+
+      - name: Audit (high+ severity blocks)
+        working-directory: tcc-app
+        run: npm audit --audit-level=high
