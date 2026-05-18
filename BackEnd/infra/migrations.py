@@ -163,6 +163,21 @@ def ensure_multi_angle_faces():
         logger.error("Falha ao aplicar migração multi-angle: %s", e)
 
 
+def ensure_chamada_aberta_unica():
+    """Garante no máximo uma chamada com status='Aberta' por turma (defesa contra race condition)."""
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_chamada_aberta_por_turma
+                ON Chamadas (turma_id)
+                WHERE status = 'Aberta'
+                """
+            )
+    except Exception as e:
+        logger.error("Falha ao aplicar índice único de chamadas abertas: %s", e)
+
+
 def run_all():
     ensure_refresh_tokens_table()
     ensure_lgpd_columns()
@@ -171,3 +186,4 @@ def run_all():
     ensure_primeiro_acesso_column()
     ensure_reset_codes_table()
     ensure_presenca_por_aula()
+    ensure_chamada_aberta_unica()

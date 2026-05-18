@@ -20,18 +20,28 @@ def fechar_chamadas_abertas_por_turma(turma_id):
 
 
 def abrir_chamada_para_turma(turma_id, professor_id):
-    """Fecha qualquer chamada aberta da turma e abre uma nova; retorna chamada_id."""
+    """Fecha qualquer chamada aberta da turma e abre uma nova; retorna chamada_id.
+
+    Serializa execução concorrente por turma via advisory lock transacional —
+    evita race condition entre dois cliques rápidos do professor que poderiam
+    criar duas chamadas com status='Aberta'. Idempotente: se ainda houver
+    chamada aberta após o lock, devolve a existente.
+    """
     with get_db_cursor(commit=True) as cur:
         if not cur:
             return None
 
+        # Bloqueio cooperativo por turma — liberado no fim da transação.
+        cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (str(turma_id),))
+
+        # Idempotência: se já existe aberta para a turma, devolve-a sem recriar.
         cur.execute(
-            """
-            UPDATE Chamadas SET status='Fechada', horario_fim=CURRENT_TIME
-            WHERE turma_id=%s AND status='Aberta'
-            """,
+            "SELECT chamada_id FROM Chamadas WHERE turma_id=%s AND status='Aberta' LIMIT 1",
             (turma_id,),
         )
+        existente = cur.fetchone()
+        if existente:
+            return existente["chamada_id"]
 
         cur.execute(
             """
