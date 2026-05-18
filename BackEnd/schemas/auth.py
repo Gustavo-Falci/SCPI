@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr, Field
 class UsuarioRegistro(BaseModel):
     nome: str = Field(..., min_length=3, max_length=100)
     email: EmailStr
-    senha: str = Field(..., min_length=8, max_length=128)
+    senha: str = Field(..., min_length=12, max_length=128)
     tipo_usuario: str = Field(..., pattern=r"^(Professor|Aluno|Admin)$")
     ra: Optional[str] = Field(None, pattern=r"^[A-Za-z0-9]{4,20}$")
     departamento: Optional[str] = Field(None, max_length=100)
@@ -30,11 +30,11 @@ class RefreshRequest(BaseModel):
 
 class AlterarSenhaBody(BaseModel):
     senha_atual: str
-    nova_senha: str = Field(..., min_length=8, max_length=128)
+    nova_senha: str = Field(..., min_length=12, max_length=128)
 
 
 class PrimeiroAcessoSenhaBody(BaseModel):
-    nova_senha: str = Field(..., min_length=8, max_length=128)
+    nova_senha: str = Field(..., min_length=12, max_length=128)
 
 
 class RegisterTokenBody(BaseModel):
@@ -52,4 +52,4 @@ class VerificarCodigoBody(BaseModel):
 
 class RedefinirSenhaBody(BaseModel):
     reset_token: str
-    nova_senha: str = Field(..., min_length=8)
+    nova_senha: str = Field(..., min_length=12, max_length=128)

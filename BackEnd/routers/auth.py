@@ -16,6 +16,7 @@ from core.auth_utils import (
     create_refresh_token,
     get_password_hash,
     hash_refresh_token,
+    senha_comprometida,
     verify_password,
 )
 from core.helpers import internal_error, mask_email
@@ -181,6 +182,12 @@ def alterar_senha(body: AlterarSenhaBody, current_user: dict = Depends(get_curre
         if not senha_ok:
             raise HTTPException(status_code=401, detail="Senha atual incorreta.")
 
+        if senha_comprometida(body.nova_senha):
+            raise HTTPException(
+                status_code=400,
+                detail="Esta senha aparece em vazamentos públicos. Escolha outra.",
+            )
+
         nova_hash = get_password_hash(body.nova_senha)
         atualizar_senha_por_usuario_id(usuario_id, nova_hash)
         audit_logger.info("Senha alterada usuario=%s", usuario_id)
@@ -200,6 +207,12 @@ def alterar_senha_primeiro_acesso(body: PrimeiroAcessoSenhaBody, current_user: d
             raise HTTPException(status_code=404, detail="Usuário não encontrado.")
         if not user["primeiro_acesso"]:
             raise HTTPException(status_code=403, detail="Operação não permitida.")
+
+        if senha_comprometida(body.nova_senha):
+            raise HTTPException(
+                status_code=400,
+                detail="Esta senha aparece em vazamentos públicos. Escolha outra.",
+            )
 
         nova_hash = get_password_hash(body.nova_senha)
         atualizar_senha_por_usuario_id(usuario_id, nova_hash)
@@ -290,6 +303,12 @@ def redefinir_senha(body: RedefinirSenhaBody):
     email = payload.get("sub", "").strip().lower()
     if not email:
         raise HTTPException(status_code=400, detail="Token inválido.")
+
+    if senha_comprometida(body.nova_senha):
+        raise HTTPException(
+            status_code=400,
+            detail="Esta senha aparece em vazamentos públicos. Escolha outra.",
+        )
 
     nova_hash = get_password_hash(body.nova_senha)
     atualizar_senha_por_email(email, nova_hash)
