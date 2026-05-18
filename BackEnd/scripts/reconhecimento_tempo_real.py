@@ -11,7 +11,7 @@ import requests
 import botocore.exceptions
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv, find_dotenv
-from core.config import COLLECTION_ID, AWS_REGION
+from core.config import COLLECTION_ID, AWS_REGION, FACE_MATCH_THRESHOLD_SALA
 from infra.aws_clientes import rekognition_client
 
 load_dotenv(find_dotenv())
@@ -86,7 +86,7 @@ class SistemaReconhecimento:
                 CollectionId=COLLECTION_ID,
                 Image={'Bytes': face_bytes},
                 MaxFaces=1,
-                FaceMatchThreshold=85,
+                FaceMatchThreshold=FACE_MATCH_THRESHOLD_SALA,
             )
 
             if not response['FaceMatches']:

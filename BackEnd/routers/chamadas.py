@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
-from core.config import COLLECTION_ID
+from core.config import COLLECTION_ID, FACE_MATCH_THRESHOLD_SELFIE
 from core.helpers import internal_error, validate_image_upload
 from core.limiter import limiter
 from core.security import get_current_user, require_role, require_service_token
@@ -15,7 +15,7 @@ from repositories.chamadas import (
     obter_chamada_aberta_com_disciplina,
     obter_chamada_aberta_por_sala,
     obter_chamada_aberta_por_turma,
-    obter_chamada_por_id,  # now includes total_aulas
+    obter_chamada_por_id,
 )
 from repositories.horarios import existe_aula_no_horario_atual_para_turma
 from repositories.presencas import ajustar_presencas_chamada, contar_alunos_da_turma, contar_presentes_por_chamada
@@ -191,7 +191,7 @@ async def registrar_rosto_aluno(
             CollectionId=COLLECTION_ID,
             Image={'Bytes': image_bytes},
             MaxFaces=1,
-            FaceMatchThreshold=90,
+            FaceMatchThreshold=FACE_MATCH_THRESHOLD_SELFIE,
         )
 
         if not response.get('FaceMatches'):
