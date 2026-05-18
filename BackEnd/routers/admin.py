@@ -252,15 +252,20 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos):
 
 
 @router.post("/turmas/{turma_id}/importar-alunos")
-async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...)):
+async def admin_importar_alunos_csv(
+    turma_id: str,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_role("Admin")),
+):
     try:
         content = await file.read()
         decoded = content.decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(decoded))
 
         importados = 0
+        emails_enviados = 0
         erros = []
-        senhas_geradas = []
 
         for row in csv_reader:
             try:
@@ -281,16 +286,23 @@ async def admin_importar_alunos_csv(turma_id: str, file: UploadFile = File(...))
                 novo_usuario, _ = importar_aluno_csv(turma_id, nome, email, ra, turno, senha_hash)
 
                 if novo_usuario:
-                    senhas_geradas.append({"email": email, "senha_temporaria": senha_temporaria})
+                    background_tasks.add_task(
+                        send_email_senha_temporaria, email.strip(), nome, senha_temporaria, "Aluno"
+                    )
+                    emails_enviados += 1
 
                 importados += 1
             except Exception as e:
                 erros.append(f"Erro na linha {row}: {str(e)}")
 
+        audit_logger.info(
+            "Importação CSV admin=%s turma=%s importados=%s emails=%s",
+            current_user.get("sub"), turma_id, importados, emails_enviados,
+        )
         return {
             "mensagem": f"Importação concluída: {importados} alunos matriculados.",
+            "emails_enviados": emails_enviados,
             "erros": erros,
-            "senhas_geradas": senhas_geradas,
         }
     except Exception as e:
         raise internal_error(e)
