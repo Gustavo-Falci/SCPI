@@ -16,6 +16,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from core.errors import rate_limit_handler
 from core.limiter import limiter
+from core.security_headers import SecurityHeadersMiddleware
 from infra import migrations as _migrations
 from infra.aws_clientes import rekognition_client, s3_client
 from infra.database import close_pool
@@ -105,6 +106,7 @@ app.add_middleware(
 )
 
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["127.0.0.1"])
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 _agendador_task: asyncio.Task | None = None
