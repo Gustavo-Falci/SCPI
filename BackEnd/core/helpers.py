@@ -12,6 +12,13 @@ logger = logging.getLogger("scpi.helpers")
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
 ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/jpg", "image/png"}
 
+# Assinaturas iniciais ("magic bytes") aceitas por tipo MIME real.
+# Evita upload de executáveis renomeados como .png/.jpg (manual §3.1).
+_IMAGE_MAGIC_SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+}
+
 
 def mask_email(email: str) -> str:
     """Mascara email para logs: 'gu.falci@gmail.com' -> 'g***@gmail.com'."""
@@ -23,15 +30,40 @@ def mask_email(email: str) -> str:
     return f"{local[0]}***@{domain}"
 
 
+def _detect_image_mime(header: bytes) -> Optional[str]:
+    """Identifica tipo de imagem a partir dos primeiros bytes; None se não suportado."""
+    for mime, signatures in _IMAGE_MAGIC_SIGNATURES.items():
+        if any(header.startswith(sig) for sig in signatures):
+            return mime
+    return None
+
+
 async def validate_image_upload(foto: UploadFile) -> bytes:
-    """Valida content-type e tamanho da imagem, retornando os bytes já lidos."""
+    """Valida content-type declarado, magic bytes reais e tamanho da imagem."""
     if foto.content_type not in ALLOWED_IMAGE_MIMES:
         raise HTTPException(status_code=400, detail="Apenas imagens JPEG ou PNG são permitidas.")
     content = await foto.read()
-    if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="Imagem muito grande (limite: 5 MB).")
     if not content:
         raise HTTPException(status_code=400, detail="Arquivo de imagem vazio.")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Imagem muito grande (limite: 5 MB).")
+
+    real_mime = _detect_image_mime(content[:16])
+    if real_mime is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Conteúdo do arquivo não corresponde a uma imagem JPEG ou PNG válida.",
+        )
+    declared = "image/jpeg" if foto.content_type == "image/jpg" else foto.content_type
+    if real_mime != declared:
+        logger.warning(
+            "Upload rejeitado: content-type declarado=%s diverge do conteúdo real=%s",
+            foto.content_type, real_mime,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Tipo de arquivo declarado não corresponde ao conteúdo real.",
+        )
     return content
 
 
