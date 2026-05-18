@@ -1,7 +1,7 @@
 import datetime
+import io
 import logging
 import zoneinfo
-import os
 import uuid
 from typing import Optional
 
@@ -188,7 +188,6 @@ async def cadastrar_aluno_api(
 
     ext = ".jpg" if foto.content_type in {"image/jpeg", "image/jpg"} else ".png"
     safe_basename = f"{uuid.uuid4().hex}{ext}"
-    temp_file = f"temp_{safe_basename}"
 
     try:
         if user_id:
@@ -209,15 +208,13 @@ async def cadastrar_aluno_api(
         external_id = formatar_nome_para_external_id(nome)
         filename = f"alunos/{external_id}_{safe_basename}"
 
-        with open(temp_file, "wb") as buffer:
-            buffer.write(image_bytes)
-
-        s3_client.upload_file(temp_file, BUCKET_NAME, filename)
+        # Upload direto da memória — sem arquivo temporário em disco (evita race,
+        # escrita em CWD não-gravável e leak por crash entre write e remove).
+        s3_client.upload_fileobj(io.BytesIO(image_bytes), BUCKET_NAME, filename)
 
         resultado_rekognition = indexar_rosto_da_imagem_s3(filename, external_id, detection_attributes="ALL")
 
         if not resultado_rekognition or not resultado_rekognition.get("FaceRecords"):
-            os.remove(temp_file)
             raise HTTPException(status_code=400, detail="Nenhum rosto detectado na imagem.")
 
         face_id = resultado_rekognition["FaceRecords"][0]["Face"]["FaceId"]
@@ -229,16 +226,11 @@ async def cadastrar_aluno_api(
         aluno_id = aluno['aluno_id']
         upsert_rosto(aluno_id, external_id, face_id, filename, angulo)
 
-        os.remove(temp_file)
         return {"status": "sucesso", "face_id": face_id, "external_id": external_id, "angulo": angulo}
 
     except HTTPException:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
         raise
     except Exception as e:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
         raise internal_error(e, "cadastrar_aluno_api")
 
 
