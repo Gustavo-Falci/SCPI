@@ -31,6 +31,18 @@ load_dotenv(find_dotenv())
 logger = logging.getLogger(__name__)
 
 
+def _env_int(name: str, default: int) -> int:
+    """Lê variável de ambiente inteira tolerando string vazia ou ausente."""
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("%s='%s' não é inteiro — usando default %s", name, raw, default)
+        return default
+
+
 def _build_database_url() -> str:
     """Monta a URL do PostgreSQL a partir de variáveis de ambiente.
 
@@ -71,8 +83,14 @@ def _ensure_pool():
         if _pool is not None:
             return _pool
 
-        minconn = int(os.getenv("DB_POOL_MIN", "1"))
-        maxconn = int(os.getenv("DB_POOL_MAX", "10"))
+        minconn = _env_int("DB_POOL_MIN", 1)
+        maxconn = _env_int("DB_POOL_MAX", 10)
+        if minconn < 1 or maxconn < minconn:
+            logger.warning(
+                "DB_POOL_MIN/MAX inválidos (min=%s, max=%s). Aplicando defaults seguros.",
+                minconn, maxconn,
+            )
+            minconn, maxconn = 1, 10
 
         try:
             _pool = _pgpool.ThreadedConnectionPool(

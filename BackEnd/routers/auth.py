@@ -53,7 +53,13 @@ from schemas.auth import (
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("scpi.audit")
 
-_resend.api_key = os.getenv("RESEND_API_KEY", "")
+_RESEND_API_KEY = (os.getenv("RESEND_API_KEY") or "").strip()
+if not _RESEND_API_KEY:
+    logger.warning(
+        "RESEND_API_KEY ausente — envio de e-mails (recuperação de senha, senhas "
+        "temporárias) ficará indisponível. Configure a variável em BackEnd/.env."
+    )
+_resend.api_key = _RESEND_API_KEY
 _RESEND_FROM = os.getenv("RESEND_FROM_EMAIL", "SCPI <onboarding@resend.dev>")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
