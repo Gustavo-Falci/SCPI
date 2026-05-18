@@ -60,10 +60,10 @@ def get_alunos_turma(turma_id: str, current_user: dict = Depends(get_current_use
         role = current_user.get("role")
         if role == "Professor":
             if not professor_responsavel_por_usuario(turma_id, current_user.get("sub")):
-                raise HTTPException(status_code=403, detail="Professor não é responsável por esta turma.")
+                raise HTTPException(status_code=404, detail="Turma não encontrada.")
         elif role == "Aluno":
             if not aluno_matriculado_por_usuario(turma_id, current_user.get("sub")):
-                raise HTTPException(status_code=403, detail="Aluno não matriculado nesta turma.")
+                raise HTTPException(status_code=404, detail="Turma não encontrada.")
         elif role != "Admin":
             raise HTTPException(status_code=403, detail="Acesso negado.")
 

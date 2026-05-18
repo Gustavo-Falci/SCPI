@@ -40,7 +40,7 @@ def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role
 
     try:
         if not professor_responsavel_pela_turma(dados.turma_id, professor_id):
-            raise HTTPException(status_code=403, detail="Você não é o professor responsável por esta turma.")
+            raise HTTPException(status_code=404, detail="Turma não encontrada.")
 
         if not existe_aula_no_horario_atual_para_turma(dados.turma_id):
             raise HTTPException(

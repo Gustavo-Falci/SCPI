@@ -36,6 +36,11 @@ def require_service_token(x_service_token: str = Header(...)):
 
 
 def require_self_or_admin(usuario_id: str, current_user: dict) -> None:
-    """Garante que o usuário autenticado é o dono do recurso ou um Admin."""
+    """Garante que o usuário autenticado é o dono do recurso ou um Admin.
+
+    Retorna 404 (em vez de 403) quando o solicitante não é dono nem Admin —
+    isso evita enumeração de IDs: o atacante não distingue "recurso existe
+    mas é de outro" de "recurso não existe".
+    """
     if current_user.get("sub") != usuario_id and current_user.get("role") != "Admin":
-        raise HTTPException(status_code=403, detail="Acesso negado a este recurso.")
+        raise HTTPException(status_code=404, detail="Recurso não encontrado.")

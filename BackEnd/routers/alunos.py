@@ -126,7 +126,7 @@ def get_historico_chamadas_aluno(
         aluno_id = aluno["aluno_id"]
 
         if not aluno_pertence_turma(turma_id, aluno_id):
-            raise HTTPException(status_code=403, detail="Você não está matriculado nesta turma.")
+            raise HTTPException(status_code=404, detail="Turma não encontrada.")
 
         turma = obter_turma_basica(turma_id)
         rows = listar_historico_chamadas_aluno(aluno_id, turma_id)
