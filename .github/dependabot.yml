@@ -1,0 +1,47 @@
+version: 2
+
+updates:
+  # Backend Python
+  - package-ecosystem: "pip"
+    directory: "/BackEnd"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"
+    groups:
+      python-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # App mobile Expo / React Native
+  - package-ecosystem: "npm"
+    directory: "/tcc-app"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "mobile"
+    groups:
+      js-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions (versões dos próprios workflows)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    labels:
+      - "ci"

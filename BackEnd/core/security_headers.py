@@ -46,6 +46,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         path = request.url.path
 
+        # Remove fingerprint do servidor — atacante não precisa saber a stack.
+        response.headers.pop("Server", None)
+        response.headers.pop("X-Powered-By", None)
+
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")

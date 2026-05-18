@@ -13,7 +13,8 @@ venv/
 .devcontainer
 node_modules/
 admin-portal/dist/
-docs/
+docs/*
+!docs/SECURITY_RUNBOOK.md
 DESIGN.md
 logo-concept.svg
 MEMORIA_OBSIDIAN.md
