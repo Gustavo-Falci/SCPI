@@ -47,8 +47,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # Remove fingerprint do servidor — atacante não precisa saber a stack.
-        response.headers.pop("Server", None)
-        response.headers.pop("X-Powered-By", None)
+        # MutableHeaders do Starlette não suporta .pop(); usa del condicional.
+        if "server" in response.headers:
+            del response.headers["server"]
+        if "x-powered-by" in response.headers:
+            del response.headers["x-powered-by"]
 
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
