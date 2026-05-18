@@ -1,6 +1,7 @@
 import csv
 import io
 import logging
+import re
 import uuid
 from typing import List, Optional
 
@@ -251,6 +252,27 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos):
         raise internal_error(e)
 
 
+_MAX_CSV_BYTES = 2 * 1024 * 1024  # 2 MB — limite para evitar DoS por upload grande
+_CSV_INJECTION_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+_EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_RA_REGEX = re.compile(r"^[A-Za-z0-9]{4,20}$")
+
+
+def _validar_celula_csv(valor: str, campo: str) -> str:
+    """Valida tamanho e bloqueia prefixos de CSV injection (=, +, -, @, TAB, CR)."""
+    if valor is None:
+        return ""
+    valor = valor.strip().lstrip("﻿")  # remove BOM se primeiro campo
+    if len(valor) > 200:
+        raise ValueError(f"Campo '{campo}' excede 200 caracteres.")
+    if valor and valor[0] in _CSV_INJECTION_PREFIXES:
+        raise ValueError(
+            f"Campo '{campo}' começa com caractere proibido ({valor[0]!r}). "
+            "Possível CSV injection."
+        )
+    return valor
+
+
 @router.post("/turmas/{turma_id}/importar-alunos")
 async def admin_importar_alunos_csv(
     turma_id: str,
@@ -258,26 +280,46 @@ async def admin_importar_alunos_csv(
     file: UploadFile = File(...),
     current_user: dict = Depends(require_role("Admin")),
 ):
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Apenas arquivos .csv são aceitos.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    if len(content) > _MAX_CSV_BYTES:
+        raise HTTPException(status_code=413, detail="CSV muito grande (limite: 2 MB).")
+
     try:
-        content = await file.read()
-        decoded = content.decode('utf-8')
+        decoded = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="CSV deve estar em UTF-8.")
+
+    try:
         csv_reader = csv.DictReader(io.StringIO(decoded))
 
         importados = 0
         emails_enviados = 0
         erros = []
 
-        for row in csv_reader:
+        for linha_num, row in enumerate(csv_reader, start=2):  # 1 = header
             try:
-                nome = row.get('nome')
-                email = row.get('email')
-                ra = row.get('ra')
-                turno = row.get('turno')
+                nome = _validar_celula_csv(row.get("nome", ""), "nome")
+                email = _validar_celula_csv(row.get("email", ""), "email")
+                ra = _validar_celula_csv(row.get("ra", ""), "ra")
+                turno = _validar_celula_csv(row.get("turno", ""), "turno")
 
                 if not nome or not email or not ra:
                     continue
 
-                if turno not in ('Matutino', 'Noturno'):
+                if len(nome) < 3:
+                    raise ValueError("Nome deve ter ao menos 3 caracteres.")
+                if not _EMAIL_REGEX.match(email):
+                    raise ValueError("E-mail em formato inválido.")
+                if not _RA_REGEX.match(ra):
+                    raise ValueError("RA deve ter de 4 a 20 caracteres alfanuméricos.")
+
+                if turno not in ("Matutino", "Noturno"):
                     turno = None
 
                 senha_temporaria = gerar_senha_temporaria()
@@ -287,25 +329,30 @@ async def admin_importar_alunos_csv(
 
                 if novo_usuario:
                     background_tasks.add_task(
-                        send_email_senha_temporaria, email.strip(), nome, senha_temporaria, "Aluno"
+                        send_email_senha_temporaria, email, nome, senha_temporaria, "Aluno"
                     )
                     emails_enviados += 1
 
                 importados += 1
+            except ValueError as ve:
+                erros.append(f"Linha {linha_num}: {ve}")
             except Exception as e:
-                erros.append(f"Erro na linha {row}: {str(e)}")
+                erros.append(f"Linha {linha_num}: erro inesperado ({type(e).__name__}).")
+                logger.warning("Erro na importação CSV linha %s: %s", linha_num, e)
 
         audit_logger.info(
-            "Importação CSV admin=%s turma=%s importados=%s emails=%s",
-            current_user.get("sub"), turma_id, importados, emails_enviados,
+            "Importação CSV admin=%s turma=%s importados=%s emails=%s erros=%s",
+            current_user.get("sub"), turma_id, importados, emails_enviados, len(erros),
         )
         return {
             "mensagem": f"Importação concluída: {importados} alunos matriculados.",
             "emails_enviados": emails_enviados,
             "erros": erros,
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise internal_error(e)
+        raise internal_error(e, "admin_importar_alunos_csv")
 
 
 @router.post("/usuarios/professor")
