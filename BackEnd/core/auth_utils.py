@@ -101,10 +101,15 @@ def senha_comprometida(senha: str) -> bool:
 
 
 def decode_access_token(token: str):
-    """Decodifica e valida o token JWT de acesso."""
+    """Decodifica e valida o token JWT de acesso.
+
+    Exige explicitamente o claim `type == "access"`. Isso impede que tokens
+    de outras finalidades (ex.: `password_reset`) — assinados com o mesmo
+    SECRET_KEY — sejam aceitos em endpoints protegidos por autenticação.
+    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("type") and payload.get("type") != "access":
+        if payload.get("type") != "access":
             return None
         return payload
     except JWTError:
