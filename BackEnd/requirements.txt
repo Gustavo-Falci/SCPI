@@ -24,7 +24,7 @@ email-validator==2.3.0
 python-jose==3.5.0
 passlib==1.7.4
 bcrypt==5.0.0
-cryptography==46.0.7
+cryptography==48.0.0
 
 # AWS
 boto3==1.43.10
