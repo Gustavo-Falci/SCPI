@@ -24,11 +24,19 @@ from core.auth_utils import ACCESS_COOKIE_NAME
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _EXPECTED_HEADER_VALUE = "XMLHttpRequest"
+# Endpoints isentos de CSRF: login não tem vetor útil (atacante precisa
+# da senha para o request ter efeito) e refresh é protegido pelo SameSite=Strict
+# do cookie scpi_refresh + posse do token opaco no body. Sem isenção, clientes
+# mobile que reaproveitam o cookie scpi_access do jar nativo ficam travados.
+_CSRF_EXEMPT_PATHS = {"/auth/login", "/auth/refresh"}
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.method in _SAFE_METHODS:
+            return await call_next(request)
+
+        if request.url.path in _CSRF_EXEMPT_PATHS:
             return await call_next(request)
 
         if request.headers.get("authorization"):

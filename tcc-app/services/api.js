@@ -112,6 +112,7 @@ async function tryRefreshToken() {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ refresh_token: refresh }),
+        credentials: "omit",
       });
       if (!response.ok) return null;
       const data = await response.json();
@@ -135,7 +136,7 @@ async function tryRefreshToken() {
 
 async function authFetch(endpoint, init, contentType) {
   const headers = await getAuthHeaders(contentType);
-  const merged = { ...init, headers: { ...headers, ...(init.headers || {}) } };
+  const merged = { ...init, credentials: "omit", headers: { ...headers, ...(init.headers || {}) } };
   let response = await fetch(`${API_URL}${endpoint}`, merged);
 
   if (response.status === 401) {
@@ -192,6 +193,7 @@ export async function apiPostFormData(endpoint, formData) {
     method: "POST",
     headers,
     body: formData,
+    credentials: "omit",
   });
 
   if (response.status === 401) {
@@ -202,6 +204,7 @@ export async function apiPostFormData(endpoint, formData) {
         method: "POST",
         headers,
         body: formData,
+        credentials: "omit",
       });
     } else {
       await clearSession();
@@ -225,6 +228,7 @@ export async function loginRequest(email, senha) {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: formData.toString(),
+    credentials: "omit",
   });
 
   const data = await safeJson(response);
