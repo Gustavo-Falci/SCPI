@@ -260,7 +260,7 @@ async function createTurma(e, container) {
     await api.post('/admin/turmas', {
       nome_disciplina: form.querySelector('[name=nome_disciplina]').value.trim(),
       codigo_turma: form.querySelector('[name=codigo_turma]').value.trim(),
-      semestre: +form.querySelector('[name=semestre]').value,
+      semestre: form.querySelector('[name=semestre]').value,
       turno: form.querySelector('[name=turno]').value,
       sala_padrao: form.querySelector('[name=sala_padrao]').value.trim() || null,
       periodo_letivo: form.querySelector('[name=periodo_letivo]').value,
@@ -357,7 +357,7 @@ export async function mount(container) {
         await api.post('/admin/turmas', {
           nome_disciplina: e.target.querySelector('[name=nome_disciplina]').value.trim(),
           codigo_turma: e.target.querySelector('[name=codigo_turma]').value.trim(),
-          semestre: +e.target.querySelector('[name=semestre]').value,
+          semestre: e.target.querySelector('[name=semestre]').value,
           turno: e.target.querySelector('[name=turno]').value,
           sala_padrao: e.target.querySelector('[name=sala_padrao]').value.trim() || null,
           periodo_letivo: e.target.querySelector('[name=periodo_letivo]').value,
