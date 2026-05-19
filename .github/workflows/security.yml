@@ -11,16 +11,44 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  # -------------------------------------------------------------------------
+  # Detecta quais áreas mudaram para evitar rodar checks irrelevantes em PR
+  # (PR que só toca BackEnd não dispara npm-audit; PR de tcc-app não dispara
+  # bandit/pip-audit). Push em main e schedule semanal continuam rodando tudo.
+  # -------------------------------------------------------------------------
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'BackEnd/**'
+              - '.github/workflows/security.yml'
+            mobile:
+              - 'tcc-app/**'
+              - '.github/workflows/security.yml'
+
   # -------------------------------------------------------------------------
   # SAST Python — varre AST do BackEnd em busca de padrões inseguros
   # -------------------------------------------------------------------------
   bandit:
     name: Bandit (SAST Python)
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v6
         with:
@@ -43,9 +71,11 @@ jobs:
   # -------------------------------------------------------------------------
   pip-audit:
     name: pip-audit (SCA Python)
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v6
         with:
@@ -71,12 +101,13 @@ jobs:
 
   # -------------------------------------------------------------------------
   # Detecção de segredos no código + histórico do git
+  # Roda sempre — segredos importam em qualquer área do repo.
   # -------------------------------------------------------------------------
   gitleaks:
     name: Gitleaks (Secrets Scan)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0  # histórico completo para escanear commits antigos
 
@@ -90,9 +121,11 @@ jobs:
   # -------------------------------------------------------------------------
   npm-audit-mobile:
     name: npm audit (tcc-app)
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v6
         with:
