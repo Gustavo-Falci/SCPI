@@ -137,7 +137,8 @@ def senha_comprometida(senha: str) -> bool:
     if not senha:
         return False
     try:
-        sha1_hash = hashlib.sha1(senha.encode("utf-8")).hexdigest().upper()
+        # SHA-1 exigido pelo protocolo HIBP (k-anonymity), não é uso criptográfico.
+        sha1_hash = hashlib.sha1(senha.encode("utf-8"), usedforsecurity=False).hexdigest().upper()
         prefix, suffix = sha1_hash[:5], sha1_hash[5:]
         response = requests.get(
             _HIBP_API_URL.format(prefix=prefix),
