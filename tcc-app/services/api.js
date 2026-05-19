@@ -12,6 +12,28 @@ import { friendlyErrorMessage, HTTP_STATUS_MESSAGES } from "./errorMessages";
  * Backend antigo: "string"
  * Pydantic: [{ loc, msg, type }, ...]
  */
+// Campos de senha tratados com mensagens dedicadas em vez do `loc: msg` cru
+// do Pydantic. Quando o backend ajustar min_length/max_length, o ctx que vem
+// na resposta é a fonte de verdade — não duplicar o número aqui.
+const PASSWORD_FIELDS = new Set(["nova_senha", "senha", "senha_atual"]);
+
+function translatePydanticItem(item) {
+  const loc = Array.isArray(item.loc) ? item.loc.filter((p) => p !== "body").join(".") : "";
+  const type = item.type || "";
+  const ctx = item.ctx || {};
+
+  if (PASSWORD_FIELDS.has(loc)) {
+    if (type === "string_too_short") return `A senha deve ter no mínimo ${ctx.min_length} caracteres.`;
+    if (type === "string_too_long") return `A senha pode ter no máximo ${ctx.max_length} caracteres.`;
+  }
+
+  if (type === "missing") return loc ? `Campo obrigatório: ${loc}.` : "Campo obrigatório não preenchido.";
+  if (loc === "email" && (type.includes("email") || /email/i.test(item.msg || ""))) return "E-mail inválido.";
+
+  const msg = item.msg || item.message || "inválido";
+  return loc ? `${loc}: ${msg}` : msg;
+}
+
 function extractDetailAndCode(data, status) {
   let message = HTTP_STATUS_MESSAGES[status] || `Erro HTTP ${status}`;
   let errorCode = null;
@@ -26,13 +48,7 @@ function extractDetailAndCode(data, status) {
     errorCode = detail.error_code || null;
   } else if (Array.isArray(detail)) {
     // Pydantic v2
-    message = detail
-      .map((item) => {
-        const loc = Array.isArray(item.loc) ? item.loc.filter((p) => p !== "body").join(".") : "";
-        const msg = item.msg || item.message || "inválido";
-        return loc ? `${loc}: ${msg}` : msg;
-      })
-      .join(" | ");
+    message = detail.map(translatePydanticItem).join(" | ");
   } else if (typeof detail === "string" && detail.trim()) {
     message = detail;
   } else if (typeof data.message === "string") {

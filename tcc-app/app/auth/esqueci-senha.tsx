@@ -38,7 +38,7 @@ export default function EsqueciSenha() {
   const [confirmarSenhaError, setConfirmarSenhaError] = useState("");
 
   const passwordRules = {
-    minLength: novaSenha.length >= 8,
+    minLength: novaSenha.length >= 12,
     hasNumber: /\d/.test(novaSenha),
     hasUppercase: /[A-Z]/.test(novaSenha),
     hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(novaSenha),
@@ -179,7 +179,7 @@ export default function EsqueciSenha() {
                   <View style={styles.passwordReqs}>
                     {(
                       [
-                        { key: "minLength" as const, label: "Mínimo 8 caracteres" },
+                        { key: "minLength" as const, label: "Mínimo 12 caracteres" },
                         { key: "hasNumber" as const, label: "Pelo menos 1 número" },
                         { key: "hasUppercase" as const, label: "Pelo menos 1 maiúscula" },
                         { key: "hasSpecial" as const, label: "Pelo menos 1 especial" },
