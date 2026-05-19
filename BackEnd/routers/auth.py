@@ -5,18 +5,21 @@ import secrets
 from datetime import datetime, timedelta
 
 import resend as _resend
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import JWTError, jwt as _jwt
 
 from core.auth_utils import (
     ALGORITHM,
+    REFRESH_COOKIE_NAME,
     SECRET_KEY,
+    clear_auth_cookies,
     create_access_token,
     create_refresh_token,
     get_password_hash,
     hash_refresh_token,
     senha_comprometida,
+    set_auth_cookies,
     verify_password,
 )
 from core.helpers import internal_error, mask_email
@@ -85,7 +88,11 @@ async def register_aluno_com_face(request: Request):
 
 @router.post("/login", response_model=Token)
 @limiter.limit("10/minute")
-def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+def login(
+    request: Request,
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+):
     email_limpo = form_data.username.strip()
 
     user = buscar_usuario_login_por_email(email_limpo)
@@ -118,6 +125,8 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     if user['tipo_usuario'] == 'Aluno':
         ra, face_cadastrada = obter_aluno_e_face_status(user['usuario_id'])
 
+    set_auth_cookies(response, access_token, refresh_plain)
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_plain,
@@ -134,9 +143,25 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
 
 @router.post("/refresh")
 @limiter.limit("30/minute")
-def refresh_access_token(request: Request, body: RefreshRequest):
-    """Troca um refresh token válido por um novo access token (rotação)."""
-    token_hash = hash_refresh_token(body.refresh_token)
+def refresh_access_token(
+    request: Request,
+    response: Response,
+    body: RefreshRequest,
+    scpi_refresh: str | None = Cookie(default=None, alias=REFRESH_COOKIE_NAME),
+):
+    """Troca um refresh token válido por um novo access token (rotação).
+
+    Aceita o refresh por dois canais:
+    - Body `refresh_token` (mobile/legado).
+    - Cookie `scpi_refresh` (portal). Quando vier por cookie, novos cookies
+      são emitidos no response e o cliente não precisa armazenar o token.
+    """
+    refresh_plain = body.refresh_token or scpi_refresh
+    if not refresh_plain:
+        raise HTTPException(status_code=401, detail="Refresh token ausente.")
+    came_from_cookie = body.refresh_token is None and scpi_refresh is not None
+
+    token_hash = hash_refresh_token(refresh_plain)
     new_plain, new_hash, new_exp = create_refresh_token()
     try:
         result = rotacionar_refresh_token(token_hash, new_hash, new_exp)
@@ -150,6 +175,9 @@ def refresh_access_token(request: Request, body: RefreshRequest):
             data={"sub": row["usuario_id"], "email": row["email"], "role": row["tipo_usuario"]}
         )
 
+        if came_from_cookie:
+            set_auth_cookies(response, access_token, new_plain)
+
         return {
             "access_token": access_token,
             "refresh_token": new_plain,
@@ -162,11 +190,23 @@ def refresh_access_token(request: Request, body: RefreshRequest):
 
 
 @router.post("/logout")
-def logout(body: RefreshRequest, current_user: dict = Depends(get_current_user)):
-    """Revoga o refresh token informado. Access token continua válido até expirar."""
-    token_hash = hash_refresh_token(body.refresh_token)
+def logout(
+    response: Response,
+    body: RefreshRequest,
+    current_user: dict = Depends(get_current_user),
+    scpi_refresh: str | None = Cookie(default=None, alias=REFRESH_COOKIE_NAME),
+):
+    """Revoga o refresh token informado e limpa cookies de auth (se houver).
+
+    Access token continua válido até expirar; o portal não consegue mais
+    apresentá-lo após o clear_auth_cookies remover scpi_access do browser.
+    """
+    refresh_plain = body.refresh_token or scpi_refresh
     try:
-        revogar_refresh_token(token_hash, current_user.get("sub"))
+        if refresh_plain:
+            token_hash = hash_refresh_token(refresh_plain)
+            revogar_refresh_token(token_hash, current_user.get("sub"))
+        clear_auth_cookies(response)
         audit_logger.info("Logout usuario=%s", current_user.get("sub"))
         return {"mensagem": "Sessão encerrada."}
     except Exception as e:

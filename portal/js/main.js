@@ -238,7 +238,8 @@ function init() {
   });
   document.getElementById('logout-btn').innerHTML = `${icon('log-out', 18)}<span>Sair</span>`;
   document.getElementById('logout-btn').addEventListener('click', () => {
-    api.post('/auth/logout', { refresh_token: localStorage.getItem('admin_refresh_token') }).catch(() => {});
+    // Cookie scpi_refresh viaja sozinho; body vazio sinaliza fluxo portal.
+    api.post('/auth/logout', {}).catch(() => {});
     showLogin();
   });
   document.getElementById('fab')?.addEventListener('click', () => runCreate());

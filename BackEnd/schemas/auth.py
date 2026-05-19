@@ -25,7 +25,8 @@ class Token(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str = Field(..., min_length=16, max_length=256)
+    # Opcional: portal envia o refresh via cookie HttpOnly; mobile envia no body.
+    refresh_token: Optional[str] = Field(default=None, min_length=16, max_length=256)
 
 
 class AlterarSenhaBody(BaseModel):

@@ -1,5 +1,5 @@
 import { API_URL } from './config.js';
-import { getToken, getRefreshToken, updateTokens, clearSession } from './auth.js';
+import { clearSession } from './auth.js';
 
 const HTTP_MSGS = {
   400: 'Requisição inválida. Confira os dados informados.',
@@ -34,48 +34,48 @@ export const setOnExpired = fn => { _onExpired = fn; };
 
 let refreshPromise = null;
 
-async function refreshTokens() {
+// Tenta renovar a sessão via cookie scpi_refresh. O backend emite novos
+// cookies HttpOnly no Set-Cookie; o portal só precisa saber se deu certo.
+async function refreshSession() {
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
-    const refresh = getRefreshToken();
-    if (!refresh) return null;
     try {
       const res = await fetch(`${API_URL}/auth/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refresh }),
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: '{}',
       });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data.access_token && data.refresh_token) {
-        updateTokens(data.access_token, data.refresh_token);
-        return data.access_token;
-      }
-      return null;
-    } catch { return null; }
+      return res.ok;
+    } catch { return false; }
   })();
   try { return await refreshPromise; } finally { refreshPromise = null; }
 }
 
 async function request(path, opts = {}, retry = true) {
-  const token = getToken();
   const isFormData = opts.body instanceof FormData;
+  // X-Requested-With: contramedida CSRF exigida pelo backend em mutações
+  // autenticadas via cookie. credentials: 'include' envia os cookies em
+  // requests cross-origin (api.scpi.me ↔ admin.scpi.me).
   const headers = {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    'X-Requested-With': 'XMLHttpRequest',
     ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(opts.headers || {}),
   };
 
   let res;
   try {
-    res = await fetch(`${API_URL}${path}`, { ...opts, headers });
+    res = await fetch(`${API_URL}${path}`, { ...opts, credentials: 'include', headers });
   } catch {
     throw { detail: 'Sem conexão com o servidor.' };
   }
 
   if (res.status === 401 && retry) {
-    const newToken = await refreshTokens();
-    if (!newToken) { clearSession(); _onExpired?.(); throw { detail: HTTP_MSGS[401] }; }
+    const ok = await refreshSession();
+    if (!ok) { clearSession(); _onExpired?.(); throw { detail: HTTP_MSGS[401] }; }
     return request(path, opts, false);
   }
 

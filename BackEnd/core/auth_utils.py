@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from starlette.responses import Response
 import logging
 import os
 import secrets
@@ -28,6 +29,62 @@ if not SECRET_KEY or len(SECRET_KEY) < 32:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+ACCESS_COOKIE_NAME = "scpi_access"
+REFRESH_COOKIE_NAME = "scpi_refresh"
+REFRESH_COOKIE_PATH = "/auth"
+
+_COOKIE_DOMAIN = (os.getenv("AUTH_COOKIE_DOMAIN") or "").strip() or None
+_COOKIE_SECURE = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
+
+
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    """Seta cookies HttpOnly de autenticação no response.
+
+    scpi_access: SameSite=Lax (permite navegação top-level com cookie),
+    scpi_refresh: SameSite=Strict + Path=/auth (só viaja para endpoints de auth).
+    Em produção, `Secure` é exigido. Domínio configurável via AUTH_COOKIE_DOMAIN.
+    """
+    response.set_cookie(
+        key=ACCESS_COOKIE_NAME,
+        value=access_token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=_COOKIE_SECURE,
+        samesite="lax",
+        domain=_COOKIE_DOMAIN,
+        path="/",
+    )
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        httponly=True,
+        secure=_COOKIE_SECURE,
+        samesite="strict",
+        domain=_COOKIE_DOMAIN,
+        path=REFRESH_COOKIE_PATH,
+    )
+
+
+def clear_auth_cookies(response: Response) -> None:
+    """Remove cookies de autenticação. Atributos devem casar com os do set_cookie."""
+    response.delete_cookie(
+        key=ACCESS_COOKIE_NAME,
+        path="/",
+        domain=_COOKIE_DOMAIN,
+        samesite="lax",
+        secure=_COOKIE_SECURE,
+        httponly=True,
+    )
+    response.delete_cookie(
+        key=REFRESH_COOKIE_NAME,
+        path=REFRESH_COOKIE_PATH,
+        domain=_COOKIE_DOMAIN,
+        samesite="strict",
+        secure=_COOKIE_SECURE,
+        httponly=True,
+    )
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 

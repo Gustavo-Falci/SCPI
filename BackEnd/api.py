@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from core.csrf import CSRFMiddleware
 from core.errors import rate_limit_handler
 from core.limiter import limiter
 from core.security_headers import SecurityHeadersMiddleware
@@ -97,12 +98,17 @@ else:
         "http://localhost:3000",
     ]
 
+# Ordem importa: middleware adicionado por último é o mais externo (executa antes
+# no request). Queremos CORS por fora do CSRF para que o preflight OPTIONS seja
+# respondido pelo CORS sem passar pelo CSRF. Já o CSRF fica antes da aplicação
+# para bloquear mutações sem X-Requested-With quando auth vier por cookie.
+app.add_middleware(CSRFMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["127.0.0.1"])

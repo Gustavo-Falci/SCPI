@@ -1,21 +1,50 @@
 import os
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
-from core.auth_utils import decode_access_token
+from core.auth_utils import ACCESS_COOKIE_NAME, decode_access_token
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+# auto_error=False: deixa get_current_user decidir entre Bearer e cookie em vez
+# de falhar imediatamente quando o header Authorization não vem.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    payload = decode_access_token(token)
+def get_current_user(
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
+    scpi_access: str | None = Cookie(default=None, alias=ACCESS_COOKIE_NAME),
+):
+    """Autenticação dual: Bearer (header) tem prioridade; cookie scpi_access é fallback.
+
+    Marca request.state.auth_source = "bearer" | "cookie" para que o middleware
+    CSRF decida se exige X-Requested-With em mutações.
+    """
+    auth_source = None
+    raw_token = None
+    if token:
+        raw_token = token
+        auth_source = "bearer"
+    elif scpi_access:
+        raw_token = scpi_access
+        auth_source = "cookie"
+
+    if not raw_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido ou expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = decode_access_token(raw_token)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido ou expirado",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    request.state.auth_source = auth_source
     return payload
 
 
