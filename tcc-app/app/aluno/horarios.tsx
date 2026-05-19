@@ -129,17 +129,26 @@ export default function Horarios() {
               {aulas.map((aula, index) => {
                 const aoVivo = isAulaAoVivo(aula.horario);
                 const [inicio, fim] = aula.horario.split(' - ');
+                const prevAula = aulas[index - 1];
                 const nextAula = aulas[index + 1];
                 const hasGap = nextAula != null && fim !== nextAula.horario.split(' - ')[0];
+                const isLast = index === aulas.length - 1;
+                // Se a aula anterior termina exatamente quando essa começa, não mostramos o "inicio" de novo
+                const prevConnects = prevAula != null && prevAula.horario.split(' - ')[1] === inicio;
+                // Se a próxima aula começa exatamente quando essa termina, o "fim" será renderizado como ponte entre os cards
+                const nextConnects = nextAula != null && fim === nextAula.horario.split(' - ')[0];
 
                 return (
                   <React.Fragment key={aula.id}>
                     <View style={styles.timelineItem}>
                       <View style={styles.timeColumn}>
-                        <Text style={[styles.timeText, aoVivo && styles.timeTextLive]}>{inicio}</Text>
+                        {/* Só mostra o horário início se a aula anterior NÃO terminou nesse mesmo horário */}
+                        {!prevConnects && (
+                          <Text style={[styles.timeText, aoVivo && styles.timeTextLive]}>{inicio}</Text>
+                        )}
                         <View style={[styles.timelineLine, aoVivo && styles.timelineLineLive]} />
-                        {/* Só mostra o horário fim aqui se NÃO houver gap (para evitar duplicação) */}
-                        {!hasGap && (
+                        {/* Só mostra o horário fim aqui se for a última aula (e não houver gap depois) */}
+                        {isLast && (
                           <Text style={[styles.timeText, aoVivo && styles.timeTextLive]}>{fim}</Text>
                         )}
                       </View>
@@ -163,6 +172,16 @@ export default function Horarios() {
                         </View>
                       </View>
                     </View>
+
+                    {/* Horário compartilhado entre aulas consecutivas (sem gap) — fica centralizado entre os dois cards */}
+                    {nextConnects && (
+                      <View style={styles.bridgeSection}>
+                        <View style={styles.timeColumn}>
+                          <Text style={styles.timeText}>{fim}</Text>
+                        </View>
+                        <View style={styles.bridgeLine} />
+                      </View>
+                    )}
 
                     {hasGap && (
                       <View style={styles.gapSection}>
@@ -210,7 +229,7 @@ const styles = StyleSheet.create({
   todayTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
   todayDate: { color: Colors.brand.textSecondary, fontSize: 14, marginTop: 4 },
   timeline: { paddingLeft: 4 },
-  timelineItem: { flexDirection: "row", alignItems: "stretch", marginBottom: 0 },
+  timelineItem: { flexDirection: "row", alignItems: "stretch", marginBottom: 4 },
   timeColumn: { alignItems: "center", width: 50, marginRight: 16 },
   timeText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   timelineLine: {
@@ -221,6 +240,13 @@ const styles = StyleSheet.create({
   },
   timelineLineLive: { backgroundColor: "rgba(74,222,128,0.4)" },
   gapSection: { flexDirection: "row", alignItems: "center" },
+  bridgeSection: { flexDirection: "row", alignItems: "center", marginVertical: 4 },
+  bridgeLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    marginLeft: 16,
+  },
   gapDottedLine: {
     width: 2, height: 28,
     borderLeftWidth: 2, borderStyle: "dashed",
