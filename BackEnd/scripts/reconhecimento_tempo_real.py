@@ -237,4 +237,7 @@ class SistemaReconhecimento:
 
 if __name__ == "__main__":
     app = SistemaReconhecimento()
-    app.iniciar()
+    try:
+        app.iniciar()
+    except KeyboardInterrupt:
+        logger.info("Interrompido pelo usuário (Ctrl+C). Encerrando…")
