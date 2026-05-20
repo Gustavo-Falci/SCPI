@@ -39,6 +39,7 @@ from repositories.turmas import (
     atribuir_professor_turma,
     criar_turma,
     excluir_turma_em_cascata,
+    listar_alunos_da_turma,
     listar_turmas_completas,
     matricular_alunos_em_turma,
     obter_turno_turma,
@@ -72,6 +73,23 @@ def admin_listar_professores():
 def admin_listar_turmas():
     try:
         return listar_turmas_completas()
+    except Exception as e:
+        raise internal_error(e)
+
+
+@router.get("/turmas/{turma_id}/alunos")
+def admin_listar_alunos_turma(turma_id: str):
+    try:
+        alunos = listar_alunos_da_turma(turma_id)
+        return [
+            {
+                "aluno_id": a["id"],
+                "nome": a["nome"],
+                "email": a["email"],
+                "ra": a["ra"],
+            }
+            for a in alunos
+        ]
     except Exception as e:
         raise internal_error(e)
 
