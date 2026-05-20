@@ -32,6 +32,53 @@ def inserir_horario(turma_id, dia_semana, horario_inicio, horario_fim, sala):
         return True
 
 
+def detectar_conflito_horario(turma_id, dia_semana, horario_inicio, horario_fim, sala):
+    """Retorna 1ª aula que conflita (mesma turma, mesma sala ou mesmo professor) ou None."""
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute(
+            """
+            SELECT h.horario_id,
+                   t.nome_disciplina,
+                   t.codigo_turma,
+                   h.sala,
+                   to_char(h.horario_inicio, 'HH24:MI') AS inicio,
+                   to_char(h.horario_fim, 'HH24:MI') AS fim,
+                   CASE
+                     WHEN h.turma_id = %s THEN 'turma'
+                     WHEN h.sala = %s THEN 'sala'
+                     ELSE 'professor'
+                   END AS motivo
+            FROM horarios_aulas h
+            JOIN Turmas t ON h.turma_id = t.turma_id
+            WHERE h.dia_semana = %s
+              AND h.horario_inicio < %s
+              AND h.horario_fim > %s
+              AND (
+                h.turma_id = %s
+                OR h.sala = %s
+                OR (
+                  t.professor_id IS NOT NULL
+                  AND t.professor_id = (SELECT professor_id FROM Turmas WHERE turma_id = %s)
+                )
+              )
+            LIMIT 1
+            """,
+            (
+                turma_id,
+                sala,
+                dia_semana,
+                horario_fim,
+                horario_inicio,
+                turma_id,
+                sala,
+                turma_id,
+            ),
+        )
+        return cur.fetchone()
+
+
 def excluir_horario(horario_id):
     with get_db_cursor(commit=True) as cur:
         if not cur:

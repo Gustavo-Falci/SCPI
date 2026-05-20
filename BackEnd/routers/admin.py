@@ -26,6 +26,7 @@ from repositories.alunos import (
 )
 from repositories.rostos import listar_rostos_ativos_por_aluno
 from repositories.horarios import (
+    detectar_conflito_horario,
     excluir_horario,
     inserir_horario,
     listar_horarios_completos,
@@ -131,8 +132,31 @@ def admin_atribuir_professor(turma_id: str, dados: AtribuirProfessor):
 @router.post("/horarios")
 def admin_adicionar_horario(h: HorarioCreate):
     try:
+        if h.horario_fim <= h.horario_inicio:
+            raise HTTPException(status_code=400, detail="Horário de fim deve ser maior que o de início.")
+        conflito = detectar_conflito_horario(
+            h.turma_id, h.dia_semana, h.horario_inicio, h.horario_fim, h.sala
+        )
+        if conflito:
+            dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+            dia_nome = dias[h.dia_semana] if 0 <= h.dia_semana < 7 else f"dia {h.dia_semana}"
+            motivo_msg = {
+                "turma": "esta turma já tem aula",
+                "sala": f"a sala {conflito['sala']} já está ocupada",
+                "professor": "o professor já tem aula",
+            }.get(conflito["motivo"], "já existe aula")
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Conflito de horário: {motivo_msg} na {dia_nome} "
+                    f"das {conflito['inicio']} às {conflito['fim']} "
+                    f"({conflito['nome_disciplina']} — {conflito['codigo_turma']})."
+                ),
+            )
         inserir_horario(h.turma_id, h.dia_semana, h.horario_inicio, h.horario_fim, h.sala)
         return {"mensagem": "Horário adicionado com sucesso!"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e)
 
