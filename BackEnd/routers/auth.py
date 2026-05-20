@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import resend as _resend
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
-from jose import JWTError, jwt as _jwt
+import jwt as _jwt
 
 from core.auth_utils import (
     ALGORITHM,
@@ -340,7 +340,7 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
 def redefinir_senha(body: RedefinirSenhaBody):
     try:
         payload = _jwt.decode(body.reset_token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError:
+    except _jwt.InvalidTokenError:
         raise HTTPException(status_code=400, detail="Token inválido ou expirado.")
 
     if payload.get("type") != "password_reset":

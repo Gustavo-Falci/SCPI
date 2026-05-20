@@ -85,7 +85,10 @@ jobs:
         run: pip install pip-audit==2.7.3
 
       - name: Audit BackEnd dependencies
-        run: pip-audit --requirement BackEnd/requirements.txt --strict
+        # PYSEC-2025-183 (PyJWT): disputado pelo mantenedor — exige enforcement de
+        # comprimento mínimo de chave pela aplicação. core/auth_utils.py valida
+        # SECRET_KEY >= 32 caracteres no boot, satisfazendo a mitigação. Sem fix upstream.
+        run: pip-audit --requirement BackEnd/requirements.txt --strict --ignore-vuln PYSEC-2025-183
 
       - name: Generate SBOM (CycloneDX)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

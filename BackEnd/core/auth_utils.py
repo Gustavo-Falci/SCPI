@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
 from passlib.context import CryptContext
 from starlette.responses import Response
 import logging
@@ -170,5 +170,5 @@ def decode_access_token(token: str):
         if payload.get("type") != "access":
             return None
         return payload
-    except JWTError:
+    except jwt.InvalidTokenError:
         return None
