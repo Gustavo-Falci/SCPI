@@ -15,7 +15,7 @@ from core.config import COLLECTION_ID, AWS_REGION, FACE_MATCH_THRESHOLD_SALA
 from infra.aws_clientes import rekognition_client
 
 load_dotenv(find_dotenv())
-_API_URL = os.getenv("EXPO_PUBLIC_API_URL", "http://localhost:8000")
+_API_URL = os.getenv("SCPI_API_URL", "https://api.scpi.me").rstrip("/")
 _SERVICE_TOKEN = os.getenv("CAMERA_SERVICE_TOKEN", "")
 _CAMERA_SALA = os.getenv("CAMERA_SALA", "")
 
