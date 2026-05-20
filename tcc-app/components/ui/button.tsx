@@ -6,7 +6,8 @@ import {
   ActivityIndicator,
   View,
   ViewStyle,
-  TextStyle
+  TextStyle,
+  StyleProp
 } from 'react-native';
 
 interface ButtonProps {
@@ -15,8 +16,8 @@ interface ButtonProps {
   loading?: boolean;
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'outline';
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }
 
 export const Button = ({ 

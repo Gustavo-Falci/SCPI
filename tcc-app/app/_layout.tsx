@@ -1,5 +1,5 @@
 import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { storage } from '../services/storage';
@@ -11,6 +11,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -19,7 +20,7 @@ export default function RootLayout() {
         const token = await storage.getItem('access_token');
         const role = await storage.getItem('user_role');
         const inAuthGroup = segments[0] === 'auth';
-        const isIndex = segments.length === 0 || segments[0] === '';
+        const isIndex = pathname === '/';
 
         if (!token) {
           // Se não tem token e não está na tela de auth, vai pro login

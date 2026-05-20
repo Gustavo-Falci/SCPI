@@ -41,3 +41,10 @@ app-example
 # generated native folders
 /ios
 /android
+
+# upgrade artifacts (local only)
+audit-before.json
+audit-after.json
+deps-before.txt
+deps-after.txt
+version-diff.md

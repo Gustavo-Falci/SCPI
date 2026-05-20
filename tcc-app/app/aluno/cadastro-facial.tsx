@@ -262,7 +262,7 @@ export default function CadastroFacial() {
                 <Text style={styles.consentBody}>
                   Autorizo o SCPI a coletar e processar minha imagem facial para{" "}
                   <Text style={styles.consentBodyStrong}>controle de presença nas aulas</Text>{" "}
-                  (LGPD Art. 11, II, 'a'). Dados armazenados em servidores AWS (us-east-1, EUA) sob o DPA da AWS — LGPD Art. 33, II. Posso revogar este consentimento a qualquer momento pelo meu perfil.{" "}
+                  (LGPD Art. 11, II, &apos;a&apos;). Dados armazenados em servidores AWS (us-east-1, EUA) sob o DPA da AWS — LGPD Art. 33, II. Posso revogar este consentimento a qualquer momento pelo meu perfil.{" "}
                   <Text
                     style={{ color: Colors.brand.primary, textDecorationLine: "underline" }}
                     onPress={() => WebBrowser.openBrowserAsync(process.env.EXPO_PUBLIC_PRIVACY_URL ?? "")}
