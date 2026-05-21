@@ -29,6 +29,7 @@
     "expo-notifications": "~55.0.23",
     "expo-router": "~55.0.15",
     "expo-secure-store": "~55.0.14",
+    "expo-sharing": "~55.0.20",
     "expo-splash-screen": "~55.0.21",
     "expo-status-bar": "~55.0.6",
     "expo-symbols": "~55.0.9",

@@ -118,3 +118,24 @@ def contar_rostos_ativos_por_aluno(aluno_id):
         )
         row = cur.fetchone()
         return row['total'] if row else 0
+
+
+def obter_path_foto_perfil_aluno(aluno_id):
+    """Retorna o s3_path_cadastro do primeiro ângulo ativo (foto de referência para export LGPD)."""
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute(
+            """
+            SELECT s3_path_cadastro
+            FROM Colecao_Rostos
+            WHERE aluno_id = %s
+              AND revogado_em IS NULL
+              AND s3_path_cadastro IS NOT NULL
+            ORDER BY angulo
+            LIMIT 1
+            """,
+            (aluno_id,),
+        )
+        row = cur.fetchone()
+        return row["s3_path_cadastro"] if row else None

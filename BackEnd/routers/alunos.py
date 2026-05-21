@@ -29,6 +29,7 @@ from repositories.rostos import (
     existe_qualquer_rosto_por_aluno,
     listar_rostos_ativos_por_aluno,
     obter_path_biometria_por_usuario,
+    obter_path_foto_perfil_aluno,
     obter_rosto_ativo_por_aluno,
     revogar_rosto_por_aluno,
     upsert_rosto,
@@ -308,15 +309,69 @@ def revogar_biometria(usuario_id: str, current_user: dict = Depends(get_current_
 
 
 @router.get("/aluno/meus-dados/{usuario_id}")
-def exportar_meus_dados(usuario_id: str, current_user: dict = Depends(get_current_user)):
-    """Retorna todos os dados pessoais do titular — LGPD Art. 18 §1."""
+def exportar_meus_dados(
+    usuario_id: str,
+    formato: str = "zip",
+    current_user: dict = Depends(get_current_user),
+):
+    """Retorna dados pessoais do titular — LGPD Art. 18 §1.
+
+    Query param ``formato``:
+      - ``zip`` (default): pacote com PDF + JSON + foto + manifesto de integridade.
+      - ``json``: retrocompatível, retorna apenas o JSON estruturado.
+    """
+    from fastapi.responses import Response
+
+    from core.config import SCPI_EXPORT_HMAC_KEY
+    from infra.export_integridade import calcular_integridade
+    from infra.export_pdf import gerar_pdf_dados
+    from infra.export_zip import montar_zip_export
+
     require_self_or_admin(usuario_id, current_user)
     try:
         dados = buscar_dados_titular(usuario_id)
         if not dados:
             raise HTTPException(status_code=404, detail="Dados não encontrados para este usuário.")
-        dados["gerado_em"] = datetime.datetime.now(tz=zoneinfo.ZoneInfo("America/Sao_Paulo")).isoformat()
-        return dados
+
+        agora = datetime.datetime.now(tz=zoneinfo.ZoneInfo("America/Sao_Paulo"))
+        dados["_schema_version"] = "1.0"
+        dados["_gerado_em"] = agora.isoformat()
+
+        if formato == "json":
+            return dados
+
+        pdf_bytes = gerar_pdf_dados(dados)
+        manifesto = calcular_integridade(dados, hmac_key=SCPI_EXPORT_HMAC_KEY)
+
+        foto_bytes = None
+        aluno = buscar_aluno_por_usuario_id(usuario_id)
+        if aluno:
+            s3_path = obter_path_foto_perfil_aluno(aluno["aluno_id"])
+            if s3_path:
+                try:
+                    obj = s3_client.get_object(Bucket=BUCKET_NAME, Key=s3_path)
+                    foto_bytes = obj["Body"].read()
+                except Exception as e:
+                    logger.warning(
+                        "Falha ao baixar foto S3 para export (path=%s): %s", s3_path, e
+                    )
+
+        zip_bytes = montar_zip_export(dados, pdf_bytes, manifesto, foto_bytes=foto_bytes)
+        logger.info(
+            "Export LGPD gerado para usuario=%s (zip=%d bytes, pdf=%d bytes, foto=%s)",
+            usuario_id, len(zip_bytes), len(pdf_bytes), "sim" if foto_bytes else "nao",
+        )
+
+        ra = dados.get("titular", {}).get("ra", "sem-ra")
+        filename = f"meus-dados-scpi-{ra}-{agora.strftime('%Y%m%d-%H%M%S')}.zip"
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(zip_bytes)),
+            },
+        )
     except HTTPException:
         raise
     except Exception as e:

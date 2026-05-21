@@ -6,17 +6,17 @@ import {
   TouchableOpacity,
   StatusBar,
   ScrollView,
-  Share,
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { storage } from "../../services/storage";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 import { Button } from "../../components/ui/button";
-import { apiGet } from "../../services/api";
 
 export default function PerfilAluno() {
   const router = useRouter();
@@ -44,18 +44,40 @@ export default function PerfilAluno() {
 
   const handleExportarDados = async () => {
     const userId = await storage.getItem("user_id");
-    if (!userId) {
+    const token = await storage.getItem("access_token");
+    if (!userId || !token) {
       Alert.alert("Erro", "Usuário não identificado.");
+      return;
+    }
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+    if (!apiUrl) {
+      Alert.alert("Erro", "Configuração da API ausente.");
       return;
     }
     setExportando(true);
     try {
-      const dados = await apiGet(`/aluno/meus-dados/${userId}`);
-      const json = JSON.stringify(dados, null, 2);
-      await Share.share({
-        message: json,
-        title: "Meus dados SCPI (LGPD Art. 18)",
-      });
+      const filename = `meus-dados-scpi-${Date.now()}.zip`;
+      const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+
+      const result = await FileSystem.downloadAsync(
+        `${apiUrl}/aluno/meus-dados/${userId}?formato=zip`,
+        fileUri,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      if (result.status !== 200) {
+        throw new Error(`HTTP ${result.status}`);
+      }
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(result.uri, {
+          mimeType: "application/zip",
+          dialogTitle: "Meus dados SCPI (LGPD Art. 18)",
+          UTI: "public.zip-archive",
+        });
+      } else {
+        Alert.alert("Sucesso", `Arquivo salvo em: ${result.uri}`);
+      }
     } catch (err: any) {
       Alert.alert("Erro", "Não foi possível exportar seus dados. Tente novamente.");
     } finally {
