@@ -51,20 +51,38 @@ def contar_alunos_da_turma(turma_id):
 
 
 def ajustar_presencas_chamada(chamada_id, alunos_presencas):
-    """alunos_presencas: list of dicts with {aluno_id, aulas_presentes: list[int]}"""
+    """alunos_presencas: list of dicts with {aluno_id, aulas_presentes: list[int]}
+
+    Merge por num_aula: presenças pré-existentes mantêm tipo_registro original
+    (ex.: 'Reconhecimento'). Apenas aulas novas marcadas pelo professor entram
+    como 'Manual'. Aulas removidas pelo professor são deletadas.
+    """
     with get_db_cursor(commit=True) as cur:
         if not cur:
             return
         for item in alunos_presencas:
+            aluno_id = item["aluno_id"]
+            novas = set(item.get("aulas_presentes", []))
+
             cur.execute(
-                "DELETE FROM Presencas WHERE chamada_id=%s AND aluno_id=%s",
-                (chamada_id, item["aluno_id"]),
+                "SELECT num_aula FROM Presencas WHERE chamada_id=%s AND aluno_id=%s",
+                (chamada_id, aluno_id),
             )
-            for num_aula in item.get("aulas_presentes", []):
+            atuais = {row["num_aula"] for row in cur.fetchall()}
+
+            remover = atuais - novas
+            if remover:
+                cur.execute(
+                    "DELETE FROM Presencas WHERE chamada_id=%s AND aluno_id=%s AND num_aula = ANY(%s)",
+                    (chamada_id, aluno_id, list(remover)),
+                )
+
+            adicionar = novas - atuais
+            for num_aula in adicionar:
                 cur.execute(
                     """
                     INSERT INTO Presencas (chamada_id, aluno_id, num_aula, tipo_registro)
                     VALUES (%s, %s, %s, 'Manual')
                     """,
-                    (chamada_id, item["aluno_id"], num_aula),
+                    (chamada_id, aluno_id, num_aula),
                 )
