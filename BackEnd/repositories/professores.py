@@ -1,3 +1,5 @@
+import uuid
+
 from infra.database import get_db_cursor
 
 
@@ -93,3 +95,69 @@ def obter_dashboard_professor(usuario_id):
             (usuario_id, usuario_id),
         )
         return cur.fetchone()
+
+
+def atualizar_professor(professor_id, nome=None, email=None, departamento=None):
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return None
+        cur.execute("SELECT usuario_id FROM Professores WHERE professor_id = %s", (professor_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        usuario_id = row["usuario_id"]
+        if nome is not None:
+            cur.execute("UPDATE Usuarios SET nome = %s WHERE usuario_id = %s", (nome, usuario_id))
+        if email is not None:
+            cur.execute("UPDATE Usuarios SET email = %s WHERE usuario_id = %s", (email, usuario_id))
+        if departamento is not None:
+            cur.execute("UPDATE Professores SET departamento = %s WHERE professor_id = %s", (departamento, professor_id))
+        return professor_id
+
+
+def buscar_usuario_id_por_professor_id(professor_id):
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute("SELECT usuario_id FROM Professores WHERE professor_id = %s", (professor_id,))
+        return cur.fetchone()
+
+
+def importar_professor_csv(nome, email, departamento, senha_hash):
+    """Insere usuario+professor em uma transação. Retorna (novo_usuario, email)."""
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return (False, None)
+
+        user_uuid = str(uuid.uuid4())
+        cur.execute(
+            """
+            INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario, primeiro_acesso)
+            VALUES (%s, %s, %s, %s, 'Professor', TRUE)
+            ON CONFLICT (email) DO NOTHING
+            RETURNING usuario_id
+            """,
+            (user_uuid, nome, email, senha_hash),
+        )
+        res_user = cur.fetchone()
+        usuario_id = res_user["usuario_id"] if res_user else None
+        novo_usuario = res_user is not None
+
+        if not usuario_id:
+            cur.execute("SELECT usuario_id FROM Usuarios WHERE email = %s", (email,))
+            row = cur.fetchone()
+            if not row:
+                return (False, None)
+            usuario_id = row["usuario_id"]
+
+        if novo_usuario:
+            professor_uuid = str(uuid.uuid4())
+            cur.execute(
+                """
+                INSERT INTO Professores (professor_id, usuario_id, departamento)
+                VALUES (%s, %s, %s)
+                """,
+                (professor_uuid, usuario_id, departamento),
+            )
+
+        return (novo_usuario, email)

@@ -2,7 +2,7 @@ import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { confirm } from '../confirm.js';
 import { icon } from '../icons.js';
-import { avatar, debounce } from '../utils.js';
+import { avatar, debounce, escapeHtml } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState, invalidate } from '../state.js';
 import { openModal, closeModal, animateRemove } from '../main.js';
@@ -52,10 +52,10 @@ function renderList(container) {
         ${avatar(a.nome, 38)}
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 mb-0.5">
-            <p class="font-black text-white text-sm truncate">${a.nome}</p>
+            <p class="font-black text-white text-sm truncate">${escapeHtml(a.nome)}</p>
             ${turnoBadge(a.turno)}
           </div>
-          <p class="text-gray-500 font-bold text-xs truncate">${a.email}${a.ra ? ` · RA/CPF: ${a.ra}` : ''}</p>
+          <p class="text-gray-500 font-bold text-xs truncate">${escapeHtml(a.email)}${a.ra ? ` · RA/CPF: ${escapeHtml(a.ra)}` : ''}</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <button data-id="${a.aluno_id}" class="edit-btn w-8 h-8 rounded-xl bg-accent/10 hover:bg-accent/20 flex items-center justify-center text-accent transition-all">${icon('pencil', 14)}</button>
@@ -90,13 +90,13 @@ function showEditModal(aluno, container) {
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3">${avatar(aluno.nome, 40)}<div><h3 class="font-black text-lg">Editar Aluno</h3><p class="text-gray-500 text-xs font-bold">${aluno.ra || ''}</p></div></div>
+        <div class="flex items-center gap-3">${avatar(aluno.nome, 40)}<div><h3 class="font-black text-lg">Editar Aluno</h3><p class="text-gray-500 text-xs font-bold">${escapeHtml(aluno.ra || '')}</p></div></div>
         <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <form id="edit-aluno-form" class="space-y-4">
-        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome</label><input name="nome" type="text" value="${aluno.nome || ''}" class="scpi-input" required></div>
-        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email</label><input name="email" type="email" value="${aluno.email || ''}" class="scpi-input" required></div>
-        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">RA</label><input name="ra" type="text" value="${aluno.ra || ''}" class="scpi-input"></div>
+        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome</label><input name="nome" type="text" value="${escapeHtml(aluno.nome || '')}" class="scpi-input" required></div>
+        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email</label><input name="email" type="email" value="${escapeHtml(aluno.email || '')}" class="scpi-input" required></div>
+        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">RA</label><input name="ra" type="text" value="${escapeHtml(aluno.ra || '')}" class="scpi-input"></div>
         <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label>
           <select name="turno" class="scpi-input"><option value="">Não definido</option><option value="Matutino" ${aluno.turno === 'Matutino' ? 'selected' : ''}>Matutino</option><option value="Noturno" ${aluno.turno === 'Noturno' ? 'selected' : ''}>Noturno</option></select></div>
         <div class="flex gap-3 pt-2">

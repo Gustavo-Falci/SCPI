@@ -2,7 +2,7 @@ import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { confirm } from '../confirm.js';
 import { icon } from '../icons.js';
-import { debounce } from '../utils.js';
+import { debounce, escapeHtml } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState, invalidate } from '../state.js';
 import { openModal, closeModal, animateRemove } from '../main.js';
@@ -97,14 +97,14 @@ function showProfModal(turma, container) {
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
-        <div><h3 class="font-black text-lg">Atribuir Professor</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${turma.nome_disciplina}</p></div>
+        <div><h3 class="font-black text-lg">Atribuir Professor</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${escapeHtml(turma.nome_disciplina)}</p></div>
         <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <div class="space-y-2 max-h-72 overflow-y-auto mb-6">
         ${opts.map(p => `
           <label class="flex items-center gap-3 px-4 py-3 rounded-2xl border border-white/5 hover:border-accent/30 hover:bg-accent/5 cursor-pointer transition-all">
             <input type="radio" name="professor" value="${p.professor_id ?? ''}" ${String(turma.professor_id) === String(p.professor_id) ? 'checked' : ''} class="accent-[#4B39EF]">
-            <div><p class="font-black text-sm text-white">${p.nome}</p>${p.email ? `<p class="text-xs text-gray-600 font-bold">${p.email}</p>` : ''}</div>
+            <div><p class="font-black text-sm text-white">${escapeHtml(p.nome)}</p>${p.email ? `<p class="text-xs text-gray-600 font-bold">${escapeHtml(p.email)}</p>` : ''}</div>
           </label>
         `).join('')}
       </div>
@@ -182,7 +182,7 @@ async function showMatriculaModal(turmaId, container) {
         ${!items.length ? `<div class="flex flex-col items-center py-10 text-gray-600">${icon('user', 28)}<p class="mt-2 font-black text-xs">Nenhum aluno elegível</p></div>` : items.map(a => `
           <label class="flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer transition-colors">
             <input type="checkbox" class="mat-check accent-[#4B39EF] w-4 h-4" data-id="${a.aluno_id}" ${selected.has(String(a.aluno_id)) ? 'checked' : ''}>
-            <div class="flex-1 min-w-0"><p class="font-black text-sm text-white truncate">${a.nome}</p><p class="text-xs text-gray-600 font-bold">${a.ra || ''}</p></div>
+            <div class="flex-1 min-w-0"><p class="font-black text-sm text-white truncate">${escapeHtml(a.nome)}</p><p class="text-xs text-gray-600 font-bold">${escapeHtml(a.ra || '')}</p></div>
           </label>
         `).join('')}
       </div>

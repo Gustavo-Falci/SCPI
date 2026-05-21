@@ -1,7 +1,7 @@
 import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { icon } from '../icons.js';
-import { debounce } from '../utils.js';
+import { debounce, escapeHtml } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState } from '../state.js';
 import { openModal, closeModal } from '../main.js';
@@ -129,7 +129,7 @@ async function openDetalhe(chamadaId) {
               : { label: 'Parcial', cls: 'bg-yellow-500/10 text-yellow-400' };
             return `
               <div class="grid items-center px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors" style="grid-template-columns: 1fr auto auto auto">
-                <div><p class="font-black text-sm text-white">${a.nome}</p><p class="text-xs text-gray-600 font-bold">${a.ra !== '—' ? `RA: ${a.ra}` : ''}</p></div>
+                <div><p class="font-black text-sm text-white">${escapeHtml(a.nome)}</p><p class="text-xs text-gray-600 font-bold">${a.ra !== '—' ? `RA: ${escapeHtml(a.ra)}` : ''}</p></div>
                 <span class="text-center font-black text-sm text-white">${a.aulas_presentes_count}/${d.total_aulas}</span>
                 <span class="text-center font-bold text-xs text-gray-500 mx-4">${a.tipo_registro !== '—' ? a.tipo_registro : '—'}</span>
                 <span class="text-xs font-black px-2 py-1 rounded-lg ${status.cls}">${status.label}</span>
