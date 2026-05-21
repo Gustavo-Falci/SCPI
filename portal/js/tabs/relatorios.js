@@ -92,6 +92,10 @@ async function openDetalhe(chamadaId) {
     const colorBadge = isNight ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-500';
     const freq = d.percentual ?? 0;
     const freqColor = freq >= 75 ? 'text-green-400' : 'text-red-400';
+    const alunos = d.alunos || [];
+    const presentes_count = alunos.filter(a => a.aulas_presentes_count === a.total_aulas).length;
+    const ausentes_count = alunos.filter(a => a.aulas_presentes_count === 0).length;
+    const parciais_count = alunos.filter(a => a.aulas_presentes_count > 0 && a.aulas_presentes_count < a.total_aulas).length;
 
     document.getElementById('modal-box').innerHTML = `
       <div class="flex items-center justify-between p-6 border-b border-white/5 flex-shrink-0">
@@ -107,11 +111,11 @@ async function openDetalhe(chamadaId) {
       <div class="p-6 overflow-y-auto">
         <!-- Stats -->
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-          <div class="bg-[#0C0C12] rounded-2xl p-4 text-center border border-white/5"><p class="text-xl font-black text-white">${d.total_alunos}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Total</p></div>
-          <div class="bg-green-500/5 rounded-2xl p-4 text-center border border-green-500/10"><p class="text-xl font-black text-green-400">${d.presentes ?? '—'}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Slots Presentes</p></div>
-          <div class="bg-[#0C0C12] rounded-2xl p-4 text-center border border-white/5"><p class="text-xl font-black ${freqColor}">${freq}%</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Frequência</p></div>
-          <div class="bg-[#0C0C12] rounded-2xl p-4 text-center border border-white/5"><p class="text-xl font-black text-white">${d.total_aulas}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Aulas</p></div>
-          <div class="bg-[#0C0C12] rounded-2xl p-4 text-center border border-white/5"><p class="text-xl font-black text-yellow-400">${d.ausentes}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Slots Ausentes</p></div>
+          <div class="bg-[#0C0C12] rounded-2xl p-4 text-center border border-white/5"><p class="text-xl font-black text-white">${d.total_alunos}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Alunos</p></div>
+          <div class="bg-green-500/5 rounded-2xl p-4 text-center border border-green-500/10"><p class="text-xl font-black text-green-400">${presentes_count}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Presentes</p></div>
+          <div class="bg-red-500/5 rounded-2xl p-4 text-center border border-red-500/10"><p class="text-xl font-black text-red-400">${ausentes_count}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Ausentes</p></div>
+          <div class="bg-yellow-500/5 rounded-2xl p-4 text-center border border-yellow-500/10"><p class="text-xl font-black text-yellow-400">${parciais_count}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Parciais</p></div>
+          <div class="bg-[#0C0C12] rounded-2xl p-4 text-center border border-white/5"><p class="text-xl font-black ${freqColor}">${freq}%</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Presença</p></div>
         </div>
         <!-- Alunos table -->
         <div class="bg-[#0C0C12] rounded-2xl border border-white/5 overflow-hidden">
