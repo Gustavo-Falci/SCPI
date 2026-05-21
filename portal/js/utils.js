@@ -3,6 +3,12 @@ export const debounce = (fn, ms = 250) => {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 };
 
+const HTML_ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+export function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value).replace(/[&<>"']/g, ch => HTML_ENTITIES[ch]);
+}
+
 const PALETTE = ['#4B39EF','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4','#F97316'];
 
 export function avatar(nome = '?', size = 36) {

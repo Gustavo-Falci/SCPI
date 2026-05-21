@@ -1,7 +1,6 @@
 import csv
 import io
 import logging
-import re
 import uuid
 from typing import List, Optional
 
@@ -10,6 +9,7 @@ from pydantic import BaseModel
 
 from core.auth_utils import get_password_hash
 from core.config import BUCKET_NAME, COLLECTION_ID
+from core.csv_utils import EMAIL_REGEX, MAX_CSV_BYTES, RA_REGEX, validar_celula_csv
 from core.helpers import gerar_senha_temporaria, internal_error
 from core.security import get_current_user, require_role
 from infra.aws_clientes import rekognition_client, s3_client
@@ -32,8 +32,11 @@ from repositories.horarios import (
     listar_horarios_completos,
 )
 from repositories.professores import (
+    atualizar_professor,
+    buscar_usuario_id_por_professor_id,
     criar_professor_com_usuario,
     excluir_professor_em_cascata,
+    importar_professor_csv,
     listar_professores_para_admin,
 )
 from repositories.turmas import (
@@ -49,6 +52,7 @@ from repositories.usuarios import buscar_usuario_por_email
 from schemas.admin import (
     AtribuirProfessor,
     AtualizarAlunoAdmin,
+    AtualizarProfessorAdmin,
     CriarAlunoAdmin,
     CriarProfessorAdmin,
     HorarioCreate,
@@ -230,6 +234,35 @@ def admin_excluir_aluno(aluno_id: str, current_user: dict = Depends(require_role
         raise internal_error(e)
 
 
+@router.patch("/professores/{professor_id}")
+def admin_atualizar_professor(
+    professor_id: str,
+    dados: AtualizarProfessorAdmin,
+    current_user: dict = Depends(require_role("Admin")),
+):
+    try:
+        if dados.email is not None:
+            existente = buscar_usuario_por_email(dados.email.strip())
+            if existente and existente.get("usuario_id"):
+                row = buscar_usuario_id_por_professor_id(professor_id)
+                if not row or row["usuario_id"] != existente["usuario_id"]:
+                    raise HTTPException(status_code=400, detail="Email já cadastrado.")
+        resultado = atualizar_professor(
+            professor_id,
+            nome=dados.nome,
+            email=dados.email.strip() if dados.email else None,
+            departamento=dados.departamento,
+        )
+        if not resultado:
+            raise HTTPException(status_code=404, detail="Professor não encontrado.")
+        audit_logger.info("Professor atualizado admin=%s professor_id=%s", current_user.get("sub"), professor_id)
+        return {"mensagem": "Professor atualizado com sucesso."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "admin_atualizar_professor")
+
+
 @router.delete("/professores/{professor_id}")
 def admin_excluir_professor(professor_id: str):
     try:
@@ -294,27 +327,6 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos):
         raise internal_error(e)
 
 
-_MAX_CSV_BYTES = 2 * 1024 * 1024  # 2 MB — limite para evitar DoS por upload grande
-_CSV_INJECTION_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
-_EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_RA_REGEX = re.compile(r"^[A-Za-z0-9]{4,20}$")
-
-
-def _validar_celula_csv(valor: str, campo: str) -> str:
-    """Valida tamanho e bloqueia prefixos de CSV injection (=, +, -, @, TAB, CR)."""
-    if valor is None:
-        return ""
-    valor = valor.strip().lstrip("﻿")  # remove BOM se primeiro campo
-    if len(valor) > 200:
-        raise ValueError(f"Campo '{campo}' excede 200 caracteres.")
-    if valor and valor[0] in _CSV_INJECTION_PREFIXES:
-        raise ValueError(
-            f"Campo '{campo}' começa com caractere proibido ({valor[0]!r}). "
-            "Possível CSV injection."
-        )
-    return valor
-
-
 @router.post("/turmas/{turma_id}/importar-alunos")
 async def admin_importar_alunos_csv(
     turma_id: str,
@@ -329,7 +341,7 @@ async def admin_importar_alunos_csv(
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
-    if len(content) > _MAX_CSV_BYTES:
+    if len(content) > MAX_CSV_BYTES:
         raise HTTPException(status_code=413, detail="CSV muito grande (limite: 2 MB).")
 
     try:
@@ -346,19 +358,19 @@ async def admin_importar_alunos_csv(
 
         for linha_num, row in enumerate(csv_reader, start=2):  # 1 = header
             try:
-                nome = _validar_celula_csv(row.get("nome", ""), "nome")
-                email = _validar_celula_csv(row.get("email", ""), "email")
-                ra = _validar_celula_csv(row.get("ra", ""), "ra")
-                turno = _validar_celula_csv(row.get("turno", ""), "turno")
+                nome = validar_celula_csv(row.get("nome", ""), "nome")
+                email = validar_celula_csv(row.get("email", ""), "email")
+                ra = validar_celula_csv(row.get("ra", ""), "ra")
+                turno = validar_celula_csv(row.get("turno", ""), "turno")
 
                 if not nome or not email or not ra:
                     continue
 
                 if len(nome) < 3:
                     raise ValueError("Nome deve ter ao menos 3 caracteres.")
-                if not _EMAIL_REGEX.match(email):
+                if not EMAIL_REGEX.match(email):
                     raise ValueError("E-mail em formato inválido.")
-                if not _RA_REGEX.match(ra):
+                if not RA_REGEX.match(ra):
                     raise ValueError("RA deve ter de 4 a 20 caracteres alfanuméricos.")
 
                 if turno not in ("Matutino", "Noturno"):
@@ -395,6 +407,86 @@ async def admin_importar_alunos_csv(
         raise
     except Exception as e:
         raise internal_error(e, "admin_importar_alunos_csv")
+
+
+@router.post("/importar-professores")
+async def admin_importar_professores_csv(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_role("Admin")),
+):
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Apenas arquivos .csv são aceitos.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    if len(content) > MAX_CSV_BYTES:
+        raise HTTPException(status_code=413, detail="CSV muito grande (limite: 2 MB).")
+
+    try:
+        decoded = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="CSV deve estar em UTF-8.")
+
+    try:
+        csv_reader = csv.DictReader(io.StringIO(decoded))
+
+        importados = 0
+        duplicados = 0
+        emails_enviados = 0
+        erros = []
+
+        for linha_num, row in enumerate(csv_reader, start=2):  # 1 = header
+            try:
+                nome = validar_celula_csv(row.get("nome", ""), "nome")
+                email = validar_celula_csv(row.get("email", ""), "email")
+                departamento = validar_celula_csv(row.get("departamento", ""), "departamento")
+
+                if not nome or not email:
+                    continue
+
+                if len(nome) < 3:
+                    raise ValueError("Nome deve ter ao menos 3 caracteres.")
+                if not EMAIL_REGEX.match(email):
+                    raise ValueError("E-mail em formato inválido.")
+
+                senha_temporaria = gerar_senha_temporaria()
+                senha_hash = get_password_hash(senha_temporaria)
+
+                novo_usuario, _ = importar_professor_csv(
+                    nome, email, departamento or None, senha_hash
+                )
+
+                if novo_usuario:
+                    background_tasks.add_task(
+                        send_email_senha_temporaria, email, nome, senha_temporaria, "Professor"
+                    )
+                    emails_enviados += 1
+                    importados += 1
+                else:
+                    duplicados += 1
+            except ValueError as ve:
+                erros.append(f"Linha {linha_num}: {ve}")
+            except Exception as e:
+                erros.append(f"Linha {linha_num}: erro inesperado ({type(e).__name__}).")
+                logger.warning("Erro na importação CSV professor linha %s: %s", linha_num, e)
+
+        audit_logger.info(
+            "Importação CSV professores admin=%s importados=%s duplicados=%s emails=%s erros=%s",
+            current_user.get("sub"), importados, duplicados, emails_enviados, len(erros),
+        )
+        return {
+            "mensagem": f"Importação concluída: {importados} professor(es) cadastrado(s).",
+            "duplicados": duplicados,
+            "emails_enviados": emails_enviados,
+            "erros": erros,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "admin_importar_professores_csv")
 
 
 @router.post("/usuarios/professor")

@@ -55,6 +55,7 @@ export default function PrimeiroAcesso() {
   const [etapaAtual, setEtapaAtual] = useState(0);
   const [etapasConcluidas, setEtapasConcluidas] = useState<Set<string>>(new Set());
   const [userData, setUserData] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -62,10 +63,14 @@ export default function PrimeiroAcesso() {
       const email = await storage.getItem("user_email");
       const ra = await storage.getItem("user_ra");
       const id = await storage.getItem("user_id");
+      const role = await storage.getItem("user_role");
       setUserData({ nome, email, ra, id });
+      setUserRole(role);
     };
     loadUser();
   }, []);
+
+  const isProfessor = userRole === "Professor";
 
   const passwordRules = {
     minLength: novaSenha.length >= 12,
@@ -370,7 +375,7 @@ export default function PrimeiroAcesso() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
           <View style={styles.topArea}>
             <View style={styles.stepBadge}>
-              <Text style={styles.stepBadgeText}>Passo 1 de 2</Text>
+              <Text style={styles.stepBadgeText}>{isProfessor ? "Definir senha" : "Passo 1 de 2"}</Text>
             </View>
           </View>
 
@@ -434,7 +439,7 @@ export default function PrimeiroAcesso() {
             />
 
             <Button
-              title="SALVAR E CONTINUAR"
+              title={isProfessor ? "DEFINIR SENHA" : "SALVAR E CONTINUAR"}
               onPress={handleAlterarSenha}
               loading={isLoading}
               disabled={!formValido}
