@@ -25,7 +25,9 @@ function renderGrid(container) {
   const colorTime = isNight ? 'text-indigo-400' : 'text-amber-500';
 
   const grid = container.querySelector('#horarios-grid');
-  grid.innerHTML = DIAS_SEMANA.map((dia, idx) => {
+  const ordemVisual = [6, 0, 1, 2, 3, 4, 5];
+  grid.innerHTML = ordemVisual.map(idx => {
+    const dia = DIAS_SEMANA[idx];
     const aulas = filtered.filter(g => g.dia_semana === idx).sort((a, b) => (a.inicio || a.horario_inicio || '').localeCompare(b.inicio || b.horario_inicio || ''));
     return `
       <div class="min-w-[140px]">
