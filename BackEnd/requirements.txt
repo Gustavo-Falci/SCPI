@@ -43,6 +43,9 @@ limits==5.8.0
 # Email
 resend==2.30.1
 
+# Geração de PDF (export LGPD Art. 18)
+reportlab==4.2.5
+
 # Dependências transitivas (pinadas para reproducibilidade)
 annotated-types==0.7.0
 anyio==4.13.0
