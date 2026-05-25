@@ -46,6 +46,12 @@ updates:
       - dependency-name: "react-dom"
       - dependency-name: "react-native"
       - dependency-name: "react-native-*"
+      # Toolchain pinada pelo SDK 55: eslint 10 quebra eslint-config-expo@55
+      # (plugin-react API removida); TS 6 desalinha do expo/tsconfig.base.
+      # Sobem juntos no upgrade SDK 56.
+      - dependency-name: "eslint"
+      - dependency-name: "eslint-config-expo"
+      - dependency-name: "typescript"
 
   # GitHub Actions (versões dos próprios workflows)
   - package-ecosystem: "github-actions"
