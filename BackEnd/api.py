@@ -87,7 +87,7 @@ def _check_aws_connectivity():
 # da API (endpoints + schemas) a anônimos. Em dev/homolog seguem disponíveis.
 _IS_PRODUCTION = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
 app = FastAPI(
-    title="SCPI API",
+    title="SCPI API",  # gitleaks:allow — falso positivo (generic-api-key), sem segredo
     docs_url=None if _IS_PRODUCTION else "/docs",
     redoc_url=None if _IS_PRODUCTION else "/redoc",
     openapi_url=None if _IS_PRODUCTION else "/openapi.json",
