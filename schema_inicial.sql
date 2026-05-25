@@ -62,7 +62,8 @@ CREATE TABLE public.chamadas (
     horario_inicio time without time zone NOT NULL,
     horario_fim time without time zone,
     status character varying(50) DEFAULT 'Aberta'::character varying,
-    data_criacao timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    data_criacao timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    total_aulas smallint DEFAULT 1 NOT NULL
 );
 
 
@@ -99,7 +100,8 @@ CREATE TABLE public.colecao_rostos (
     data_indexacao timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     consentimento_biometrico boolean DEFAULT false NOT NULL,
     consentimento_data timestamp without time zone,
-    revogado_em timestamp without time zone
+    revogado_em timestamp without time zone,
+    angulo character varying(50) DEFAULT 'frontal'::character varying NOT NULL
 );
 
 
@@ -180,7 +182,8 @@ CREATE TABLE public.presencas (
     chamada_id integer NOT NULL,
     aluno_id uuid NOT NULL,
     hora_registro timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    tipo_registro character varying(50) DEFAULT 'Reconhecimento'::character varying
+    tipo_registro character varying(50) DEFAULT 'Reconhecimento'::character varying,
+    num_aula smallint DEFAULT 1 NOT NULL
 );
 
 
@@ -371,19 +374,19 @@ ALTER TABLE ONLY public.chamadas
 
 
 --
--- Name: colecao_rostos colecao_rostos_external_image_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.colecao_rostos
-    ADD CONSTRAINT colecao_rostos_external_image_id_key UNIQUE (external_image_id);
-
-
---
 -- Name: colecao_rostos colecao_rostos_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.colecao_rostos
     ADD CONSTRAINT colecao_rostos_pkey PRIMARY KEY (colecao_rosto_id);
+
+
+--
+-- Name: colecao_rostos uq_colecao_rostos_aluno_angulo; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.colecao_rostos
+    ADD CONSTRAINT uq_colecao_rostos_aluno_angulo UNIQUE (aluno_id, angulo);
 
 
 --
@@ -403,11 +406,11 @@ ALTER TABLE ONLY public.passwordresetcodes
 
 
 --
--- Name: presencas presencas_chamada_id_aluno_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: presencas presencas_chamada_aluno_aula_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.presencas
-    ADD CONSTRAINT presencas_chamada_id_aluno_id_key UNIQUE (chamada_id, aluno_id);
+    ADD CONSTRAINT presencas_chamada_aluno_aula_key UNIQUE (chamada_id, aluno_id, num_aula);
 
 
 --
@@ -503,6 +506,13 @@ ALTER TABLE ONLY public.usuarios
 --
 
 CREATE INDEX idx_refresh_usuario ON public.refreshtokens USING btree (usuario_id);
+
+
+--
+-- Name: uq_chamada_aberta_por_turma; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_chamada_aberta_por_turma ON public.chamadas USING btree (turma_id) WHERE ((status)::text = 'Aberta'::text);
 
 
 --
