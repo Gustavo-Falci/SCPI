@@ -36,6 +36,16 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # Pacotes gerenciados pelo Expo SDK: atualizar via `expo install --fix`,
+    # não por PR avulso do Dependabot (desalinha do SDK).
+    ignore:
+      - dependency-name: "expo"
+      - dependency-name: "expo-*"
+      - dependency-name: "@expo/*"
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
 
   # GitHub Actions (versões dos próprios workflows)
   - package-ecosystem: "github-actions"
