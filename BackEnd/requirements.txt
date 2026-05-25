@@ -1,4 +1,4 @@
-﻿# DependÃªncias diretas â€” versÃµes exatas do ambiente de desenvolvimento (pip freeze)
+# DependÃªncias diretas â€” versÃµes exatas do ambiente de desenvolvimento (pip freeze)
 # Gerado em 2026-05-01. Para atualizar: pip freeze > requirements.txt
 
 # API
@@ -17,7 +17,7 @@ scramp==1.4.8
 
 # Schemas / validaÃ§Ã£o
 pydantic==2.13.4
-pydantic_core==2.46.4
+pydantic_core==2.47.0
 email-validator==2.3.0
 
 # AutenticaÃ§Ã£o
