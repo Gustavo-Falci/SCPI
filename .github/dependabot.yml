@@ -18,6 +18,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # pydantic-core é pinado exato por pydantic (==2.46.4 p/ pydantic 2.13.4).
+    # PR avulso quebra resolução de deps. Sobe junto com pydantic.
+    ignore:
+      - dependency-name: "pydantic-core"
 
   # App mobile Expo / React Native
   - package-ecosystem: "npm"
