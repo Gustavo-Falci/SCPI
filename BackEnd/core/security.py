@@ -1,4 +1,5 @@
 import os
+import secrets
 
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -60,7 +61,7 @@ def require_role(*roles: str):
 def require_service_token(x_service_token: str = Header(...)):
     """Valida token estático de serviço interno (câmera local)."""
     expected = os.getenv("CAMERA_SERVICE_TOKEN")
-    if not expected or x_service_token != expected:
+    if not expected or not secrets.compare_digest(x_service_token, expected):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token de serviço inválido.")
 
 

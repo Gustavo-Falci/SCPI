@@ -630,6 +630,10 @@ def admin_excluir_rosto_s3(payload: S3KeyPayload):
         raise HTTPException(status_code=503, detail="S3 não disponível")
     if not payload.key:
         raise HTTPException(status_code=400, detail="Key não informada.")
+    # Restringe ao prefixo de biometria — impede deleção de outros objetos do
+    # bucket via key arbitrária (defense-in-depth, mesmo sendo endpoint Admin).
+    if not payload.key.startswith("alunos/") or ".." in payload.key:
+        raise HTTPException(status_code=400, detail="Key fora do escopo permitido.")
     try:
         s3_client.delete_object(Bucket=BUCKET_NAME, Key=payload.key)
         return {"mensagem": "Arquivo S3 removido com sucesso."}

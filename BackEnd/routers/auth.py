@@ -67,6 +67,11 @@ _RESEND_FROM = os.getenv("RESEND_FROM_EMAIL", "SCPI <onboarding@resend.dev>")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# Hash descartável usado para equalizar o tempo de resposta quando o e-mail não
+# existe — sem ele, o caminho "usuário inexistente" retorna instantaneamente
+# (pula o verify_password), permitindo enumeração de contas por timing.
+_DUMMY_PASSWORD_HASH = get_password_hash("scpi-timing-equalizer-not-a-real-password")
+
 
 @router.post("/register")
 @limiter.limit("5/minute")
@@ -98,6 +103,9 @@ def login(
     user = buscar_usuario_login_por_email(email_limpo)
 
     if not user:
+        # Verifica contra um hash descartável para gastar o mesmo tempo de um
+        # login real (mitiga enumeração de usuário por timing).
+        verify_password(form_data.password, _DUMMY_PASSWORD_HASH)
         audit_logger.warning("Login falhou (usuário inexistente) email=%s ip=%s", mask_email(email_limpo), request.client.host)
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 

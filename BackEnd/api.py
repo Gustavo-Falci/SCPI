@@ -83,7 +83,15 @@ def _check_aws_connectivity():
     except Exception as e:
         logger.warning("AWS S3: falha na verificação de conectividade: %s", e)
 
-app = FastAPI(title="SCPI API")
+# Em produção, desabilita docs/schema interativos — evita expor toda a superfície
+# da API (endpoints + schemas) a anônimos. Em dev/homolog seguem disponíveis.
+_IS_PRODUCTION = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
+app = FastAPI(
+    title="SCPI API",
+    docs_url=None if _IS_PRODUCTION else "/docs",
+    redoc_url=None if _IS_PRODUCTION else "/redoc",
+    openapi_url=None if _IS_PRODUCTION else "/openapi.json",
+)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_handler)

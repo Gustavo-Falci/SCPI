@@ -30,6 +30,19 @@ audit_logger = logging.getLogger("scpi.audit")
 router = APIRouter(prefix="/chamadas", tags=["chamadas"])
 
 
+def _assert_professor_dono_ou_admin(turma_id, current_user: dict) -> None:
+    """Garante que o solicitante é Admin ou o professor responsável pela turma.
+
+    Retorna 404 (não 403) para não revelar a existência de chamadas/turmas de
+    outros professores (evita enumeração de chamada_id/turma_id).
+    """
+    if current_user.get("role") == "Admin":
+        return
+    professor_id = obter_professor_id(current_user.get("sub"))
+    if not professor_id or not professor_responsavel_pela_turma(turma_id, professor_id):
+        raise HTTPException(status_code=404, detail="Recurso não encontrado.")
+
+
 @router.post("/abrir")
 def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role("Professor"))):
     usuario_id = current_user.get("sub")
@@ -61,6 +74,7 @@ def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role
 @router.post("/fechar/{turma_id}")
 def fechar_chamada(turma_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Professor"))):
     try:
+        _assert_professor_dono_ou_admin(turma_id, current_user)
         chamada = obter_chamada_aberta_com_disciplina(turma_id)
         fechar_chamadas_abertas_por_turma(turma_id)
 
@@ -72,6 +86,8 @@ def fechar_chamada(turma_id: str, background_tasks: BackgroundTasks, current_use
             )
 
         return {"mensagem": "Chamada encerrada com sucesso!"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e, "fechar_chamada")
 
@@ -79,6 +95,7 @@ def fechar_chamada(turma_id: str, background_tasks: BackgroundTasks, current_use
 @router.get("/status/{turma_id}")
 def status_chamada(turma_id: str, current_user: dict = Depends(get_current_user)):
     try:
+        _assert_professor_dono_ou_admin(turma_id, current_user)
         chamada = obter_chamada_aberta_por_turma(turma_id)
 
         if not chamada:
@@ -98,6 +115,8 @@ def status_chamada(turma_id: str, current_user: dict = Depends(get_current_user)
             "presentes": presentes,
             "ausentes": ausentes,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e, "status_chamada")
 
@@ -105,11 +124,15 @@ def status_chamada(turma_id: str, current_user: dict = Depends(get_current_user)
 @router.get("/{chamada_id}/alunos")
 def listar_alunos_chamada(chamada_id: str, current_user: dict = Depends(get_current_user)):
     try:
+        chamada = obter_chamada_por_id(chamada_id)
+        if not chamada:
+            raise HTTPException(status_code=404, detail="Chamada não encontrada.")
+        _assert_professor_dono_ou_admin(chamada["turma_id"], current_user)
+
         alunos = listar_alunos_da_chamada(chamada_id)
         if alunos:
             total_aulas = alunos[0]["total_aulas"]
         else:
-            chamada = obter_chamada_por_id(chamada_id)
             total_aulas = chamada["total_aulas"] if chamada else 1
         alunos_serializados = [
             {
@@ -120,6 +143,8 @@ def listar_alunos_chamada(chamada_id: str, current_user: dict = Depends(get_curr
             for a in alunos
         ]
         return {"total_aulas": total_aulas, "alunos": alunos_serializados}
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e, "listar_alunos_chamada")
 
@@ -134,6 +159,7 @@ def ajustar_chamada(
         chamada = obter_chamada_por_id(chamada_id)
         if not chamada:
             raise HTTPException(status_code=404, detail="Chamada não encontrada.")
+        _assert_professor_dono_ou_admin(chamada["turma_id"], current_user)
 
         ajustar_presencas_chamada(chamada_id, [a.model_dump() for a in payload.alunos])
         audit_logger.info("Presenças da chamada %s ajustadas pelo professor.", chamada_id)
@@ -156,6 +182,7 @@ def finalizar_chamada(
         chamada = obter_chamada_por_id(chamada_id)
         if not chamada:
             raise HTTPException(status_code=404, detail="Chamada não encontrada.")
+        _assert_professor_dono_ou_admin(chamada["turma_id"], current_user)
 
         ajustar_presencas_chamada(chamada_id, [a.model_dump() for a in payload.alunos])
         fechar_chamadas_abertas_por_turma(chamada["turma_id"])
