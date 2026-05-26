@@ -140,36 +140,54 @@ async function showMatriculaModal(turmaId, container) {
   try { allAlunos = await api.get('/admin/alunos'); } catch (err) { toast.error(extractError(err)); closeModal(); return; }
 
   let matriculados = new Set();
+  let matriculadosList = [];
   try {
-    const mat = await api.get(`/admin/turmas/${turmaId}/alunos`).catch(() => []);
-    mat.forEach(a => matriculados.add(String(a.aluno_id)));
+    matriculadosList = await api.get(`/admin/turmas/${turmaId}/alunos`).catch(() => []);
+    matriculadosList.forEach(a => matriculados.add(String(a.aluno_id)));
   } catch {}
 
-  let modalSearch = '';
-  let selected = new Set();
-  let matPage = 1;
   const MAT_PER_PAGE = 8;
+  let aba = 'matricular'; // 'matricular' | 'matriculados'
+  const estado = {
+    matricular:   { search: '', selected: new Set(), page: 1 },
+    matriculados: { search: '', selected: new Set(), page: 1 },
+  };
 
   function elegivel(a) { return !matriculados.has(String(a.aluno_id)) && (!turma.turno || !a.turno || a.turno === turma.turno); }
   const elegiveis = allAlunos.filter(elegivel);
 
   function renderMatList() {
-    const filtered = modalSearch ? elegiveis.filter(a => a.nome.toLowerCase().includes(modalSearch.toLowerCase()) || a.ra?.toLowerCase().includes(modalSearch.toLowerCase())) : elegiveis;
-    const { items, page: pg, total, count } = paginate(filtered, matPage, MAT_PER_PAGE);
-    matPage = pg;
-    const allSelected = filtered.length > 0 && filtered.every(a => selected.has(String(a.aluno_id)));
-    const someSelected = filtered.some(a => selected.has(String(a.aluno_id)));
-    const selCount = selected.size;
+    const st = estado[aba];
+    const fonte = aba === 'matricular' ? elegiveis : matriculadosList;
+    const isRemover = aba === 'matriculados';
+
+    const filtered = st.search
+      ? fonte.filter(a => a.nome.toLowerCase().includes(st.search.toLowerCase()) || a.ra?.toLowerCase().includes(st.search.toLowerCase()))
+      : fonte;
+    const { items, page: pg, total, count } = paginate(filtered, st.page, MAT_PER_PAGE);
+    st.page = pg;
+    const allSelected = filtered.length > 0 && filtered.every(a => st.selected.has(String(a.aluno_id)));
+    const someSelected = filtered.some(a => st.selected.has(String(a.aluno_id)));
+    const selCount = st.selected.size;
+
+    const tabBtn = (id, label) => `<button data-aba="${id}" class="aba-btn flex-1 py-2 rounded-xl font-black text-xs transition-colors ${aba === id ? 'bg-accent text-white' : 'text-gray-500 hover:bg-white/5'}">${label}</button>`;
+    const emptyMsg = isRemover ? 'Nenhum aluno matriculado' : 'Nenhum aluno elegível';
+    const actionLabel = isRemover ? 'Desmatricular' : 'Matricular';
+    const actionColor = isRemover ? 'bg-red-500 hover:bg-red-600' : 'bg-accent hover:bg-accent-dark';
 
     document.getElementById('modal-box').innerHTML = `
       <div class="flex items-center justify-between p-6 border-b border-white/5 flex-shrink-0">
-        <div><h3 class="font-black text-lg">Matricular Alunos</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${turma.nome_disciplina} · ${turma.turno}</p></div>
+        <div><h3 class="font-black text-lg">Alunos da Turma</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${escapeHtml(turma.nome_disciplina)} · ${turma.turno}</p></div>
         <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+      </div>
+      <div class="p-4 border-b border-white/5 flex-shrink-0 flex gap-2">
+        ${tabBtn('matricular', 'Matricular')}
+        ${tabBtn('matriculados', 'Matriculados')}
       </div>
       <div class="p-4 border-b border-white/5 flex-shrink-0">
         <div class="relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600">${icon('search', 15)}</span>
-          <input id="mat-search" type="search" value="${modalSearch}" placeholder="Buscar aluno..." class="scpi-input pl-9 w-full">
+          <input id="mat-search" type="search" value="${st.search}" placeholder="Buscar aluno..." class="scpi-input pl-9 w-full">
         </div>
       </div>
       <div class="p-4 border-b border-white/5 flex-shrink-0">
@@ -179,49 +197,70 @@ async function showMatriculaModal(turmaId, container) {
         </label>
       </div>
       <div class="flex-1 overflow-y-auto">
-        ${!items.length ? `<div class="flex flex-col items-center py-10 text-gray-600">${icon('user', 28)}<p class="mt-2 font-black text-xs">Nenhum aluno elegível</p></div>` : items.map(a => `
+        ${!items.length ? `<div class="flex flex-col items-center py-10 text-gray-600">${icon('user', 28)}<p class="mt-2 font-black text-xs">${emptyMsg}</p></div>` : items.map(a => `
           <label class="flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer transition-colors">
-            <input type="checkbox" class="mat-check accent-[#4B39EF] w-4 h-4" data-id="${a.aluno_id}" ${selected.has(String(a.aluno_id)) ? 'checked' : ''}>
+            <input type="checkbox" class="mat-check accent-[#4B39EF] w-4 h-4" data-id="${a.aluno_id}" ${st.selected.has(String(a.aluno_id)) ? 'checked' : ''}>
             <div class="flex-1 min-w-0"><p class="font-black text-sm text-white truncate">${escapeHtml(a.nome)}</p><p class="text-xs text-gray-600 font-bold">${escapeHtml(a.ra || '')}</p></div>
           </label>
         `).join('')}
       </div>
-      ${total > 1 ? `<div class="px-4 py-3 border-t border-white/5 flex-shrink-0 flex items-center justify-between"><span class="text-xs text-gray-600 font-black">${count} elegíveis</span><div class="flex items-center gap-1"><button id="mat-prev" ${matPage <= 1 ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-gray-500 disabled:opacity-30">${icon('chevron-left', 13)}</button><span class="text-xs font-black text-gray-500 px-2">${matPage}/${total}</span><button id="mat-next" ${matPage >= total ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-gray-500 disabled:opacity-30">${icon('chevron-right', 13)}</button></div></div>` : ''}
+      ${total > 1 ? `<div class="px-4 py-3 border-t border-white/5 flex-shrink-0 flex items-center justify-between"><span class="text-xs text-gray-600 font-black">${count} ${isRemover ? 'matriculados' : 'elegíveis'}</span><div class="flex items-center gap-1"><button id="mat-prev" ${st.page <= 1 ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-gray-500 disabled:opacity-30">${icon('chevron-left', 13)}</button><span class="text-xs font-black text-gray-500 px-2">${st.page}/${total}</span><button id="mat-next" ${st.page >= total ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-gray-500 disabled:opacity-30">${icon('chevron-right', 13)}</button></div></div>` : ''}
       <div class="p-4 border-t border-white/5 flex gap-3 flex-shrink-0">
         <button onclick="closeModal()" class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
-        <button id="mat-submit" ${!selCount ? 'disabled' : ''} class="flex-1 py-3 rounded-2xl bg-accent hover:bg-accent-dark disabled:opacity-40 text-white font-black text-sm transition-colors">Matricular ${selCount > 0 ? `(${selCount})` : ''}</button>
+        <button id="mat-submit" ${!selCount ? 'disabled' : ''} class="flex-1 py-3 rounded-2xl ${actionColor} disabled:opacity-40 text-white font-black text-sm transition-colors">${actionLabel} ${selCount > 0 ? `(${selCount})` : ''}</button>
       </div>
     `;
 
     const saEl = document.getElementById('select-all-mat');
     if (saEl?.dataset.indeterminate === 'true') { saEl.indeterminate = true; saEl.checked = false; }
 
+    document.querySelectorAll('.aba-btn').forEach(b => b.addEventListener('click', () => { aba = b.dataset.aba; renderMatList(); }));
+
     saEl?.addEventListener('change', () => {
-      const vis = filtered;
-      vis.forEach(a => saEl.checked ? selected.add(String(a.aluno_id)) : selected.delete(String(a.aluno_id)));
+      filtered.forEach(a => saEl.checked ? st.selected.add(String(a.aluno_id)) : st.selected.delete(String(a.aluno_id)));
       renderMatList();
     });
 
     document.querySelectorAll('.mat-check').forEach(chk => {
-      chk.addEventListener('change', () => { chk.checked ? selected.add(chk.dataset.id) : selected.delete(chk.dataset.id); renderMatList(); });
+      chk.addEventListener('change', () => { chk.checked ? st.selected.add(chk.dataset.id) : st.selected.delete(chk.dataset.id); renderMatList(); });
     });
 
-    document.getElementById('mat-search')?.addEventListener('input', e => { modalSearch = e.target.value; matPage = 1; renderMatList(); });
-    document.getElementById('mat-prev')?.addEventListener('click', () => { matPage--; renderMatList(); });
-    document.getElementById('mat-next')?.addEventListener('click', () => { matPage++; renderMatList(); });
+    document.getElementById('mat-search')?.addEventListener('input', e => { st.search = e.target.value; st.page = 1; renderMatList(); });
+    document.getElementById('mat-prev')?.addEventListener('click', () => { st.page--; renderMatList(); });
+    document.getElementById('mat-next')?.addEventListener('click', () => { st.page++; renderMatList(); });
 
-    document.getElementById('mat-submit')?.addEventListener('click', async () => {
-      const btn = document.getElementById('mat-submit');
-      btn.disabled = true; btn.textContent = 'Matriculando…';
-      try {
-        await api.post(`/admin/turmas/${turmaId}/matricular-alunos`, { aluno_ids: [...selected] });
-        invalidate('turmas');
-        await load();
-        renderList(container);
-        closeModal();
-        toast.success(`${selected.size} aluno(s) matriculado(s).`);
-      } catch (err) { toast.error(extractError(err)); btn.disabled = false; btn.textContent = `Matricular (${selected.size})`; }
-    });
+    document.getElementById('mat-submit')?.addEventListener('click', isRemover ? onDesmatricular : onMatricular);
+  }
+
+  async function onMatricular() {
+    const st = estado.matricular;
+    const btn = document.getElementById('mat-submit');
+    btn.disabled = true; btn.textContent = 'Matriculando…';
+    try {
+      await api.post(`/admin/turmas/${turmaId}/matricular-alunos`, { aluno_ids: [...st.selected] });
+      invalidate('turmas');
+      await load();
+      renderList(container);
+      closeModal();
+      toast.success(`${st.selected.size} aluno(s) matriculado(s).`);
+    } catch (err) { toast.error(extractError(err)); btn.disabled = false; btn.textContent = `Matricular (${st.selected.size})`; }
+  }
+
+  async function onDesmatricular() {
+    const st = estado.matriculados;
+    const n = st.selected.size;
+    const ok = await confirm.show('Desmatricular Alunos', `Remover ${n} aluno(s) desta turma? O histórico de presença é mantido.`);
+    if (!ok) return;
+    const btn = document.getElementById('mat-submit');
+    btn.disabled = true; btn.textContent = 'Desmatriculando…';
+    try {
+      await api.post(`/admin/turmas/${turmaId}/desmatricular-alunos`, { aluno_ids: [...st.selected] });
+      invalidate('turmas');
+      await load();
+      renderList(container);
+      closeModal();
+      toast.success(`${n} aluno(s) desmatriculado(s).`);
+    } catch (err) { toast.error(extractError(err)); btn.disabled = false; btn.textContent = `Desmatricular (${n})`; }
   }
 
   renderMatList();
