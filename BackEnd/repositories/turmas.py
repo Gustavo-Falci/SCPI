@@ -89,6 +89,20 @@ def matricular_alunos_em_turma(turma_id, aluno_ids):
         return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
 
 
+def desmatricular_alunos_da_turma(turma_id, aluno_ids):
+    """Remove matrículas; retorna o número de linhas removidas."""
+    if not aluno_ids:
+        return 0
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return 0
+        cur.execute(
+            "DELETE FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = ANY(%s)",
+            (turma_id, list(aluno_ids)),
+        )
+        return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+
 def professor_responsavel_pela_turma(turma_id, professor_id):
     with get_db_cursor() as cur:
         if not cur:

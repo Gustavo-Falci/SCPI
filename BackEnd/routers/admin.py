@@ -42,6 +42,7 @@ from repositories.professores import (
 from repositories.turmas import (
     atribuir_professor_turma,
     criar_turma,
+    desmatricular_alunos_da_turma,
     excluir_turma_em_cascata,
     listar_alunos_da_turma,
     listar_turmas_completas,
@@ -321,6 +322,32 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos):
 
         matriculados = matricular_alunos_em_turma(turma_id, dados.aluno_ids)
         return {"mensagem": f"{matriculados} aluno(s) matriculado(s) com sucesso.", "total_enviados": len(dados.aluno_ids)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e)
+
+
+@router.post("/turmas/{turma_id}/desmatricular-alunos")
+def admin_desmatricular_alunos(
+    turma_id: str,
+    dados: MatricularAlunos,
+    current_user: dict = Depends(require_role("Admin")),
+):
+    if not dados.aluno_ids:
+        raise HTTPException(status_code=400, detail="Nenhum aluno selecionado.")
+    try:
+        if not obter_turno_turma(turma_id):
+            raise HTTPException(status_code=404, detail="Turma não encontrada.")
+        removidos = desmatricular_alunos_da_turma(turma_id, dados.aluno_ids)
+        audit_logger.info(
+            "Desmatrícula admin=%s turma=%s removidos=%s",
+            current_user.get("sub"), turma_id, removidos,
+        )
+        return {
+            "mensagem": f"{removidos} aluno(s) desmatriculado(s) com sucesso.",
+            "total_enviados": len(dados.aluno_ids),
+        }
     except HTTPException:
         raise
     except Exception as e:
