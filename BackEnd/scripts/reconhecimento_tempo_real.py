@@ -32,7 +32,7 @@ class SistemaReconhecimento:
         self.frame_atual = None
 
         self.INTERVALO_ENVIO_AWS = 1.5
-        self.CAM_INDEX = 0
+        self.CAM_INDEX = 1
 
         self.chamada_id_atual = None
         self.presentes_chamada: set = set()
