@@ -22,7 +22,7 @@ from core.auth_utils import (
     set_auth_cookies,
     verify_password,
 )
-from core.helpers import internal_error, mask_email
+from core.helpers import client_ip, internal_error, mask_email
 from core.limiter import limiter
 from core.security import get_current_user
 from repositories.alunos import obter_aluno_e_face_status
@@ -76,6 +76,9 @@ _DUMMY_PASSWORD_HASH = get_password_hash("scpi-timing-equalizer-not-a-real-passw
 @router.post("/register")
 @limiter.limit("5/minute")
 def register(request: Request, usuario: UsuarioRegistro):
+    audit_logger.warning(
+        "Tentativa de uso de endpoint desabilitado rota=/auth/register ip=%s", client_ip(request)
+    )
     raise HTTPException(
         status_code=403,
         detail="Cadastros de usuários são realizados exclusivamente pelo administrador do sistema.",
@@ -85,6 +88,10 @@ def register(request: Request, usuario: UsuarioRegistro):
 @router.post("/register-aluno-com-face")
 @limiter.limit("5/minute")
 async def register_aluno_com_face(request: Request):
+    audit_logger.warning(
+        "Tentativa de uso de endpoint desabilitado rota=/auth/register-aluno-com-face ip=%s",
+        client_ip(request),
+    )
     raise HTTPException(
         status_code=403,
         detail="Cadastros de usuários são realizados exclusivamente pelo administrador do sistema.",
@@ -294,6 +301,9 @@ def esqueci_senha(request: Request, body: EsqueciSenhaBody):
     expires_at = datetime.utcnow() + timedelta(minutes=15)
 
     substituir_codigo_reset(email, code, expires_at)
+    audit_logger.info(
+        "Código de redefinição gerado email=%s ip=%s", mask_email(email), client_ip(request)
+    )
 
     try:
         _resend.Emails.send({
@@ -328,12 +338,23 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
     row = buscar_codigo_reset_valido(email, body.codigo)
 
     if not row:
+        audit_logger.warning(
+            "Verificação de código falhou (inválido/usado) email=%s ip=%s",
+            mask_email(email), client_ip(request),
+        )
         raise HTTPException(status_code=400, detail="Código inválido ou já utilizado.")
 
     if datetime.utcnow() > row["expires_at"]:
+        audit_logger.warning(
+            "Verificação de código falhou (expirado) email=%s ip=%s",
+            mask_email(email), client_ip(request),
+        )
         raise HTTPException(status_code=400, detail="Código expirado. Solicite um novo.")
 
     marcar_codigo_reset_usado(row["id"])
+    audit_logger.info(
+        "Código de redefinição verificado email=%s ip=%s", mask_email(email), client_ip(request)
+    )
 
     reset_payload = {
         "sub": email,
@@ -345,13 +366,19 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
 
 
 @router.post("/redefinir-senha")
-def redefinir_senha(body: RedefinirSenhaBody):
+def redefinir_senha(request: Request, body: RedefinirSenhaBody):
     try:
         payload = _jwt.decode(body.reset_token, SECRET_KEY, algorithms=[ALGORITHM])
     except _jwt.InvalidTokenError:
+        audit_logger.warning(
+            "Redefinição de senha falhou (token inválido/expirado) ip=%s", client_ip(request)
+        )
         raise HTTPException(status_code=400, detail="Token inválido ou expirado.")
 
     if payload.get("type") != "password_reset":
+        audit_logger.warning(
+            "Redefinição de senha falhou (tipo de token inválido) ip=%s", client_ip(request)
+        )
         raise HTTPException(status_code=400, detail="Token inválido.")
 
     email = payload.get("sub", "").strip().lower()
@@ -366,5 +393,8 @@ def redefinir_senha(body: RedefinirSenhaBody):
 
     nova_hash = get_password_hash(body.nova_senha)
     atualizar_senha_por_email(email, nova_hash)
+    audit_logger.info(
+        "Senha redefinida via código email=%s ip=%s", mask_email(email), client_ip(request)
+    )
 
     return {"mensagem": "Senha redefinida com sucesso."}

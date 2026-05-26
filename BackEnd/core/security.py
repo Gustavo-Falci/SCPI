@@ -1,3 +1,4 @@
+import logging
 import os
 import secrets
 
@@ -5,6 +6,17 @@ from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
 from core.auth_utils import ACCESS_COOKIE_NAME, decode_access_token
+
+logger = logging.getLogger("scpi.security")
+audit_logger = logging.getLogger("scpi.audit")
+
+
+def _ip(request: Request) -> str:
+    try:
+        return request.client.host if request.client else "desconhecido"
+    except Exception:
+        return "desconhecido"
+
 
 # auto_error=False: deixa get_current_user decidir entre Bearer e cookie em vez
 # de falhar imediatamente quando o header Authorization não vem.
@@ -39,6 +51,12 @@ def get_current_user(
 
     payload = decode_access_token(raw_token)
     if not payload:
+        # Token presente mas inválido/expirado/adulterado — registra para trilha
+        # de segurança (token ausente é fluxo normal e não é logado aqui).
+        logger.info(
+            "Token rejeitado rota=%s metodo=%s origem=%s ip=%s",
+            request.url.path, request.method, auth_source, _ip(request),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido ou expirado",
@@ -51,17 +69,25 @@ def get_current_user(
 
 def require_role(*roles: str):
     """Dependency factory: exige que o usuário autenticado tenha uma das roles informadas."""
-    def _checker(current_user: dict = Depends(get_current_user)):
+    def _checker(request: Request, current_user: dict = Depends(get_current_user)):
         if current_user.get("role") not in roles:
+            audit_logger.warning(
+                "Acesso negado role=%s requerido=%s rota=%s metodo=%s usuario=%s ip=%s",
+                current_user.get("role"), ",".join(roles), request.url.path,
+                request.method, current_user.get("sub"), _ip(request),
+            )
             raise HTTPException(status_code=403, detail="Acesso negado para este perfil.")
         return current_user
     return _checker
 
 
-def require_service_token(x_service_token: str = Header(...)):
+def require_service_token(request: Request, x_service_token: str = Header(...)):
     """Valida token estático de serviço interno (câmera local)."""
     expected = os.getenv("CAMERA_SERVICE_TOKEN")
     if not expected or not secrets.compare_digest(x_service_token, expected):
+        audit_logger.warning(
+            "Token de serviço inválido rota=%s ip=%s", request.url.path, _ip(request)
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token de serviço inválido.")
 
 
@@ -73,4 +99,8 @@ def require_self_or_admin(usuario_id: str, current_user: dict) -> None:
     mas é de outro" de "recurso não existe".
     """
     if current_user.get("sub") != usuario_id and current_user.get("role") != "Admin":
+        audit_logger.warning(
+            "Acesso negado a recurso de outro titular usuario=%s alvo=%s role=%s",
+            current_user.get("sub"), usuario_id, current_user.get("role"),
+        )
         raise HTTPException(status_code=404, detail="Recurso não encontrado.")

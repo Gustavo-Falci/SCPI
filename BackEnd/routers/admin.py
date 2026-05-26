@@ -4,13 +4,13 @@ import logging
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from core.auth_utils import get_password_hash
 from core.config import BUCKET_NAME, COLLECTION_ID
 from core.csv_utils import EMAIL_REGEX, MAX_CSV_BYTES, RA_REGEX, validar_celula_csv
-from core.helpers import gerar_senha_temporaria, internal_error
+from core.helpers import audit, client_ip, gerar_senha_temporaria, internal_error
 from core.security import get_current_user, require_role
 from infra.aws_clientes import rekognition_client, s3_client
 from infra.rekognition_aws import deletar_rosto
@@ -101,7 +101,7 @@ def admin_listar_alunos_turma(turma_id: str):
 
 
 @router.post("/turmas")
-def admin_criar_turma(turma: TurmaCreate):
+def admin_criar_turma(turma: TurmaCreate, request: Request, current_user: dict = Depends(require_role("Admin"))):
     try:
         turma_id = str(uuid.uuid4())
         professor_id = turma.professor_id if turma.professor_id else None
@@ -115,27 +115,31 @@ def admin_criar_turma(turma: TurmaCreate):
             turma.turno,
             turma.semestre,
         )
+        audit("Turma criada", admin=current_user.get("sub"), turma_id=turma_id,
+              codigo=turma.codigo_turma, ip=client_ip(request))
         return {"mensagem": "Turma criada com sucesso!", "turma_id": turma_id}
     except Exception as e:
-        raise internal_error(e)
+        raise internal_error(e, "admin_criar_turma")
 
 
 @router.patch("/turmas/{turma_id}/professor")
-def admin_atribuir_professor(turma_id: str, dados: AtribuirProfessor):
+def admin_atribuir_professor(turma_id: str, dados: AtribuirProfessor, request: Request, current_user: dict = Depends(require_role("Admin"))):
     try:
         professor_id = dados.professor_id if dados.professor_id else None
         rowcount = atribuir_professor_turma(turma_id, professor_id)
         if rowcount == 0:
             raise HTTPException(status_code=404, detail="Turma não encontrada.")
+        audit("Professor atribuído à turma", admin=current_user.get("sub"),
+              turma_id=turma_id, professor_id=professor_id, ip=client_ip(request))
         return {"mensagem": "Professor atribuído com sucesso."}
     except HTTPException:
         raise
     except Exception as e:
-        raise internal_error(e)
+        raise internal_error(e, "admin_atribuir_professor")
 
 
 @router.post("/horarios")
-def admin_adicionar_horario(h: HorarioCreate):
+def admin_adicionar_horario(h: HorarioCreate, request: Request, current_user: dict = Depends(require_role("Admin"))):
     try:
         if h.horario_fim <= h.horario_inicio:
             raise HTTPException(status_code=400, detail="Horário de fim deve ser maior que o de início.")
@@ -159,24 +163,27 @@ def admin_adicionar_horario(h: HorarioCreate):
                 ),
             )
         inserir_horario(h.turma_id, h.dia_semana, h.horario_inicio, h.horario_fim, h.sala)
+        audit("Horário adicionado", admin=current_user.get("sub"), turma_id=h.turma_id,
+              dia=h.dia_semana, inicio=h.horario_inicio, fim=h.horario_fim, ip=client_ip(request))
         return {"mensagem": "Horário adicionado com sucesso!"}
     except HTTPException:
         raise
     except Exception as e:
-        raise internal_error(e)
+        raise internal_error(e, "admin_adicionar_horario")
 
 
 @router.delete("/turmas/{turma_id}")
-def admin_excluir_turma(turma_id: str):
+def admin_excluir_turma(turma_id: str, request: Request, current_user: dict = Depends(require_role("Admin"))):
     try:
         excluir_turma_em_cascata(turma_id)
+        audit("Turma excluída", admin=current_user.get("sub"), turma_id=turma_id, ip=client_ip(request))
         return {"mensagem": "Turma e dependências excluídas com sucesso!"}
     except Exception as e:
-        raise internal_error(e)
+        raise internal_error(e, "admin_excluir_turma")
 
 
 @router.patch("/alunos/{aluno_id}")
-def admin_atualizar_aluno(aluno_id: str, dados: AtualizarAlunoAdmin):
+def admin_atualizar_aluno(aluno_id: str, dados: AtualizarAlunoAdmin, request: Request, current_user: dict = Depends(require_role("Admin"))):
     try:
         if dados.email is not None:
             from repositories.usuarios import buscar_usuario_por_email
@@ -201,15 +208,16 @@ def admin_atualizar_aluno(aluno_id: str, dados: AtualizarAlunoAdmin):
         )
         if not resultado:
             raise HTTPException(status_code=404, detail="Aluno não encontrado.")
+        audit("Aluno atualizado", admin=current_user.get("sub"), aluno_id=aluno_id, ip=client_ip(request))
         return {"mensagem": "Aluno atualizado com sucesso."}
     except HTTPException:
         raise
     except Exception as e:
-        raise internal_error(e)
+        raise internal_error(e, "admin_atualizar_aluno")
 
 
 @router.delete("/alunos/{aluno_id}")
-def admin_excluir_aluno(aluno_id: str, current_user: dict = Depends(require_role("Admin"))):
+def admin_excluir_aluno(aluno_id: str, request: Request, current_user: dict = Depends(require_role("Admin"))):
     try:
         rostos = listar_rostos_ativos_por_aluno(aluno_id)
         for rosto in rostos:
@@ -227,7 +235,7 @@ def admin_excluir_aluno(aluno_id: str, current_user: dict = Depends(require_role
         if not usuario_id:
             raise HTTPException(status_code=404, detail="Aluno não encontrado")
 
-        audit_logger.info("Aluno excluído admin=%s aluno_id=%s", current_user.get("sub"), aluno_id)
+        audit("Aluno excluído", admin=current_user.get("sub"), aluno_id=aluno_id, ip=client_ip(request))
         return {"mensagem": "Aluno excluído com sucesso"}
     except HTTPException:
         raise
@@ -239,6 +247,7 @@ def admin_excluir_aluno(aluno_id: str, current_user: dict = Depends(require_role
 def admin_atualizar_professor(
     professor_id: str,
     dados: AtualizarProfessorAdmin,
+    request: Request,
     current_user: dict = Depends(require_role("Admin")),
 ):
     try:
@@ -256,7 +265,7 @@ def admin_atualizar_professor(
         )
         if not resultado:
             raise HTTPException(status_code=404, detail="Professor não encontrado.")
-        audit_logger.info("Professor atualizado admin=%s professor_id=%s", current_user.get("sub"), professor_id)
+        audit("Professor atualizado", admin=current_user.get("sub"), professor_id=professor_id, ip=client_ip(request))
         return {"mensagem": "Professor atualizado com sucesso."}
     except HTTPException:
         raise
@@ -265,16 +274,17 @@ def admin_atualizar_professor(
 
 
 @router.delete("/professores/{professor_id}")
-def admin_excluir_professor(professor_id: str):
+def admin_excluir_professor(professor_id: str, request: Request, current_user: dict = Depends(require_role("Admin"))):
     try:
         usuario_id = excluir_professor_em_cascata(professor_id)
         if not usuario_id:
             raise HTTPException(status_code=404, detail="Professor não encontrado")
+        audit("Professor excluído", admin=current_user.get("sub"), professor_id=professor_id, ip=client_ip(request))
         return {"mensagem": "Professor excluído com sucesso"}
     except HTTPException:
         raise
     except Exception as e:
-        raise internal_error(e)
+        raise internal_error(e, "admin_excluir_professor")
 
 
 @router.get("/horarios-todos")
@@ -286,12 +296,13 @@ def admin_listar_todos_horarios():
 
 
 @router.delete("/horarios/{horario_id}")
-def admin_excluir_horario(horario_id: str):
+def admin_excluir_horario(horario_id: str, request: Request, current_user: dict = Depends(require_role("Admin"))):
     try:
         excluir_horario(horario_id)
+        audit("Horário removido", admin=current_user.get("sub"), horario_id=horario_id, ip=client_ip(request))
         return {"mensagem": "Horário removido!"}
     except Exception as e:
-        raise internal_error(e)
+        raise internal_error(e, "admin_excluir_horario")
 
 
 @router.get("/alunos")
@@ -303,7 +314,7 @@ def admin_listar_alunos(turma_id: Optional[str] = None):
 
 
 @router.post("/turmas/{turma_id}/matricular-alunos")
-def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos):
+def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos, request: Request, current_user: dict = Depends(require_role("Admin"))):
     if not dados.aluno_ids:
         raise HTTPException(status_code=400, detail="Nenhum aluno selecionado.")
     try:
@@ -321,17 +332,20 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos):
                 )
 
         matriculados = matricular_alunos_em_turma(turma_id, dados.aluno_ids)
+        audit("Matrícula", admin=current_user.get("sub"), turma_id=turma_id,
+              matriculados=matriculados, enviados=len(dados.aluno_ids), ip=client_ip(request))
         return {"mensagem": f"{matriculados} aluno(s) matriculado(s) com sucesso.", "total_enviados": len(dados.aluno_ids)}
     except HTTPException:
         raise
     except Exception as e:
-        raise internal_error(e)
+        raise internal_error(e, "admin_matricular_alunos")
 
 
 @router.post("/turmas/{turma_id}/desmatricular-alunos")
 def admin_desmatricular_alunos(
     turma_id: str,
     dados: MatricularAlunos,
+    request: Request,
     current_user: dict = Depends(require_role("Admin")),
 ):
     if not dados.aluno_ids:
@@ -340,10 +354,8 @@ def admin_desmatricular_alunos(
         if not obter_turno_turma(turma_id):
             raise HTTPException(status_code=404, detail="Turma não encontrada.")
         removidos = desmatricular_alunos_da_turma(turma_id, dados.aluno_ids)
-        audit_logger.info(
-            "Desmatrícula admin=%s turma=%s removidos=%s",
-            current_user.get("sub"), turma_id, removidos,
-        )
+        audit("Desmatrícula", admin=current_user.get("sub"), turma_id=turma_id,
+              removidos=removidos, enviados=len(dados.aluno_ids), ip=client_ip(request))
         return {
             "mensagem": f"{removidos} aluno(s) desmatriculado(s) com sucesso.",
             "total_enviados": len(dados.aluno_ids),
@@ -357,6 +369,7 @@ def admin_desmatricular_alunos(
 @router.post("/turmas/{turma_id}/importar-alunos")
 async def admin_importar_alunos_csv(
     turma_id: str,
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: dict = Depends(require_role("Admin")),
@@ -421,10 +434,8 @@ async def admin_importar_alunos_csv(
                 erros.append(f"Linha {linha_num}: erro inesperado ({type(e).__name__}).")
                 logger.warning("Erro na importação CSV linha %s: %s", linha_num, e)
 
-        audit_logger.info(
-            "Importação CSV admin=%s turma=%s importados=%s emails=%s erros=%s",
-            current_user.get("sub"), turma_id, importados, emails_enviados, len(erros),
-        )
+        audit("Importação CSV alunos", admin=current_user.get("sub"), turma_id=turma_id,
+              importados=importados, emails=emails_enviados, erros=len(erros), ip=client_ip(request))
         return {
             "mensagem": f"Importação concluída: {importados} alunos matriculados.",
             "emails_enviados": emails_enviados,
@@ -438,6 +449,7 @@ async def admin_importar_alunos_csv(
 
 @router.post("/importar-professores")
 async def admin_importar_professores_csv(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: dict = Depends(require_role("Admin")),
@@ -500,10 +512,8 @@ async def admin_importar_professores_csv(
                 erros.append(f"Linha {linha_num}: erro inesperado ({type(e).__name__}).")
                 logger.warning("Erro na importação CSV professor linha %s: %s", linha_num, e)
 
-        audit_logger.info(
-            "Importação CSV professores admin=%s importados=%s duplicados=%s emails=%s erros=%s",
-            current_user.get("sub"), importados, duplicados, emails_enviados, len(erros),
-        )
+        audit("Importação CSV professores", admin=current_user.get("sub"), importados=importados,
+              duplicados=duplicados, emails=emails_enviados, erros=len(erros), ip=client_ip(request))
         return {
             "mensagem": f"Importação concluída: {importados} professor(es) cadastrado(s).",
             "duplicados": duplicados,
@@ -517,7 +527,7 @@ async def admin_importar_professores_csv(
 
 
 @router.post("/usuarios/professor")
-def admin_criar_professor(dados: CriarProfessorAdmin, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Admin"))):
+def admin_criar_professor(dados: CriarProfessorAdmin, request: Request, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Admin"))):
     email_limpo = dados.email.strip()
     try:
         if buscar_usuario_por_email(email_limpo):
@@ -532,7 +542,7 @@ def admin_criar_professor(dados: CriarProfessorAdmin, background_tasks: Backgrou
 
         background_tasks.add_task(send_email_senha_temporaria, email_limpo, dados.nome, senha_temporaria, "Professor")
 
-        audit_logger.info("Professor criado admin=%s professor_id=%s", current_user.get("sub"), professor_id)
+        audit("Professor criado", admin=current_user.get("sub"), professor_id=professor_id, ip=client_ip(request))
         return {
             "mensagem": "Professor criado com sucesso!",
             "usuario_id": usuario_id,
@@ -545,7 +555,7 @@ def admin_criar_professor(dados: CriarProfessorAdmin, background_tasks: Backgrou
 
 
 @router.post("/usuarios/aluno")
-def admin_criar_aluno(dados: CriarAlunoAdmin, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Admin"))):
+def admin_criar_aluno(dados: CriarAlunoAdmin, request: Request, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Admin"))):
     email_limpo = dados.email.strip()
     try:
         if buscar_usuario_por_email(email_limpo):
@@ -563,7 +573,7 @@ def admin_criar_aluno(dados: CriarAlunoAdmin, background_tasks: BackgroundTasks,
 
         background_tasks.add_task(send_email_senha_temporaria, email_limpo, dados.nome, senha_temporaria, "Aluno")
 
-        audit_logger.info("Aluno criado admin=%s aluno_id=%s", current_user.get("sub"), aluno_id)
+        audit("Aluno criado", admin=current_user.get("sub"), aluno_id=aluno_id, ip=client_ip(request))
         return {
             "mensagem": "Aluno criado com sucesso!",
             "usuario_id": usuario_id,
@@ -627,7 +637,7 @@ def admin_listar_rostos_s3():
 
 
 @router.delete("/rostos/rekognition/bulk")
-def admin_excluir_rostos_rekognition_bulk(payload: BulkFaceIds):
+def admin_excluir_rostos_rekognition_bulk(payload: BulkFaceIds, request: Request, current_user: dict = Depends(require_role("Admin"))):
     if rekognition_client is None:
         raise HTTPException(status_code=503, detail="Rekognition não disponível")
     if not payload.face_ids:
@@ -635,24 +645,28 @@ def admin_excluir_rostos_rekognition_bulk(payload: BulkFaceIds):
     try:
         face_ids = payload.face_ids[:4096]
         rekognition_client.delete_faces(CollectionId=COLLECTION_ID, FaceIds=face_ids)
+        audit("Rostos Rekognition removidos (bulk)", admin=current_user.get("sub"),
+              total=len(face_ids), ip=client_ip(request))
         return {"mensagem": f"{len(face_ids)} rosto(s) removido(s) com sucesso."}
     except Exception as e:
         raise internal_error(e, "admin_excluir_rostos_rekognition_bulk")
 
 
 @router.delete("/rostos/rekognition/{face_id}")
-def admin_excluir_rosto_rekognition(face_id: str):
+def admin_excluir_rosto_rekognition(face_id: str, request: Request, current_user: dict = Depends(require_role("Admin"))):
     if rekognition_client is None:
         raise HTTPException(status_code=503, detail="Rekognition não disponível")
     try:
         rekognition_client.delete_faces(CollectionId=COLLECTION_ID, FaceIds=[face_id])
+        audit("Rosto Rekognition removido", admin=current_user.get("sub"),
+              face_id=face_id, ip=client_ip(request))
         return {"mensagem": "Rosto removido com sucesso."}
     except Exception as e:
         raise internal_error(e, "admin_excluir_rosto_rekognition")
 
 
 @router.delete("/rostos/s3")
-def admin_excluir_rosto_s3(payload: S3KeyPayload):
+def admin_excluir_rosto_s3(payload: S3KeyPayload, request: Request, current_user: dict = Depends(require_role("Admin"))):
     if s3_client is None:
         raise HTTPException(status_code=503, detail="S3 não disponível")
     if not payload.key:
@@ -663,6 +677,8 @@ def admin_excluir_rosto_s3(payload: S3KeyPayload):
         raise HTTPException(status_code=400, detail="Key fora do escopo permitido.")
     try:
         s3_client.delete_object(Bucket=BUCKET_NAME, Key=payload.key)
+        audit("Objeto S3 de rosto removido", admin=current_user.get("sub"),
+              key=payload.key, ip=client_ip(request))
         return {"mensagem": "Arquivo S3 removido com sucesso."}
     except Exception as e:
         raise internal_error(e, "admin_excluir_rosto_s3")

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from pydantic import EmailStr
 
 from core.config import BUCKET_NAME
-from core.helpers import gerar_url_presigned, internal_error, validate_image_upload
+from core.helpers import client_ip, gerar_url_presigned, internal_error, validate_image_upload
 from core.limiter import limiter
 from core.security import get_current_user, require_self_or_admin
 from core.utils import formatar_nome_para_external_id
@@ -227,6 +227,10 @@ async def cadastrar_aluno_api(
         aluno_id = aluno['aluno_id']
         upsert_rosto(aluno_id, external_id, face_id, filename, angulo)
 
+        audit_logger.info(
+            "Biometria cadastrada aluno=%s angulo=%s por=%s ip=%s",
+            target_user_id, angulo, current_user.get("sub"), client_ip(request),
+        )
         return {"status": "sucesso", "face_id": face_id, "external_id": external_id, "angulo": angulo}
 
     except HTTPException:
@@ -336,6 +340,10 @@ def exportar_meus_dados(
         agora = datetime.datetime.now(tz=zoneinfo.ZoneInfo("America/Sao_Paulo"))
         dados["_schema_version"] = "1.0"
         dados["_gerado_em"] = agora.isoformat()
+
+        audit_logger.info(
+            "Export LGPD solicitado titular=%s por=%s formato=%s", usuario_id, current_user.get("sub"), formato
+        )
 
         if formato == "json":
             return dados

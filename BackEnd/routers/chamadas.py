@@ -40,6 +40,10 @@ def _assert_professor_dono_ou_admin(turma_id, current_user: dict) -> None:
         return
     professor_id = obter_professor_id(current_user.get("sub"))
     if not professor_id or not professor_responsavel_pela_turma(turma_id, professor_id):
+        audit_logger.warning(
+            "Acesso negado a turma de outro professor usuario=%s turma=%s",
+            current_user.get("sub"), turma_id,
+        )
         raise HTTPException(status_code=404, detail="Recurso não encontrado.")
 
 
@@ -85,6 +89,9 @@ def fechar_chamada(turma_id: str, background_tasks: BackgroundTasks, current_use
                 chamada["nome_disciplina"],
             )
 
+        audit_logger.info(
+            "Chamada encerrada turma=%s por=%s", turma_id, current_user.get("sub")
+        )
         return {"mensagem": "Chamada encerrada com sucesso!"}
     except HTTPException:
         raise

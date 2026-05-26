@@ -9,6 +9,31 @@ from infra.aws_clientes import s3_client
 from core.config import BUCKET_NAME
 
 logger = logging.getLogger("scpi.helpers")
+audit_logger = logging.getLogger("scpi.audit")
+
+
+def client_ip(request) -> str:
+    """IP do cliente (respeita ProxyHeadersMiddleware). 'desconhecido' se ausente."""
+    try:
+        if request is not None and request.client:
+            return request.client.host
+    except Exception:
+        pass
+    return "desconhecido"
+
+
+def audit(evento: str, **campos) -> None:
+    """Emite evento de auditoria padronizado em scpi.audit: 'evento k=v k=v'.
+
+    Use para toda ação relevante (criação/edição/exclusão, acesso a dado
+    sensível, negação de acesso). Campos None viram 'None' literal — passe só
+    o que importa para o trilho de auditoria.
+    """
+    if campos:
+        partes = " ".join(f"{k}={v}" for k, v in campos.items())
+        audit_logger.info("%s %s", evento, partes)
+    else:
+        audit_logger.info("%s", evento)
 
 # Mapeamento de constraints UNIQUE para mensagens orientadas ao usuário final.
 # Constraint name é o nome real do índice/constraint no Postgres; quando uma
