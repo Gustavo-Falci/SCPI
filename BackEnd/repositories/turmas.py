@@ -97,7 +97,7 @@ def desmatricular_alunos_da_turma(turma_id, aluno_ids):
         if not cur:
             return 0
         cur.execute(
-            "DELETE FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = ANY(%s)",
+            "DELETE FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = ANY(%s::uuid[])",
             (turma_id, list(aluno_ids)),
         )
         return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
