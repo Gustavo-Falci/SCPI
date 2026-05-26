@@ -96,6 +96,15 @@ def ensure_reset_codes_table():
                 )
                 """
             )
+            # code agora guarda HMAC-SHA256 (64 hex), não mais o código em texto.
+            cur.execute(
+                "ALTER TABLE PasswordResetCodes ALTER COLUMN code TYPE VARCHAR(64)"
+            )
+            # Contador de tentativas para lockout por conta (anti brute-force).
+            cur.execute(
+                "ALTER TABLE PasswordResetCodes "
+                "ADD COLUMN IF NOT EXISTS tentativas INT NOT NULL DEFAULT 0"
+            )
     except Exception as e:
         logger.error("Falha ao criar tabela PasswordResetCodes: %s", e)
 

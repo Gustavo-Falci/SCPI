@@ -7,6 +7,7 @@ import logging
 import os
 import secrets
 import hashlib
+import hmac
 
 import requests
 from dotenv import load_dotenv, find_dotenv
@@ -29,6 +30,11 @@ if not SECRET_KEY or len(SECRET_KEY) < 32:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+# Claims iss/aud do access token — defesa em profundidade contra reuso de um
+# token assinado com a mesma SECRET_KEY em outro contexto/serviço.
+JWT_ISSUER = "scpi-api"
+JWT_AUDIENCE = "scpi-client"
 
 ACCESS_COOKIE_NAME = "scpi_access"
 REFRESH_COOKIE_NAME = "scpi_refresh"
@@ -104,7 +110,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    to_encode.update({"exp": expire, "type": "access"})
+    to_encode.update({"exp": expire, "type": "access", "iss": JWT_ISSUER, "aud": JWT_AUDIENCE})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -122,6 +128,18 @@ def create_refresh_token() -> tuple[str, str, datetime]:
 def hash_refresh_token(token_plain: str) -> str:
     """Hash determinístico para lookup do refresh token no banco."""
     return hashlib.sha256(token_plain.encode("utf-8")).hexdigest()
+
+
+def hash_reset_code(email: str, code: str) -> str:
+    """HMAC-SHA256 do código de redefinição, com SECRET_KEY como pepper.
+
+    O código nunca é persistido em texto puro. Como o HMAC depende da
+    SECRET_KEY, um vazamento isolado do banco não permite brute-force offline
+    do espaço de 6 dígitos — o atacante precisaria também da SECRET_KEY.
+    Inclui o email no input para amarrar o código ao titular.
+    """
+    msg = f"{email.strip().lower()}:{code}".encode("utf-8")
+    return hmac.new(SECRET_KEY.encode("utf-8"), msg, hashlib.sha256).hexdigest()
 
 def senha_comprometida(senha: str) -> bool:
     """Consulta a API Have I Been Pwned (k-anonymity) para verificar vazamento.
@@ -166,9 +184,16 @@ def decode_access_token(token: str):
     SECRET_KEY — sejam aceitos em endpoints protegidos por autenticação.
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
+        )
         if payload.get("type") != "access":
             return None
         return payload
     except jwt.InvalidTokenError:
+        # Cobre assinatura/expiração inválidas e também aud/iss divergentes.
         return None

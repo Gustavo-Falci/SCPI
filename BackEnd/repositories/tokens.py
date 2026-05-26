@@ -121,20 +121,23 @@ def inserir_codigo_reset(email, code, expires_at):
         return True
 
 
-def substituir_codigo_reset(email, code, expires_at):
-    """Invalida códigos anteriores e cria novo no mesmo commit."""
+def substituir_codigo_reset(email, code_hash, expires_at):
+    """Invalida códigos anteriores e cria novo no mesmo commit.
+
+    `code_hash` é o HMAC do código (ver hash_reset_code) — nunca o texto puro.
+    """
     with get_db_cursor(commit=True) as cur:
         if not cur:
             return False
         cur.execute("UPDATE PasswordResetCodes SET used = TRUE WHERE email = %s AND used = FALSE", (email,))
         cur.execute(
             "INSERT INTO PasswordResetCodes (email, code, expires_at) VALUES (%s, %s, %s)",
-            (email, code, expires_at),
+            (email, code_hash, expires_at),
         )
         return True
 
 
-def buscar_codigo_reset_valido(email, codigo):
+def buscar_codigo_reset_valido(email, code_hash):
     with get_db_cursor() as cur:
         if not cur:
             return None
@@ -144,9 +147,40 @@ def buscar_codigo_reset_valido(email, codigo):
             WHERE email = %s AND code = %s AND used = FALSE
             ORDER BY created_at DESC LIMIT 1
             """,
-            (email, codigo),
+            (email, code_hash),
         )
         return cur.fetchone()
+
+
+def registrar_tentativa_codigo_invalida(email, max_tentativas):
+    """Incrementa o contador de tentativas do código ativo mais recente do email.
+
+    Ao atingir `max_tentativas`, invalida o código (used=TRUE) — força o titular
+    a solicitar um novo via /esqueci-senha. Protege o espaço de 6 dígitos contra
+    brute-force mesmo com rotação de IP (lockout por conta, não por IP).
+    Retorna (tentativas, bloqueado).
+    """
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return (0, False)
+        cur.execute(
+            """
+            UPDATE PasswordResetCodes
+            SET tentativas = tentativas + 1,
+                used = (tentativas + 1 >= %s)
+            WHERE id = (
+                SELECT id FROM PasswordResetCodes
+                WHERE email = %s AND used = FALSE
+                ORDER BY created_at DESC LIMIT 1
+            )
+            RETURNING tentativas, used
+            """,
+            (max_tentativas, email),
+        )
+        r = cur.fetchone()
+        if not r:
+            return (0, False)
+        return (r["tentativas"], r["used"])
 
 
 def marcar_codigo_reset_usado(codigo_id):

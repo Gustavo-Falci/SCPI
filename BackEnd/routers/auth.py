@@ -18,6 +18,7 @@ from core.auth_utils import (
     create_refresh_token,
     get_password_hash,
     hash_refresh_token,
+    hash_reset_code,
     senha_comprometida,
     set_auth_cookies,
     verify_password,
@@ -30,6 +31,7 @@ from repositories.tokens import (
     buscar_codigo_reset_valido,
     inserir_refresh_token,
     marcar_codigo_reset_usado,
+    registrar_tentativa_codigo_invalida,
     revogar_refresh_token,
     revogar_todos_refresh_tokens,
     rotacionar_refresh_token,
@@ -56,6 +58,10 @@ from schemas.auth import (
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("scpi.audit")
+
+# Tentativas de verificação de código de reset antes de invalidá-lo (lockout
+# por conta — complementa o rate-limit por IP, que sozinho é contornável).
+_MAX_TENTATIVAS_CODIGO = 5
 
 _RESEND_API_KEY = (os.getenv("RESEND_API_KEY") or "").strip()
 if not _RESEND_API_KEY:
@@ -311,7 +317,8 @@ def esqueci_senha(request: Request, body: EsqueciSenhaBody):
     code = str(secrets.randbelow(900000) + 100000)
     expires_at = datetime.utcnow() + timedelta(minutes=15)
 
-    substituir_codigo_reset(email, code, expires_at)
+    # Persiste apenas o HMAC do código; o texto puro só vai no e-mail ao titular.
+    substituir_codigo_reset(email, hash_reset_code(email, code), expires_at)
     audit_logger.info(
         "Código de redefinição gerado email=%s ip=%s", mask_email(email), client_ip(request)
     )
@@ -346,12 +353,24 @@ def esqueci_senha(request: Request, body: EsqueciSenhaBody):
 def verificar_codigo(request: Request, body: VerificarCodigoBody):
     email = body.email.strip().lower()
 
-    row = buscar_codigo_reset_valido(email, body.codigo)
+    row = buscar_codigo_reset_valido(email, hash_reset_code(email, body.codigo))
 
     if not row:
+        # Código errado/usado: incrementa tentativas do código ativo do email e
+        # bloqueia ao atingir o limite (lockout por conta).
+        tentativas, bloqueado = registrar_tentativa_codigo_invalida(email, _MAX_TENTATIVAS_CODIGO)
+        if bloqueado:
+            audit_logger.warning(
+                "Código de reset bloqueado por excesso de tentativas email=%s ip=%s",
+                mask_email(email), client_ip(request),
+            )
+            raise HTTPException(
+                status_code=429,
+                detail="Muitas tentativas. Solicite um novo código de redefinição.",
+            )
         audit_logger.warning(
-            "Verificação de código falhou (inválido/usado) email=%s ip=%s",
-            mask_email(email), client_ip(request),
+            "Verificação de código falhou (inválido/usado) email=%s tentativas=%s ip=%s",
+            mask_email(email), tentativas, client_ip(request),
         )
         raise HTTPException(status_code=400, detail="Código inválido ou já utilizado.")
 
