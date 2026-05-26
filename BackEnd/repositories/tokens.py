@@ -31,8 +31,20 @@ def rotacionar_refresh_token(token_hash_antigo, token_hash_novo, expires_at_novo
             (token_hash_antigo,),
         )
         row = cur.fetchone()
-        if not row or row.get("revoked_at") is not None:
+        if not row:
             return {"_status": "invalid"}
+
+        if row.get("revoked_at") is not None:
+            # Token já revogado sendo reapresentado = sinal de roubo/replay
+            # (RFC 9700 §4.13.2). Revoga TODA a família de refresh tokens ativos
+            # do usuário — derruba tanto o atacante quanto a sessão legítima,
+            # forçando novo login. O caller deve auditar e responder 401.
+            cur.execute(
+                "UPDATE RefreshTokens SET revoked_at = CURRENT_TIMESTAMP "
+                "WHERE usuario_id = %s AND revoked_at IS NULL",
+                (row["usuario_id"],),
+            )
+            return {"_status": "reuse", "usuario_id": row["usuario_id"]}
 
         import datetime as _dt
         if row["expires_at"] < _dt.datetime.utcnow():
@@ -60,6 +72,24 @@ def revogar_refresh_token(token_hash, usuario_id):
             WHERE token_hash = %s AND usuario_id = %s AND revoked_at IS NULL
             """,
             (token_hash, usuario_id),
+        )
+        return cur.rowcount
+
+
+def revogar_todos_refresh_tokens(usuario_id):
+    """Revoga todos os refresh tokens ativos de um usuário (logout global).
+
+    Usado em troca/redefinição de senha — invalida sessões em todos os
+    dispositivos, fechando a janela de 7 dias em que um token roubado
+    continuaria válido após a vítima trocar a senha (ASVS 3.3.3).
+    """
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return 0
+        cur.execute(
+            "UPDATE RefreshTokens SET revoked_at = CURRENT_TIMESTAMP "
+            "WHERE usuario_id = %s AND revoked_at IS NULL",
+            (str(usuario_id),),
         )
         return cur.rowcount
 

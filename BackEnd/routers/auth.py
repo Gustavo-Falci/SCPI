@@ -31,6 +31,7 @@ from repositories.tokens import (
     inserir_refresh_token,
     marcar_codigo_reset_usado,
     revogar_refresh_token,
+    revogar_todos_refresh_tokens,
     rotacionar_refresh_token,
     substituir_codigo_reset,
 )
@@ -182,6 +183,14 @@ def refresh_access_token(
         result = rotacionar_refresh_token(token_hash, new_hash, new_exp)
         if not result or result.get("_status") == "invalid":
             raise HTTPException(status_code=401, detail="Refresh token inválido.")
+        if result.get("_status") == "reuse":
+            # Detecção de reuso: família já foi revogada no repositório. Audita e
+            # força novo login em todos os dispositivos.
+            audit_logger.warning(
+                "Reuso de refresh token detectado — todas as sessões revogadas usuario=%s ip=%s",
+                result.get("usuario_id"), client_ip(request),
+            )
+            raise HTTPException(status_code=401, detail="Sessão inválida. Faça login novamente.")
         if result.get("_status") == "expired":
             raise HTTPException(status_code=401, detail="Refresh token expirado.")
 
@@ -251,7 +260,8 @@ def alterar_senha(body: AlterarSenhaBody, current_user: dict = Depends(get_curre
 
         nova_hash = get_password_hash(body.nova_senha)
         atualizar_senha_por_usuario_id(usuario_id, nova_hash)
-        audit_logger.info("Senha alterada usuario=%s", usuario_id)
+        revogados = revogar_todos_refresh_tokens(usuario_id)
+        audit_logger.info("Senha alterada usuario=%s sessoes_revogadas=%s", usuario_id, revogados)
         return {"mensagem": "Senha alterada com sucesso."}
     except HTTPException:
         raise
@@ -277,7 +287,8 @@ def alterar_senha_primeiro_acesso(body: PrimeiroAcessoSenhaBody, current_user: d
 
         nova_hash = get_password_hash(body.nova_senha)
         atualizar_senha_por_usuario_id(usuario_id, nova_hash)
-        audit_logger.info("Senha primeiro acesso alterada usuario=%s", usuario_id)
+        revogados = revogar_todos_refresh_tokens(usuario_id)
+        audit_logger.info("Senha primeiro acesso alterada usuario=%s sessoes_revogadas=%s", usuario_id, revogados)
         return {"mensagem": "Senha alterada com sucesso."}
     except HTTPException:
         raise
@@ -393,8 +404,16 @@ def redefinir_senha(request: Request, body: RedefinirSenhaBody):
 
     nova_hash = get_password_hash(body.nova_senha)
     atualizar_senha_por_email(email, nova_hash)
+
+    # Recuperação de conta: derruba todas as sessões existentes (o atacante que
+    # motivou o reset não deve manter refresh token válido).
+    revogados = 0
+    user = buscar_usuario_id_por_email_lower(email)
+    if user and user.get("usuario_id"):
+        revogados = revogar_todos_refresh_tokens(user["usuario_id"])
     audit_logger.info(
-        "Senha redefinida via código email=%s ip=%s", mask_email(email), client_ip(request)
+        "Senha redefinida via código email=%s sessoes_revogadas=%s ip=%s",
+        mask_email(email), revogados, client_ip(request),
     )
 
     return {"mensagem": "Senha redefinida com sucesso."}
