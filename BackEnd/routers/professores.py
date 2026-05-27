@@ -29,9 +29,23 @@ def get_dashboard(usuario_id: str, current_user: dict = Depends(get_current_user
         else:
             estatisticas = {"total": 0, "presentes": 0, "parciais": 0, "ausentes": 0, "disciplina": "Nenhuma chamada recente"}
 
+        ca_id = row.get("aberta_chamada_id") if row else None
+        chamada_ativa = None
+        if ca_id:
+            chamada_ativa = {
+                "chamada_id": ca_id,
+                "turma_id": row.get("aberta_turma_id"),
+                "turma_nome": row.get("aberta_turma_nome"),
+            }
+
         dia_hoje = datetime.datetime.now(zoneinfo.ZoneInfo("America/Sao_Paulo")).weekday()
         aulas_hoje = listar_aulas_hoje_por_professor(usuario_id, dia_hoje)
 
-        return {"nome": nome, "estatisticas": estatisticas, "aulas_hoje": aulas_hoje}
+        return {
+            "nome": nome,
+            "estatisticas": estatisticas,
+            "aulas_hoje": aulas_hoje,
+            "chamada_ativa": chamada_ativa,
+        }
     except Exception as e:
         raise internal_error(e)

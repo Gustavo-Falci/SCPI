@@ -7,6 +7,8 @@ import {
   View,
   ActivityIndicator,
   StatusBar,
+  Alert,
+  BackHandler,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,6 +34,7 @@ export default function RevisarChamada() {
   const [saving, setSaving] = useState(false);
   const [totalAulas, setTotalAulas] = useState(1);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     carregarAlunos();
@@ -59,6 +62,7 @@ export default function RevisarChamada() {
   };
 
   const toggleCard = (alunoId: string) => {
+    setDirty(true);
     setAlunos((prev) =>
       prev.map((a) => {
         if (a.id !== alunoId) return a;
@@ -72,6 +76,7 @@ export default function RevisarChamada() {
   };
 
   const toggleAula = (alunoId: string, aulaIdx: number) => {
+    setDirty(true);
     setAlunos((prev) =>
       prev.map((a) => {
         if (a.id !== alunoId) return a;
@@ -81,6 +86,32 @@ export default function RevisarChamada() {
       })
     );
   };
+
+  const confirmLeave = (action: () => void) => {
+    if (dirty) {
+      Alert.alert(
+        "Descartar ajustes?",
+        "Você alterou presenças sem salvar.",
+        [
+          { text: "Continuar editando", style: "cancel" },
+          { text: "Descartar", style: "destructive", onPress: action },
+        ]
+      );
+    } else {
+      action();
+    }
+  };
+
+  const handleBack = () => confirmLeave(() => router.replace("/professor/home"));
+  const handleMenuNavigate = (route: string) => confirmLeave(() => router.replace(route as any));
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [dirty]);
 
   const totalPresencas = alunos.filter((a) => a.aulasPresentes.every(Boolean)).length;
   const totalFaltas = alunos.filter((a) => a.aulasPresentes.every((v) => !v)).length;
@@ -141,7 +172,7 @@ export default function RevisarChamada() {
 
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={styles.backBtn}
           activeOpacity={0.7}
           accessibilityRole="button"
@@ -303,7 +334,7 @@ export default function RevisarChamada() {
         <View style={{ height: 148 }} />
       </ScrollView>
 
-      <FloatingMenu items={menuItems} />
+      <FloatingMenu items={menuItems} onNavigate={handleMenuNavigate} />
     </SafeAreaView>
   );
 }

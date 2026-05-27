@@ -90,7 +90,34 @@ export default function HomeProfessor() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <TouchableOpacity 
+        {data?.chamada_ativa && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.resumeBanner}
+            onPress={() =>
+              router.push({
+                pathname: "/professor/lista-presencas",
+                params: {
+                  turma_id: String(data.chamada_ativa.turma_id),
+                  turma_nome: String(data.chamada_ativa.turma_nome),
+                },
+              })
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Retomar chamada em andamento"
+          >
+            <View style={styles.resumeDot} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.resumeTitle}>Chamada em andamento</Text>
+              <Text style={styles.resumeSub} numberOfLines={1}>
+                {data.chamada_ativa.turma_nome} — toque para retomar
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward" size={20} color="#fff" />
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
           activeOpacity={0.9}
           onPress={() => router.push("/professor/iniciar-chamada")}
         >
@@ -257,4 +284,21 @@ const styles = StyleSheet.create({
     borderRadius: 24, borderStyle: "dashed", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
   },
   emptyText: { color: Colors.brand.textSecondary, marginTop: 12, fontSize: 14 },
+  resumeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#22C55E",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  resumeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#fff",
+  },
+  resumeTitle: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  resumeSub: { color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 2 },
 });

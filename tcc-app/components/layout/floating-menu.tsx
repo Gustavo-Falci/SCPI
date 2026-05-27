@@ -22,9 +22,13 @@ interface MenuItem {
 
 interface FloatingMenuProps {
   items: MenuItem[];
+  /** Optional navigation interceptor. When provided, it is called with the
+   *  target route instead of navigating directly — lets a screen confirm
+   *  (e.g. discard unsaved edits) before leaving. */
+  onNavigate?: (route: string) => void;
 }
 
-export const FloatingMenu = ({ items }: FloatingMenuProps) => {
+export const FloatingMenu = ({ items, onNavigate }: FloatingMenuProps) => {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -43,7 +47,7 @@ export const FloatingMenu = ({ items }: FloatingMenuProps) => {
               accessibilityRole="button"
               accessibilityLabel={item.label}
               accessibilityState={{ selected: isActive }}
-              onPress={() => router.push(item.route as any)}
+              onPress={() => (onNavigate ? onNavigate(item.route) : router.push(item.route as any))}
             >
               <Ionicons
                 name={isActive ? item.activeIcon : item.icon}
