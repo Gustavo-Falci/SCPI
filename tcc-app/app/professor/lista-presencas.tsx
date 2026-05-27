@@ -26,6 +26,8 @@ export default function ListaPresenca() {
   const [loading, setLoading] = useState(true);
   const [statusChamada, setStatusChamada] = useState<any>(null);
   const [alunos, setAlunos] = useState<any[]>([]);
+  const [lastChamadaId, setLastChamadaId] = useState<string | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -47,12 +49,16 @@ export default function ListaPresenca() {
       setStatusChamada(statusResp);
 
       if (statusResp.status === "Aberta") {
+        setLastChamadaId(String(statusResp.chamada_id));
         try {
           const listResp = await apiGet(`/chamadas/${statusResp.chamada_id}/alunos`);
           if (listResp && listResp.alunos) setAlunos(listResp.alunos);
         } catch (e) {
           console.log("Erro ao buscar alunos", e);
         }
+      } else if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     } catch (err: any) {
       console.error("Erro ao carregar status:", err);
@@ -63,8 +69,10 @@ export default function ListaPresenca() {
 
   useEffect(() => {
     carregarStatus();
-    const intervalId = setInterval(carregarStatus, 3000);
-    return () => clearInterval(intervalId);
+    intervalRef.current = setInterval(carregarStatus, 3000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [turma_id]);
 
   const [encerrandoChamada, setEncerrandoChamada] = useState(false);
@@ -74,7 +82,7 @@ export default function ListaPresenca() {
     try {
       setEncerrandoChamada(true);
       await apiPost(`/chamadas/fechar/${turma_id}`, {});
-      router.push({
+      router.replace({
         pathname: "/professor/revisar-chamada",
         params: {
           chamada_id: String(statusChamada.chamada_id),
@@ -89,6 +97,18 @@ export default function ListaPresenca() {
     }
   };
 
+  const irParaRevisao = () => {
+    if (!lastChamadaId) return;
+    router.replace({
+      pathname: "/professor/revisar-chamada",
+      params: {
+        chamada_id: String(lastChamadaId),
+        turma_id: String(turma_id),
+        turma_nome: String(turma_nome),
+      },
+    });
+  };
+
   const menuItems: any[] = [
     { icon: 'home-outline', activeIcon: 'home', route: '/professor/home', label: 'Início' },
     { icon: 'clipboard-outline', activeIcon: 'clipboard', route: '/professor/turmas', label: 'Turmas' },
@@ -97,6 +117,7 @@ export default function ListaPresenca() {
   ];
 
   const isAberta = statusChamada?.status === "Aberta";
+  const isFechada = !!statusChamada && statusChamada.status !== "Aberta";
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -180,6 +201,18 @@ export default function ListaPresenca() {
                   <Text style={styles.closeCallText}>Encerrar Chamada</Text>
                 </>
               )}
+            </TouchableOpacity>
+          )}
+          {isFechada && lastChamadaId && (
+            <TouchableOpacity
+              style={styles.reviewBtn}
+              onPress={irParaRevisao}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Revisar chamada encerrada"
+            >
+              <Ionicons name="create-outline" size={20} color="#fff" />
+              <Text style={styles.closeCallText}>Revisar Chamada</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -331,6 +364,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   closeCallText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+
+  reviewBtn: {
+    backgroundColor: Colors.brand.primary,
+    height: 52,
+    borderRadius: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
 
   sectionHeader: {
     flexDirection: "row",

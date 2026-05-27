@@ -36,7 +36,13 @@ def get_turmas(usuario_id: str, current_user: dict = Depends(get_current_user)):
                     "codigo_turma": row['codigo_turma'],
                     "pode_iniciar": False,
                     "proximo_horario": "Sem horário definido",
+                    "chamada_aberta": False,
+                    "chamada_id": None,
                 }
+
+            if row.get('chamada_aberta_id') is not None:
+                turmas_dict[t_id]["chamada_aberta"] = True
+                turmas_dict[t_id]["chamada_id"] = row['chamada_aberta_id']
 
             if row['dia_semana'] == dia_semana:
                 happening_now = row['horario_inicio'] <= hora_atual <= row['horario_fim']

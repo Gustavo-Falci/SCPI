@@ -141,9 +141,15 @@ def listar_turmas_com_horarios_por_professor(usuario_id):
                 t.codigo_turma,
                 h.dia_semana,
                 h.horario_inicio,
-                h.horario_fim
+                h.horario_fim,
+                ca.chamada_id AS chamada_aberta_id
             FROM Turmas t
             LEFT JOIN horarios_aulas h ON t.turma_id = h.turma_id
+            LEFT JOIN LATERAL (
+                SELECT chamada_id FROM Chamadas
+                WHERE turma_id = t.turma_id AND status = 'Aberta'
+                ORDER BY data_criacao DESC LIMIT 1
+            ) ca ON TRUE
             WHERE t.professor_id = (SELECT professor_id FROM Professores WHERE usuario_id = %s)
             """,
             (usuario_id,),

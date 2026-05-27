@@ -71,6 +71,13 @@ export default function IniciarChamada() {
     }
   };
 
+  const handleRetomar = (turmaId: string, nomeTurma: string) => {
+    router.replace({
+      pathname: "/professor/lista-presencas",
+      params: { turma_id: turmaId, turma_nome: nomeTurma },
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" />
@@ -110,16 +117,20 @@ export default function IniciarChamada() {
           turmas.map((t: any) => {
             const isOpening = openingTurmaId === t.turma_id;
             const anyOpening = openingTurmaId !== null;
-            const disabled = !t.pode_iniciar || anyOpening;
+            const disabled = t.chamada_aberta ? anyOpening : (!t.pode_iniciar || anyOpening);
             return (
               <TouchableOpacity
                 key={t.turma_id}
-                style={[styles.card, !t.pode_iniciar && styles.cardDisabled, anyOpening && !isOpening && { opacity: 0.5 }]}
-                onPress={() => handleAbrirChamada(t.turma_id, t.nome_disciplina, t.pode_iniciar)}
-                activeOpacity={t.pode_iniciar ? 0.7 : 1}
+                style={[styles.card, !t.pode_iniciar && !t.chamada_aberta && styles.cardDisabled, anyOpening && !isOpening && { opacity: 0.5 }]}
+                onPress={() =>
+                  t.chamada_aberta
+                    ? handleRetomar(t.turma_id, t.nome_disciplina)
+                    : handleAbrirChamada(t.turma_id, t.nome_disciplina, t.pode_iniciar)
+                }
+                activeOpacity={t.pode_iniciar || t.chamada_aberta ? 0.7 : 1}
                 disabled={disabled}
                 accessibilityRole="button"
-                accessibilityLabel={`${t.pode_iniciar ? 'Iniciar' : 'Bloqueada'} chamada de ${t.nome_disciplina}`}
+                accessibilityLabel={`${t.chamada_aberta ? 'Retomar' : t.pode_iniciar ? 'Iniciar' : 'Bloqueada'} chamada de ${t.nome_disciplina}`}
                 accessibilityState={{ disabled, busy: isOpening }}
               >
                 <View style={[styles.iconCircle, !t.pode_iniciar && styles.iconCircleDisabled]}>
@@ -137,6 +148,10 @@ export default function IniciarChamada() {
 
                 {isOpening ? (
                   <ActivityIndicator size="small" color={Colors.brand.primary} />
+                ) : t.chamada_aberta ? (
+                  <View style={styles.liveBadge}>
+                    <Text style={styles.liveText}>Em andamento</Text>
+                  </View>
                 ) : t.pode_iniciar ? (
                   <Ionicons name="play-circle" size={32} color={Colors.brand.primary} />
                 ) : (
@@ -187,6 +202,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
+  },
+  liveBadge: {
+    backgroundColor: "rgba(34, 197, 94, 0.85)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  liveText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
   },
   emptyContainer: {
     alignItems: 'center',

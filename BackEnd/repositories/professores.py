@@ -67,6 +67,14 @@ def obter_dashboard_professor(usuario_id):
                 JOIN Professores p ON c.professor_id = p.professor_id
                 WHERE p.usuario_id = %s
                 ORDER BY c.data_criacao DESC LIMIT 1
+            ),
+            chamada_aberta AS (
+                SELECT c.chamada_id, c.turma_id, t.nome_disciplina
+                FROM Chamadas c
+                JOIN Professores p ON c.professor_id = p.professor_id
+                JOIN Turmas t ON t.turma_id = c.turma_id
+                WHERE p.usuario_id = %s AND c.status = 'Aberta'
+                ORDER BY c.data_criacao DESC LIMIT 1
             )
             SELECT
                 u.nome AS prof_nome,
@@ -74,6 +82,9 @@ def obter_dashboard_professor(usuario_id):
                 lc.turma_id,
                 lc.total_aulas,
                 t.nome_disciplina,
+                ca.chamada_id     AS aberta_chamada_id,
+                ca.turma_id       AS aberta_turma_id,
+                ca.nome_disciplina AS aberta_turma_nome,
                 (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = lc.turma_id) AS total,
                 (SELECT COUNT(*)
                  FROM Turma_Alunos ta
@@ -89,10 +100,11 @@ def obter_dashboard_professor(usuario_id):
                  WHERE ta.turma_id = lc.turma_id AND COALESCE(pc.cnt, 0) = 0) AS ausentes
             FROM Usuarios u
             LEFT JOIN last_chamada lc ON TRUE
+            LEFT JOIN chamada_aberta ca ON TRUE
             LEFT JOIN Turmas t ON t.turma_id = lc.turma_id
             WHERE u.usuario_id = %s
             """,
-            (usuario_id, usuario_id),
+            (usuario_id, usuario_id, usuario_id),
         )
         return cur.fetchone()
 
