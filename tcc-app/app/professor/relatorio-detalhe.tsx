@@ -174,7 +174,7 @@ export default function RelatorioDetalhe() {
                   <Text style={styles.studentName} numberOfLines={1}>
                     {a.nome}
                   </Text>
-                  <Text style={[styles.studentRa, { marginTop: 2 }]}>RA {a.ra}</Text>
+                  <Text style={[styles.studentRa, { marginTop: 2 }]}>RA/CPF {a.ra}</Text>
                 </View>
 
                 <View style={{ alignItems: "flex-end", gap: 4 }}>
