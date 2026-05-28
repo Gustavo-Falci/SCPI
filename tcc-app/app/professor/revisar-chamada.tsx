@@ -22,7 +22,7 @@ import { useErrorToast } from "../../hooks/useErrorToast";
 type Aluno = {
   id: string;
   nome: string;
-  aulasPresentes: boolean[]; // índice 0 = Aula 1, comprimento = totalAulas
+  aulasPresentes: boolean[]; 
 };
 
 export default function RevisarChamada() {

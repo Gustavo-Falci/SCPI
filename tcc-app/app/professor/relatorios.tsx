@@ -540,8 +540,8 @@ const styles = StyleSheet.create({
   },
   filterBadgeText: { color: "#fff", fontSize: 12, fontWeight: "800" },
 
-  chipsRow: { maxHeight: 44, marginBottom: 4 },
-  chipsContent: { paddingHorizontal: 24, gap: 8, alignItems: "center" },
+  chipsRow: { flexGrow: 0, flexShrink: 0, marginBottom: 4 },
+  chipsContent: { paddingHorizontal: 24, gap: 8, alignItems: "center", paddingVertical: 4 },
   activeChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -552,8 +552,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     gap: 6,
     maxWidth: 220,
+    flexShrink: 0,
+    minHeight: 32,
   },
-  activeChipText: { color: Colors.brand.text, fontSize: 13, fontWeight: "600" },
+  activeChipText: { color: Colors.brand.text, fontSize: 13, fontWeight: "600", flexShrink: 1 },
 
   scrollContent: { paddingHorizontal: 24, paddingTop: 4 },
   card: {
