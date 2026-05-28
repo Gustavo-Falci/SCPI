@@ -7,24 +7,98 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StatusBar,
+  Modal,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { apiGet } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 
+type Filtros = {
+  dataInicio?: string; // YYYY-MM-DD
+  dataFim?: string; // YYYY-MM-DD
+  turmaId?: string;
+  turno?: "Matutino" | "Noturno";
+  semestre?: string;
+};
+
+type TurmaOpcao = { turma_id: string; nome_disciplina: string; codigo_turma: string };
+type Opcoes = { turmas: TurmaOpcao[]; turnos: string[]; semestres: string[] };
+
+function fmtISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function fmtBR(iso?: string): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function buildQuery(f: Filtros): string {
+  const p = new URLSearchParams();
+  if (f.dataInicio) p.append("data_inicio", f.dataInicio);
+  if (f.dataFim) p.append("data_fim", f.dataFim);
+  if (f.turmaId) p.append("turma_id", f.turmaId);
+  if (f.turno) p.append("turno", f.turno);
+  if (f.semestre) p.append("semestre", f.semestre);
+  const qs = p.toString();
+  return qs ? `?${qs}` : "";
+}
+
+function contarAtivos(f: Filtros): number {
+  let n = 0;
+  if (f.dataInicio || f.dataFim) n++;
+  if (f.turmaId) n++;
+  if (f.turno) n++;
+  if (f.semestre) n++;
+  return n;
+}
+
+type Preset = "hoje" | "7dias" | "30dias" | "mes";
+
+function calcPreset(p: Preset): { dataInicio: string; dataFim: string } {
+  const hoje = new Date();
+  const fim = fmtISO(hoje);
+  if (p === "hoje") return { dataInicio: fim, dataFim: fim };
+  if (p === "7dias") {
+    const ini = new Date(hoje);
+    ini.setDate(hoje.getDate() - 6);
+    return { dataInicio: fmtISO(ini), dataFim: fim };
+  }
+  if (p === "30dias") {
+    const ini = new Date(hoje);
+    ini.setDate(hoje.getDate() - 29);
+    return { dataInicio: fmtISO(ini), dataFim: fim };
+  }
+  // mes
+  const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  return { dataInicio: fmtISO(ini), dataFim: fim };
+}
+
 export default function Relatorios() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [chamadas, setChamadas] = useState<any[]>([]);
+  const [opcoes, setOpcoes] = useState<Opcoes>({ turmas: [], turnos: [], semestres: [] });
 
-  const loadRelatorios = async () => {
+  const [filtros, setFiltros] = useState<Filtros>({});
+  const [painelAberto, setPainelAberto] = useState(false);
+  const [rascunho, setRascunho] = useState<Filtros>({});
+  const [pickerAlvo, setPickerAlvo] = useState<null | "inicio" | "fim">(null);
+
+  const loadRelatorios = async (f: Filtros) => {
     setLoading(true);
     try {
-      const data = await apiGet("/professor/relatorios/chamadas");
+      const data = await apiGet(`/professor/relatorios/chamadas${buildQuery(f)}`);
       setChamadas(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Erro ao carregar relatórios:", err);
@@ -33,11 +107,86 @@ export default function Relatorios() {
     }
   };
 
+  const loadOpcoes = async () => {
+    try {
+      const data = await apiGet("/professor/relatorios/filtros");
+      setOpcoes({
+        turmas: data?.turmas ?? [],
+        turnos: data?.turnos ?? [],
+        semestres: data?.semestres ?? [],
+      });
+    } catch (err) {
+      console.error("Erro ao carregar opções de filtro:", err);
+    }
+  };
+
+  // Recarrega opções a cada foco da tela.
   useFocusEffect(
     useCallback(() => {
-      loadRelatorios();
+      loadOpcoes();
     }, [])
   );
+
+  // Recarrega a lista ao focar a tela e sempre que os filtros mudam
+  // (preserva o refresh-no-foco: chamadas recém-encerradas aparecem ao voltar).
+  useFocusEffect(
+    useCallback(() => {
+      loadRelatorios(filtros);
+    }, [filtros])
+  );
+
+  const abrirPainel = () => {
+    setRascunho(filtros);
+    setPainelAberto(true);
+  };
+
+  const aplicar = () => {
+    setFiltros(rascunho);
+    setPainelAberto(false);
+  };
+
+  const limpar = () => setRascunho({});
+
+  const removerChip = (chave: "periodo" | "turma" | "turno" | "semestre") => {
+    const next: Filtros = { ...filtros };
+    if (chave === "periodo") {
+      delete next.dataInicio;
+      delete next.dataFim;
+    } else if (chave === "turma") {
+      delete next.turmaId;
+    } else if (chave === "turno") {
+      delete next.turno;
+    } else if (chave === "semestre") {
+      delete next.semestre;
+    }
+    setFiltros(next);
+  };
+
+  const aplicarPreset = (p: Preset) => {
+    const { dataInicio, dataFim } = calcPreset(p);
+    setRascunho((r) => ({ ...r, dataInicio, dataFim }));
+  };
+
+  const onPickerChange = (_event: any, selected?: Date) => {
+    const alvo = pickerAlvo;
+    setPickerAlvo(null);
+    if (!selected || !alvo) return;
+    const iso = fmtISO(selected);
+    setRascunho((r) => (alvo === "inicio" ? { ...r, dataInicio: iso } : { ...r, dataFim: iso }));
+  };
+
+  const ativos = contarAtivos(filtros);
+  const turmaSelecionada = opcoes.turmas.find((t) => t.turma_id === filtros.turmaId);
+  const periodoLabel =
+    filtros.dataInicio && filtros.dataFim
+      ? filtros.dataInicio === filtros.dataFim
+        ? fmtBR(filtros.dataInicio)
+        : `${fmtBR(filtros.dataInicio)} – ${fmtBR(filtros.dataFim)}`
+      : filtros.dataInicio
+        ? `A partir de ${fmtBR(filtros.dataInicio)}`
+        : filtros.dataFim
+          ? `Até ${fmtBR(filtros.dataFim)}`
+          : "";
 
   const menuItems: any[] = [
     { icon: "home-outline", activeIcon: "home", route: "/professor/home", label: "Início" },
@@ -55,22 +204,67 @@ export default function Relatorios() {
         <Text style={styles.headerSubtitle}>Histórico imutável de chamadas realizadas</Text>
       </View>
 
+      <View style={styles.filterBar}>
+        <TouchableOpacity
+          style={styles.filterButton}
+          onPress={abrirPainel}
+          accessibilityRole="button"
+          accessibilityLabel="Abrir filtros"
+        >
+          <Ionicons name="filter" size={18} color={Colors.brand.text} />
+          <Text style={styles.filterButtonText}>Filtros</Text>
+          {ativos > 0 && (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>{ativos}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {ativos > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipsRow}
+          contentContainerStyle={styles.chipsContent}
+        >
+          {periodoLabel ? (
+            <ActiveChip label={periodoLabel} onRemove={() => removerChip("periodo")} />
+          ) : null}
+          {turmaSelecionada ? (
+            <ActiveChip label={turmaSelecionada.nome_disciplina} onRemove={() => removerChip("turma")} />
+          ) : null}
+          {filtros.turno ? (
+            <ActiveChip label={filtros.turno} onRemove={() => removerChip("turno")} />
+          ) : null}
+          {filtros.semestre ? (
+            <ActiveChip label={filtros.semestre} onRemove={() => removerChip("semestre")} />
+          ) : null}
+        </ScrollView>
+      )}
+
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.brand.primary} />
         </View>
       ) : (
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {chamadas.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="document-text-outline" size={48} color={Colors.brand.textSecondary} />
-              <Text style={styles.emptyTitle}>Nenhuma chamada realizada</Text>
-              <Text style={styles.emptyText}>
-                Suas chamadas encerradas aparecerão aqui.
+              <Text style={styles.emptyTitle}>
+                {ativos > 0 ? "Nenhum relatório com esses filtros" : "Nenhuma chamada realizada"}
               </Text>
+              <Text style={styles.emptyText}>
+                {ativos > 0
+                  ? "Ajuste ou limpe os filtros para ver mais resultados."
+                  : "Suas chamadas encerradas aparecerão aqui."}
+              </Text>
+              {ativos > 0 && (
+                <TouchableOpacity style={styles.clearInline} onPress={() => setFiltros({})}>
+                  <Text style={styles.clearInlineText}>Limpar filtros</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             chamadas.map((c) => (
@@ -104,19 +298,14 @@ export default function Relatorios() {
                       styles.percentBadge,
                       {
                         backgroundColor:
-                          c.percentual >= 75
-                            ? "rgba(34,197,94,0.12)"
-                            : "rgba(255,75,75,0.12)",
+                          c.percentual >= 75 ? "rgba(34,197,94,0.12)" : "rgba(255,75,75,0.12)",
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.percentText,
-                        {
-                          color:
-                            c.percentual >= 75 ? "#22C55E" : Colors.brand.error,
-                        },
+                        { color: c.percentual >= 75 ? "#22C55E" : Colors.brand.error },
                       ]}
                     >
                       {c.percentual}%
@@ -131,23 +320,17 @@ export default function Relatorios() {
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
-                    <Text style={[styles.statValue, { color: "#22C55E" }]}>
-                      {c.presentes_alunos}
-                    </Text>
+                    <Text style={[styles.statValue, { color: "#22C55E" }]}>{c.presentes_alunos}</Text>
                     <Text style={styles.statLabel}>Presentes</Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
-                    <Text style={[styles.statValue, { color: Colors.brand.error }]}>
-                      {c.ausentes_alunos}
-                    </Text>
+                    <Text style={[styles.statValue, { color: Colors.brand.error }]}>{c.ausentes_alunos}</Text>
                     <Text style={styles.statLabel}>Ausentes</Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
-                    <Text style={[styles.statValue, { color: "#F59E0B" }]}>
-                      {c.parciais_alunos}
-                    </Text>
+                    <Text style={[styles.statValue, { color: "#F59E0B" }]}>{c.parciais_alunos}</Text>
                     <Text style={styles.statLabel}>Parciais</Text>
                   </View>
                   <Ionicons
@@ -164,21 +347,214 @@ export default function Relatorios() {
         </ScrollView>
       )}
 
+      <Modal
+        visible={painelAberto}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPainelAberto(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filtros</Text>
+              <TouchableOpacity onPress={() => setPainelAberto(false)} accessibilityLabel="Fechar filtros">
+                <Ionicons name="close" size={24} color={Colors.brand.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.sectionLabel}>Período</Text>
+              <View style={styles.chipWrap}>
+                {([
+                  ["hoje", "Hoje"],
+                  ["7dias", "7 dias"],
+                  ["30dias", "30 dias"],
+                  ["mes", "Este mês"],
+                ] as [Preset, string][]).map(([key, label]) => (
+                  <TouchableOpacity key={key} style={styles.choiceChip} onPress={() => aplicarPreset(key)}>
+                    <Text style={styles.choiceChipText}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.dateRow}>
+                <TouchableOpacity style={styles.dateField} onPress={() => setPickerAlvo("inicio")}>
+                  <Text style={styles.dateFieldLabel}>De</Text>
+                  <Text style={styles.dateFieldValue}>{fmtBR(rascunho.dataInicio) || "—"}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.dateField} onPress={() => setPickerAlvo("fim")}>
+                  <Text style={styles.dateFieldLabel}>Até</Text>
+                  <Text style={styles.dateFieldValue}>{fmtBR(rascunho.dataFim) || "—"}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {opcoes.turmas.length > 0 && (
+                <>
+                  <Text style={styles.sectionLabel}>Turma</Text>
+                  <View style={styles.chipWrap}>
+                    {opcoes.turmas.map((t) => {
+                      const sel = rascunho.turmaId === t.turma_id;
+                      return (
+                        <TouchableOpacity
+                          key={t.turma_id}
+                          style={[styles.choiceChip, sel && styles.choiceChipActive]}
+                          onPress={() =>
+                            setRascunho((r) => ({
+                              ...r,
+                              turmaId: sel ? undefined : t.turma_id,
+                            }))
+                          }
+                        >
+                          <Text style={[styles.choiceChipText, sel && styles.choiceChipTextActive]}>
+                            {t.nome_disciplina}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {opcoes.turnos.length > 0 && (
+                <>
+                  <Text style={styles.sectionLabel}>Turno</Text>
+                  <View style={styles.chipWrap}>
+                    {opcoes.turnos.map((tn) => {
+                      const sel = rascunho.turno === tn;
+                      return (
+                        <TouchableOpacity
+                          key={tn}
+                          style={[styles.choiceChip, sel && styles.choiceChipActive]}
+                          onPress={() =>
+                            setRascunho((r) => ({
+                              ...r,
+                              turno: sel ? undefined : (tn as "Matutino" | "Noturno"),
+                            }))
+                          }
+                        >
+                          <Text style={[styles.choiceChipText, sel && styles.choiceChipTextActive]}>{tn}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {opcoes.semestres.length > 0 && (
+                <>
+                  <Text style={styles.sectionLabel}>Semestre</Text>
+                  <View style={styles.chipWrap}>
+                    {opcoes.semestres.map((s) => {
+                      const sel = rascunho.semestre === s;
+                      return (
+                        <TouchableOpacity
+                          key={s}
+                          style={[styles.choiceChip, sel && styles.choiceChipActive]}
+                          onPress={() =>
+                            setRascunho((r) => ({ ...r, semestre: sel ? undefined : s }))
+                          }
+                        >
+                          <Text style={[styles.choiceChipText, sel && styles.choiceChipTextActive]}>{s}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              <View style={{ height: 16 }} />
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.clearButton} onPress={limpar}>
+                <Text style={styles.clearButtonText}>Limpar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.applyButton} onPress={aplicar}>
+                <Text style={styles.applyButtonText}>Aplicar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {pickerAlvo && (
+          <DateTimePicker
+            value={
+              pickerAlvo === "inicio" && rascunho.dataInicio
+                ? new Date(rascunho.dataInicio)
+                : pickerAlvo === "fim" && rascunho.dataFim
+                  ? new Date(rascunho.dataFim)
+                  : new Date()
+            }
+            mode="date"
+            display={Platform.OS === "ios" ? "inline" : "default"}
+            onChange={onPickerChange}
+          />
+        )}
+      </Modal>
+
       <FloatingMenu items={menuItems} />
     </SafeAreaView>
+  );
+}
+
+function ActiveChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <View style={styles.activeChip}>
+      <Text style={styles.activeChipText} numberOfLines={1}>
+        {label}
+      </Text>
+      <TouchableOpacity onPress={onRemove} accessibilityLabel={`Remover filtro ${label}`}>
+        <Ionicons name="close-circle" size={16} color={Colors.brand.textSecondary} />
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.brand.background },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24 },
+  header: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 16 },
   headerTitle: { color: Colors.brand.text, fontSize: 28, fontWeight: "800" },
-  headerSubtitle: {
-    color: Colors.brand.textSecondary,
-    fontSize: 14,
-    marginTop: 4,
+  headerSubtitle: { color: Colors.brand.textSecondary, fontSize: 14, marginTop: 4 },
+
+  filterBar: { paddingHorizontal: 24, paddingBottom: 8, flexDirection: "row" },
+  filterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.brand.card,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
+  filterButtonText: { color: Colors.brand.text, fontSize: 14, fontWeight: "700", marginLeft: 8 },
+  filterBadge: {
+    marginLeft: 8,
+    backgroundColor: Colors.brand.primary,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  filterBadgeText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+
+  chipsRow: { maxHeight: 44, marginBottom: 4 },
+  chipsContent: { paddingHorizontal: 24, gap: 8, alignItems: "center" },
+  activeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 14,
+    paddingLeft: 12,
+    paddingRight: 8,
+    paddingVertical: 6,
+    gap: 6,
+    maxWidth: 220,
+  },
+  activeChipText: { color: Colors.brand.text, fontSize: 13, fontWeight: "600" },
+
   scrollContent: { paddingHorizontal: 24, paddingTop: 4 },
   card: {
     backgroundColor: Colors.brand.card,
@@ -188,35 +564,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
   },
-  cardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 16,
-  },
+  cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
   disciplinaInfo: { flex: 1, marginRight: 12 },
-  disciplinaNome: {
-    color: Colors.brand.text,
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  disciplinaCodigo: {
-    color: Colors.brand.textSecondary,
-    fontSize: 13,
-    marginTop: 4,
-  },
-  disciplinaHorario: {
-    color: Colors.brand.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  percentBadge: {
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  disciplinaNome: { color: Colors.brand.text, fontSize: 17, fontWeight: "800" },
+  disciplinaCodigo: { color: Colors.brand.textSecondary, fontSize: 13, marginTop: 4 },
+  disciplinaHorario: { color: Colors.brand.textSecondary, fontSize: 12, marginTop: 2 },
+  percentBadge: { borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, alignItems: "center", justifyContent: "center" },
   percentText: { fontSize: 18, fontWeight: "800" },
   statsRow: {
     flexDirection: "row",
@@ -228,11 +581,8 @@ const styles = StyleSheet.create({
   statItem: { flex: 1, alignItems: "center" },
   statValue: { color: Colors.brand.text, fontSize: 18, fontWeight: "800" },
   statLabel: { color: Colors.brand.textSecondary, fontSize: 11, marginTop: 2 },
-  statDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
+  statDivider: { width: 1, height: 28, backgroundColor: "rgba(255,255,255,0.06)" },
+
   emptyContainer: {
     alignItems: "center",
     paddingVertical: 60,
@@ -241,17 +591,64 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderStyle: "dashed",
   },
-  emptyTitle: {
-    color: Colors.brand.text,
-    fontSize: 16,
-    fontWeight: "700",
-    marginTop: 14,
+  emptyTitle: { color: Colors.brand.text, fontSize: 16, fontWeight: "700", marginTop: 14 },
+  emptyText: { color: Colors.brand.textSecondary, fontSize: 13, marginTop: 6, textAlign: "center", paddingHorizontal: 24 },
+  clearInline: {
+    marginTop: 16,
+    backgroundColor: Colors.brand.primary,
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
-  emptyText: {
-    color: Colors.brand.textSecondary,
-    fontSize: 13,
-    marginTop: 6,
-    textAlign: "center",
+  clearInlineText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalSheet: {
+    backgroundColor: Colors.brand.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 28,
+    maxHeight: "85%",
   },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  modalTitle: { color: Colors.brand.text, fontSize: 20, fontWeight: "800" },
+  sectionLabel: { color: Colors.brand.textSecondary, fontSize: 13, fontWeight: "700", marginTop: 16, marginBottom: 8 },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  choiceChip: {
+    backgroundColor: Colors.brand.card,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  choiceChipActive: { backgroundColor: Colors.brand.primary, borderColor: Colors.brand.primary },
+  choiceChipText: { color: Colors.brand.text, fontSize: 13, fontWeight: "600" },
+  choiceChipTextActive: { color: "#fff" },
+  dateRow: { flexDirection: "row", gap: 12, marginTop: 12 },
+  dateField: {
+    flex: 1,
+    backgroundColor: Colors.brand.card,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  dateFieldLabel: { color: Colors.brand.textSecondary, fontSize: 11 },
+  dateFieldValue: { color: Colors.brand.text, fontSize: 15, fontWeight: "700", marginTop: 2 },
+  modalActions: { flexDirection: "row", gap: 12, marginTop: 16 },
+  clearButton: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  clearButtonText: { color: Colors.brand.text, fontWeight: "700", fontSize: 14 },
+  applyButton: { flex: 2, borderRadius: 14, paddingVertical: 14, alignItems: "center", backgroundColor: Colors.brand.primary },
+  applyButtonText: { color: "#fff", fontWeight: "800", fontSize: 14 },
 });

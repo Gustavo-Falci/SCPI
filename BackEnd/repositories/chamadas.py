@@ -241,7 +241,8 @@ def fechar_chamadas_expiradas(agora=None):
     return fechadas
 
 
-def listar_relatorios_chamadas(professor_id=None, turma_id=None, limit=200, offset=0):
+def listar_relatorios_chamadas(professor_id=None, turma_id=None, limit=200, offset=0,
+                               data_inicio=None, data_fim=None, turno=None, semestre=None):
     sql = """
         SELECT
             c.chamada_id, c.turma_id,
@@ -278,6 +279,18 @@ def listar_relatorios_chamadas(professor_id=None, turma_id=None, limit=200, offs
     if turma_id:
         sql += " AND c.turma_id = %s"
         params.append(turma_id)
+    if data_inicio:
+        sql += " AND c.data_chamada >= %s"
+        params.append(data_inicio)
+    if data_fim:
+        sql += " AND c.data_chamada <= %s"
+        params.append(data_fim)
+    if turno:
+        sql += " AND t.turno = %s"
+        params.append(turno)
+    if semestre:
+        sql += " AND t.semestre = %s"
+        params.append(semestre)
     sql += " ORDER BY c.data_chamada DESC, c.horario_inicio DESC LIMIT %s OFFSET %s"
     params.extend([limit, offset])
 
@@ -330,3 +343,35 @@ def obter_chamada_por_id(chamada_id):
             (chamada_id,),
         )
         return cur.fetchone()
+
+
+def listar_opcoes_filtros_relatorios(professor_id):
+    """Opções de filtro derivadas das chamadas Fechadas do professor.
+
+    Mantém as opções coerentes com os dados existentes, independente de
+    paginação ou filtros aplicados na listagem.
+    """
+    with get_db_cursor() as cur:
+        if not cur:
+            return {"turmas": [], "turnos": [], "semestres": []}
+        cur.execute(
+            """
+            SELECT DISTINCT t.turma_id, t.nome_disciplina, t.codigo_turma,
+                            t.turno, t.semestre
+            FROM Chamadas c
+            JOIN Turmas t ON t.turma_id = c.turma_id
+            WHERE c.status = 'Fechada' AND c.professor_id = %s
+            ORDER BY t.nome_disciplina ASC
+            """,
+            (professor_id,),
+        )
+        rows = cur.fetchall()
+
+    turmas = [
+        {"turma_id": r["turma_id"], "nome_disciplina": r["nome_disciplina"],
+         "codigo_turma": r["codigo_turma"]}
+        for r in rows
+    ]
+    turnos = sorted({r["turno"] for r in rows if r["turno"]})
+    semestres = sorted({r["semestre"] for r in rows if r["semestre"]}, reverse=True)
+    return {"turmas": turmas, "turnos": turnos, "semestres": semestres}

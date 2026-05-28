@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.helpers import internal_error
 from core.security import require_role
 from repositories.usuarios import obter_professor_id
-from services.relatorios import listar_relatorios, detalhe_relatorio
+from services.relatorios import listar_relatorios, detalhe_relatorio, opcoes_filtros_relatorios
 
 router = APIRouter(tags=["relatorios"])
 
@@ -14,17 +15,44 @@ router = APIRouter(tags=["relatorios"])
 def listar_relatorios_professor(
     limit: int = 50,
     offset: int = 0,
+    data_inicio: Optional[date] = None,
+    data_fim: Optional[date] = None,
+    turma_id: Optional[str] = None,
+    turno: Optional[str] = None,
+    semestre: Optional[str] = None,
+    current_user: dict = Depends(require_role("Professor")),
+):
+    professor_id = obter_professor_id(current_user.get("sub"))
+    if not professor_id:
+        raise HTTPException(status_code=404, detail="Professor não encontrado.")
+    if data_inicio and data_fim and data_inicio > data_fim:
+        raise HTTPException(status_code=400, detail="Intervalo de datas inválido.")
+    if turno is not None and turno not in ("Matutino", "Noturno"):
+        raise HTTPException(status_code=400, detail="Turno inválido.")
+    try:
+        return listar_relatorios(
+            professor_id=professor_id, turma_id=turma_id, limit=limit, offset=offset,
+            data_inicio=data_inicio, data_fim=data_fim, turno=turno, semestre=semestre,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "listar_relatorios_professor")
+
+
+@router.get("/professor/relatorios/filtros")
+def opcoes_filtros_relatorios_professor(
     current_user: dict = Depends(require_role("Professor")),
 ):
     professor_id = obter_professor_id(current_user.get("sub"))
     if not professor_id:
         raise HTTPException(status_code=404, detail="Professor não encontrado.")
     try:
-        return listar_relatorios(professor_id=professor_id, limit=limit, offset=offset)
+        return opcoes_filtros_relatorios(professor_id)
     except HTTPException:
         raise
     except Exception as e:
-        raise internal_error(e, "listar_relatorios_professor")
+        raise internal_error(e, "opcoes_filtros_relatorios_professor")
 
 
 @router.get("/professor/relatorios/chamadas/{chamada_id}")
