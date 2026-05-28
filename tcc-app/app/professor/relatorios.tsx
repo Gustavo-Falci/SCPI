@@ -387,6 +387,22 @@ export default function Relatorios() {
                 </TouchableOpacity>
               </View>
 
+              {pickerAlvo && (
+                <DateTimePicker
+                  value={
+                    pickerAlvo === "inicio" && rascunho.dataInicio
+                      ? new Date(rascunho.dataInicio)
+                      : pickerAlvo === "fim" && rascunho.dataFim
+                        ? new Date(rascunho.dataFim)
+                        : new Date()
+                  }
+                  mode="date"
+                  display={Platform.OS === "ios" ? "inline" : "default"}
+                  onChange={onPickerChange}
+                  themeVariant="dark"
+                />
+              )}
+
               {opcoes.turmas.length > 0 && (
                 <>
                   <Text style={styles.sectionLabel}>Turma</Text>
@@ -474,21 +490,6 @@ export default function Relatorios() {
             </View>
           </View>
         </View>
-
-        {pickerAlvo && (
-          <DateTimePicker
-            value={
-              pickerAlvo === "inicio" && rascunho.dataInicio
-                ? new Date(rascunho.dataInicio)
-                : pickerAlvo === "fim" && rascunho.dataFim
-                  ? new Date(rascunho.dataFim)
-                  : new Date()
-            }
-            mode="date"
-            display={Platform.OS === "ios" ? "inline" : "default"}
-            onChange={onPickerChange}
-          />
-        )}
       </Modal>
 
       <FloatingMenu items={menuItems} />
