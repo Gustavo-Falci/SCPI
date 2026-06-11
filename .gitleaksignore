@@ -1,0 +1,16 @@
+# Findings históricos do gitleaks (scan agendado com --all).
+# Segredos abaixo foram descontinuados/nunca foram reais; arquivos já removidos do tree.
+# Formato: <commit>:<arquivo>:<regra>:<linha>
+
+# Falso positivo: title="SCPI API" em FastAPI() — commit anterior ao comentário gitleaks:allow
+2c08e06beb07d49ad75cf7b06af1838b7bce7076:BackEnd/api.py:generic-api-key:90
+
+# CAMERA_SERVICE_TOKEN de exemplo commitado por engano; token descontinuado
+1f44b72858f2a36ee70e510d5f4ed05a22dc1e54:.env.example:generic-api-key:53
+
+# Chaves Obsidian em settings.local.json (arquivo removido do tree); chaves descontinuadas
+6576483082406999718f9ad5881628e009b42761:.claude/settings.local.json:generic-api-key:32
+6576483082406999718f9ad5881628e009b42761:.claude/settings.local.json:generic-api-key:33
+
+# OPENAI_API_KEY em .openclaude-profile.json (arquivo removido do tree); chave descontinuada
+2558d6579ed251217e67fc787a1c0acfab031bab:.openclaude-profile.json:generic-api-key:6
