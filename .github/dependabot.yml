@@ -50,6 +50,10 @@ updates:
       - dependency-name: "react-dom"
       - dependency-name: "react-native"
       - dependency-name: "react-native-*"
+      # Versões ditadas pelo SDK (expo install --check): PR #34 bumpou
+      # datetimepicker p/ 9.1.0 e desalinhou do SDK 55 (espera 8.6.0).
+      - dependency-name: "@react-native-community/*"
+      - dependency-name: "@react-navigation/*"
       # Toolchain pinada pelo SDK 55: eslint 10 quebra eslint-config-expo@55
       # (plugin-react API removida); TS 6 desalinha do expo/tsconfig.base.
       # Sobem juntos no upgrade SDK 56.
