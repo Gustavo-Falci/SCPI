@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Copia variáveis EXPO_PUBLIC_* do .env raiz para tcc-app/.env
-// Metro bundler só lê .env do diretório do projeto (tcc-app/).
+// Copia variáveis EXPO_PUBLIC_* do .env raiz para app/.env
+// Metro bundler só lê .env do diretório do projeto (app/).
 const fs = require('fs');
 const path = require('path');
 
@@ -22,4 +22,4 @@ if (expoLines.length === 0) {
 }
 
 fs.writeFileSync(targetEnv, expoLines.join('\n') + '\n');
-console.log(`tcc-app/.env atualizado (${expoLines.length} variável(is) Expo).`);
+console.log(`app/.env atualizado (${expoLines.length} variável(is) Expo).`);

@@ -16,7 +16,7 @@ permissions:
 jobs:
   # -------------------------------------------------------------------------
   # Detecta quais áreas mudaram para evitar rodar checks irrelevantes em PR
-  # (PR que só toca BackEnd não dispara npm-audit; PR de tcc-app não dispara
+  # (PR que só toca BackEnd não dispara npm-audit; PR de app não dispara
   # bandit/pip-audit). Push em main e schedule semanal continuam rodando tudo.
   # -------------------------------------------------------------------------
   changes:
@@ -36,7 +36,7 @@ jobs:
               - 'BackEnd/**'
               - '.github/workflows/security.yml'
             mobile:
-              - 'tcc-app/**'
+              - 'app/**'
               - '.github/workflows/security.yml'
 
   # -------------------------------------------------------------------------
@@ -123,7 +123,7 @@ jobs:
   # SCA Node — vulnerabilidades nas deps do app mobile (Expo/React Native)
   # -------------------------------------------------------------------------
   npm-audit-mobile:
-    name: npm audit (tcc-app)
+    name: npm audit (app)
     needs: changes
     if: github.event_name != 'pull_request' || needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
@@ -134,12 +134,12 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: tcc-app/package-lock.json
+          cache-dependency-path: app/package-lock.json
 
       - name: Install dependencies (no scripts)
-        working-directory: tcc-app
+        working-directory: app
         run: npm ci --ignore-scripts
 
       - name: Audit (high+ severity blocks)
-        working-directory: tcc-app
+        working-directory: app
         run: npm audit --audit-level=high

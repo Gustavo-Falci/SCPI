@@ -25,7 +25,7 @@ updates:
 
   # App mobile Expo / React Native
   - package-ecosystem: "npm"
-    directory: "/tcc-app"
+    directory: "/app"
     schedule:
       interval: "weekly"
       day: "monday"

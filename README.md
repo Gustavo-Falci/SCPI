@@ -90,7 +90,7 @@ SCPI/
 │       ├── tabs/             # alunos, professores, turmas, rostos, etc.
 │       └── ...               # api.js, auth.js, state.js, toast.js, ...
 │
-├── tcc-app/                  # App mobile (alunos e professores)
+├── app/                      # App mobile (alunos e professores)
 │   ├── app/                  # Rotas Expo Router
 │   │   ├── (auth)/           # Login, primeiro acesso, recuperação
 │   │   ├── (aluno)/          # Telas do aluno
@@ -229,7 +229,7 @@ Produção: publicar `portal/` em qualquer CDN ou web server (Nginx, S3+CloudFro
 ### Aplicativo Mobile (Expo)
 
 ```bash
-cd tcc-app
+cd app
 npm install
 
 # Sincroniza variáveis do .env raiz para o app
