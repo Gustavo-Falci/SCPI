@@ -1,8 +1,145 @@
 import logging
 
+import infra.database as _db
 from infra.database import get_db_cursor
 
 logger = logging.getLogger("scpi.migrations")
+
+# Chave fixa arbitrária para o advisory lock que serializa as migrações
+# entre os múltiplos workers do gunicorn (evita race em CREATE TABLE/TYPE).
+_MIGRATION_LOCK_KEY = 4815162342
+
+
+def ensure_base_schema():
+    """Cria as tabelas-base do domínio (idempotente).
+
+    Antes ficavam só no schema_inicial.sql (aplicado manualmente uma vez).
+    Aqui elas são recriadas no startup se ausentes — banco novo se auto-monta.
+    Colunas/constraints adicionadas depois por migração ficam nas funções
+    `ensure_*` específicas; aqui só o conjunto pré-migração (cada coluna tem
+    um único dono).
+    """
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS Usuarios (
+                    usuario_id uuid PRIMARY KEY,
+                    nome varchar(255) NOT NULL,
+                    email varchar(255) NOT NULL UNIQUE,
+                    senha varchar(255) NOT NULL,
+                    tipo_usuario varchar(50) NOT NULL,
+                    data_cadastro timestamp DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS Professores (
+                    professor_id uuid PRIMARY KEY,
+                    usuario_id uuid NOT NULL UNIQUE
+                        REFERENCES Usuarios(usuario_id) ON DELETE CASCADE,
+                    departamento varchar(150),
+                    data_admissao date
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS Alunos (
+                    aluno_id uuid PRIMARY KEY,
+                    usuario_id uuid NOT NULL UNIQUE
+                        REFERENCES Usuarios(usuario_id) ON DELETE CASCADE,
+                    ra varchar(100) NOT NULL UNIQUE,
+                    turno varchar(20)
+                        CHECK (turno IN ('Matutino', 'Noturno'))
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS Turmas (
+                    turma_id uuid PRIMARY KEY,
+                    professor_id uuid
+                        REFERENCES Professores(professor_id) ON DELETE CASCADE,
+                    codigo_turma varchar(50) NOT NULL UNIQUE,
+                    nome_disciplina varchar(255) NOT NULL,
+                    periodo_letivo varchar(50),
+                    sala_padrao varchar(100),
+                    turno varchar(20),
+                    semestre varchar(20)
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS Turma_Alunos (
+                    turma_aluno_id serial PRIMARY KEY,
+                    turma_id uuid NOT NULL
+                        REFERENCES Turmas(turma_id) ON DELETE CASCADE,
+                    aluno_id uuid NOT NULL
+                        REFERENCES Alunos(aluno_id) ON DELETE CASCADE,
+                    data_associacao timestamp DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (turma_id, aluno_id)
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS Horarios_Aulas (
+                    horario_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                    turma_id uuid REFERENCES Turmas(turma_id),
+                    dia_semana integer,
+                    horario_inicio time,
+                    horario_fim time,
+                    sala text
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS Chamadas (
+                    chamada_id serial PRIMARY KEY,
+                    turma_id uuid NOT NULL
+                        REFERENCES Turmas(turma_id) ON DELETE CASCADE,
+                    professor_id uuid NOT NULL
+                        REFERENCES Professores(professor_id) ON DELETE CASCADE,
+                    data_chamada date NOT NULL,
+                    horario_inicio time NOT NULL,
+                    horario_fim time,
+                    status varchar(50) DEFAULT 'Aberta',
+                    data_criacao timestamp DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS Presencas (
+                    presenca_id serial PRIMARY KEY,
+                    chamada_id integer NOT NULL
+                        REFERENCES Chamadas(chamada_id) ON DELETE CASCADE,
+                    aluno_id uuid NOT NULL
+                        REFERENCES Alunos(aluno_id) ON DELETE CASCADE,
+                    hora_registro timestamp DEFAULT CURRENT_TIMESTAMP,
+                    tipo_registro varchar(50) DEFAULT 'Reconhecimento'
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS Colecao_Rostos (
+                    colecao_rosto_id serial PRIMARY KEY,
+                    aluno_id uuid NOT NULL
+                        REFERENCES Alunos(aluno_id) ON DELETE CASCADE,
+                    external_image_id varchar(255) NOT NULL,
+                    face_id_rekognition varchar(255),
+                    s3_path_cadastro varchar(500),
+                    data_indexacao timestamp DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+    except Exception as e:
+        logger.error("Falha ao aplicar schema base: %s", e)
 
 
 def ensure_lgpd_columns():
@@ -187,7 +324,8 @@ def ensure_chamada_aberta_unica():
         logger.error("Falha ao aplicar índice único de chamadas abertas: %s", e)
 
 
-def run_all():
+def _apply_all():
+    ensure_base_schema()
     ensure_refresh_tokens_table()
     ensure_lgpd_columns()
     ensure_multi_angle_faces()
@@ -196,3 +334,31 @@ def run_all():
     ensure_reset_codes_table()
     ensure_presenca_por_aula()
     ensure_chamada_aberta_unica()
+
+
+def run_all():
+    """Aplica schema base + migrações, serializado entre workers via advisory lock.
+
+    Com -w 4 no gunicorn, os 4 workers chamam isto no startup ao mesmo tempo.
+    O advisory lock garante execução sequencial; as funções são idempotentes,
+    então os workers seguintes só confirmam que está tudo no lugar (sem race em
+    CREATE TABLE/TYPE — antes dava `duplicate key pg_type_typname_nsp_index`).
+    """
+    lock_conn = _db.get_db_connection()
+    if lock_conn is None:
+        logger.error("Migrations: sem conexão com o banco; schema não aplicado.")
+        return
+    try:
+        with lock_conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_lock(%s)", (_MIGRATION_LOCK_KEY,))
+        lock_conn.commit()
+
+        _apply_all()
+    finally:
+        try:
+            with lock_conn.cursor() as cur:
+                cur.execute("SELECT pg_advisory_unlock(%s)", (_MIGRATION_LOCK_KEY,))
+            lock_conn.commit()
+        except Exception:
+            pass
+        _db.release_connection(lock_conn)

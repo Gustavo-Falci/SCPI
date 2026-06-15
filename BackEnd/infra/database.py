@@ -98,6 +98,7 @@ def _ensure_pool():
                 maxconn,
                 dsn=_build_database_url(),
                 options="-c timezone=America/Sao_Paulo",
+                connect_timeout=_env_int("DB_CONNECT_TIMEOUT", 3),
             )
             logger.info("Pool de conexão criado (min=%s, max=%s)", minconn, maxconn)
         except Exception as e:
@@ -137,7 +138,13 @@ def get_db_connection():
 
     # Fallback (pg8000 ou pool falhou)
     try:
-        conn = psycopg2.connect(_build_database_url())
+        if _IS_PSYCOPG2:
+            conn = psycopg2.connect(
+                _build_database_url(),
+                connect_timeout=_env_int("DB_CONNECT_TIMEOUT", 3),
+            )
+        else:
+            conn = psycopg2.connect(_build_database_url())
         with conn.cursor() as cur:
             cur.execute("SET TIME ZONE 'America/Sao_Paulo'")
         conn.commit()
