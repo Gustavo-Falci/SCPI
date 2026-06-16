@@ -11,7 +11,7 @@ import requests
 import botocore.exceptions
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv, find_dotenv
-from core.config import COLLECTION_ID, AWS_REGION, FACE_MATCH_THRESHOLD_SALA
+from core.config import COLLECTION_ID, FACE_MATCH_THRESHOLD_SALA
 from infra.aws_clientes import rekognition_client
 
 load_dotenv(find_dotenv())

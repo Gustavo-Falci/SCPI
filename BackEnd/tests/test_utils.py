@@ -1,4 +1,3 @@
-import pytest
 from core.utils import formatar_nome_para_external_id
 
 

@@ -21,7 +21,7 @@ from repositories.horarios import existe_aula_no_horario_atual_para_turma
 from repositories.presencas import ajustar_presencas_chamada, contar_alunos_da_turma, contar_presentes_por_chamada
 from repositories.turmas import professor_responsavel_pela_turma
 from repositories.usuarios import obter_professor_id, registrar_presenca_por_face
-from schemas.chamada import ChamadaAbrir, FinalizarChamadaPayload, PresencaAluno
+from schemas.chamada import ChamadaAbrir, FinalizarChamadaPayload
 from services.notificacoes import enviar_notificacoes_presenca, notificar_alunos_presentes
 
 logger = logging.getLogger(__name__)

@@ -11,7 +11,7 @@ from core.auth_utils import get_password_hash
 from core.config import BUCKET_NAME, COLLECTION_ID
 from core.csv_utils import EMAIL_REGEX, MAX_CSV_BYTES, RA_REGEX, validar_celula_csv
 from core.helpers import audit, client_ip, gerar_senha_temporaria, internal_error
-from core.security import get_current_user, require_role
+from core.security import require_role
 from infra.aws_clientes import rekognition_client, s3_client
 from infra.rekognition_aws import deletar_rosto
 from infra.notificacoes import send_email_senha_temporaria

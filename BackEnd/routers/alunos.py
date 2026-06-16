@@ -25,12 +25,9 @@ from repositories.alunos import (
 from repositories.chamadas import listar_historico_chamadas_aluno
 from repositories.horarios import listar_aulas_hoje_por_aluno
 from repositories.rostos import (
-    contar_rostos_ativos_por_aluno,
-    existe_qualquer_rosto_por_aluno,
     listar_rostos_ativos_por_aluno,
     obter_path_biometria_por_usuario,
     obter_path_foto_perfil_aluno,
-    obter_rosto_ativo_por_aluno,
     revogar_rosto_por_aluno,
     upsert_rosto,
 )

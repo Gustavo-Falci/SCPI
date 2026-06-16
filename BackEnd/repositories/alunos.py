@@ -1,4 +1,4 @@
-from infra.database import get_db_cursor, logger
+from infra.database import get_db_cursor
 
 
 def buscar_aluno_por_usuario_id(usuario_id):
