@@ -24,9 +24,13 @@ updates:
       - dependency-name: "pydantic-core"
       # fastapi 0.136.3 é release malicioso (MAL-2026-4750): injeta 'fastar' no
       # extra [standard]. PR #35 (2026-06-04) re-subiu 0.136.1 → 0.136.3 como patch.
-      # Bloqueia só a versão maliciosa; futura release limpa ainda passa.
+      # 0.137.1 ainda declara fastar>=0.9.0 no [standard] — cadeia NÃO saneada upstream.
+      # Segura fastapi no pin auditado 0.136.1; reavaliar quando fastar sumir do [standard].
+      # SCPI instala fastapi puro (sem [standard]), então fastar não é puxado no install.
       - dependency-name: "fastapi"
-        versions: ["0.136.3"]
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
 
   # App mobile Expo / React Native
   - package-ecosystem: "npm"
