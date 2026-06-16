@@ -25,7 +25,6 @@ email-validator==2.3.0
 # Autenticação
 PyJWT==2.13.0
 passlib==1.7.4
-bcrypt==5.0.0
 cryptography==49.0.0
 
 # AWS
