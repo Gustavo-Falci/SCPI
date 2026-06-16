@@ -92,7 +92,10 @@ def clear_auth_cookies(response: Response) -> None:
         httponly=True,
     )
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
+# bcrypt removido dos schemes: passlib 1.7.4 + bcrypt 5.0.0 tem backend quebrado
+# (detect_wrap_bug levanta ValueError em entrada >72 bytes). Todas as senhas SCPI
+# sempre usaram pbkdf2_sha256 (default desde o 1º commit); nenhum hash $2 existe.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 def verify_password(plain_password, hashed_password):
     """Verifica se a senha em texto puro bate com o hash."""
