@@ -1,4 +1,4 @@
-# DependÃªncias diretas â€” versÃµes exatas do ambiente de desenvolvimento (pip freeze)
+# Dependências diretas — versões exatas do ambiente de desenvolvimento (pip freeze)
 # Gerado em 2026-05-01. Para atualizar: pip freeze > requirements.txt
 
 # API
@@ -17,12 +17,12 @@ psycopg2-binary==2.9.12
 pg8000==1.31.5
 scramp==1.4.8
 
-# Schemas / validaÃ§Ã£o
+# Schemas / validação
 pydantic==2.13.4
 pydantic_core==2.46.4
 email-validator==2.3.0
 
-# AutenticaÃ§Ã£o
+# Autenticação
 PyJWT==2.13.0
 passlib==1.7.4
 bcrypt==5.0.0
@@ -33,8 +33,8 @@ boto3==1.43.27
 botocore==1.43.27
 s3transfer==0.18.0
 
-# Reconhecimento facial (necessÃ¡rio apenas na mÃ¡quina com cÃ¢mera)
-# Em servidor headless, pode ser removido se o script nÃ£o rodar lÃ¡
+# Reconhecimento facial (necessário apenas na máquina com câmera)
+# Em servidor headless, pode ser removido se o script não rodar lá
 opencv-python==4.13.0.92
 numpy==2.4.6
 
@@ -45,10 +45,10 @@ limits==5.8.0
 # Email
 resend==2.30.1
 
-# GeraÃ§Ã£o de PDF (export LGPD Art. 18)
+# Geração de PDF (export LGPD Art. 18)
 reportlab==4.5.1
 
-# DependÃªncias transitivas (pinadas para reproducibilidade)
+# Dependências transitivas (pinadas para reproducibilidade)
 annotated-types==0.7.0
 anyio==4.13.0
 certifi==2026.5.20
