@@ -45,7 +45,7 @@ limits==5.8.0
 resend==2.30.1
 
 # Geração de PDF (export LGPD Art. 18)
-reportlab==4.5.1
+reportlab==5.0.0
 
 # Dependências transitivas (pinadas para reproducibilidade)
 annotated-types==0.7.0
