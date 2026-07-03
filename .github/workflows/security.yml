@@ -52,7 +52,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install Bandit
         run: pip install bandit==1.7.10
@@ -79,7 +79,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install pip-audit
         run: pip install pip-audit==2.7.3
