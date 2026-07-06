@@ -1,0 +1,12 @@
+[Unit]
+Description=Timer diario do backup SCPI (03:30 America/Sao_Paulo)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 America/Sao_Paulo
+# VM desligada/reiniciando no horário => executa na próxima subida
+Persistent=true
+# Espalha a carga caso outros jobs existam no mesmo horário
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

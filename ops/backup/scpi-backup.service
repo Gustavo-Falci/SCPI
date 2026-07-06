@@ -1,0 +1,15 @@
+[Unit]
+Description=Backup diario do Postgres SCPI para OCI Object Storage
+Documentation=file:/opt/scpi/ops/backup/README.md
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/scpi/ops/backup/scpi-backup.sh
+# Config e .pgpass são de root; script roda como root (default).
+# Timeout generoso: dump + upload de banco pequeno leva segundos, mas
+# rede OCI degradada não deve matar o job cedo demais.
+TimeoutStartSec=30min
+Nice=10
+IOSchedulingClass=idle
