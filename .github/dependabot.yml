@@ -31,6 +31,13 @@ updates:
         update-types:
           - "version-update:semver-minor"
           - "version-update:semver-patch"
+      # OpenCV 5 removeu CascadeClassifier do pacote core (foi pro contrib) —
+      # quebra scripts/reconhecimento_tempo_real.py (smoke test 2026-07-07).
+      # Ficar na linha 4.x (mantida) até migrar o script pra FaceDetectorYN,
+      # provavelmente junto com o trabalho de liveness (M1).
+      - dependency-name: "opencv-python"
+        update-types:
+          - "version-update:semver-major"
 
   # App mobile Expo / React Native
   - package-ecosystem: "npm"
