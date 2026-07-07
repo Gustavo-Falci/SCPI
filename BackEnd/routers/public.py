@@ -16,13 +16,14 @@ def home():
     return {"mensagem": "API SCPI está rodando!"}
 
 
-@router.get("/health")
+@router.api_route("/health", methods=["GET", "HEAD"])
 @limiter.limit("30/minute")
 def health(request: Request):
     """Healthcheck: valida a conexão com o Postgres.
 
     200 {"status": "ok", "database": "ok"} — SELECT 1 funcionou.
     503 {"status": "degraded", "database": "error"} — sem conexão ou erro.
+    HEAD aceito porque o monitor free do UptimeRobot usa HEAD por padrão.
     O detalhe do erro vai para o log, nunca para o response (anônimo não
     recebe informação interna).
     """

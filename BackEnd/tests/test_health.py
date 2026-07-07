@@ -65,3 +65,16 @@ def test_health_nao_vaza_detalhe_de_erro():
     with patch("routers.public.get_db_cursor", _cursor_explode):
         resp = _make_client().get("/health")
     assert "connection reset" not in resp.text
+
+
+def test_health_aceita_head_db_ok():
+    # UptimeRobot free usa HEAD por padrão — endpoint precisa responder 200.
+    with patch("routers.public.get_db_cursor", _cursor_ok):
+        resp = _make_client().head("/health")
+    assert resp.status_code == 200
+
+
+def test_health_head_db_fora_retorna_503():
+    with patch("routers.public.get_db_cursor", _cursor_none):
+        resp = _make_client().head("/health")
+    assert resp.status_code == 503
