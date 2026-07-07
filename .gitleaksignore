@@ -14,3 +14,7 @@
 
 # OPENAI_API_KEY em .openclaude-profile.json (arquivo removido do tree); chave descontinuada
 2558d6579ed251217e67fc787a1c0acfab031bab:.openclaude-profile.json:generic-api-key:6
+
+# Falso positivo: SECRET_KEY dummy de CI no workflow de testes (valor fake "ci-dummy-...");
+# commit anterior ao comentário gitleaks:allow na linha
+9516d5339a8233766eece75a86d8d10f3d410c30:.github/workflows/tests.yml:generic-api-key:25

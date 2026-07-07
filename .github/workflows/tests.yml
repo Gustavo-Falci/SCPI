@@ -22,7 +22,7 @@ jobs:
     env:
       # Exigidas no import de core/auth_utils.py e core/config.py.
       # Valores fake auto-evidentes — nenhum teste usa os valores reais.
-      SECRET_KEY: ci-dummy-secret-key-nao-e-segredo-0123456789abcdef
+      SECRET_KEY: ci-dummy-secret-key-nao-e-segredo-0123456789abcdef # gitleaks:allow — dummy de CI, não é segredo
       SCPI_EXPORT_HMAC_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
     steps:
       - uses: actions/checkout@v7
