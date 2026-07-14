@@ -12,6 +12,7 @@ import {
   ScrollView,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { storage } from "../../services/storage";
 import { apiPostFormData } from "../../services/api";
@@ -100,6 +101,17 @@ export default function CadastroFacial() {
         shutterSound: false,
       });
 
+      // Redimensiona antes do upload: câmera nativa gera JPEG > 5 MB (limite do
+      // backend), com tamanho variável por cena — causava 413 intermitente.
+      // Largura fixa de 1080px mantém detalhe suficiente para o Rekognition.
+      const rendered = await ImageManipulator.manipulate(photo.uri)
+        .resize({ width: 1080 })
+        .renderAsync();
+      const resized = await rendered.saveAsync({
+        compress: 0.7,
+        format: SaveFormat.JPEG,
+      });
+
       const formData = new FormData();
       formData.append("user_id", userData?.id || "");
       formData.append("nome", userData?.nome || "Aluno");
@@ -107,10 +119,9 @@ export default function CadastroFacial() {
       formData.append("ra", userData?.ra || "");
       formData.append("angulo", etapa.angulo);
 
-      const localUri = photo.uri;
+      const localUri = resized.uri;
       const filename = localUri.split("/").pop() || "face.jpg";
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : `image/jpeg`;
+      const type = "image/jpeg";
 
       formData.append("foto", { uri: localUri, name: filename, type } as any);
       formData.append("consentimento_biometrico", "true");
