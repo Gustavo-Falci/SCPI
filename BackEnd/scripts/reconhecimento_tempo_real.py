@@ -52,9 +52,10 @@ class SistemaReconhecimento:
         self.lock = threading.Lock()
         self._aws_pool = ThreadPoolExecutor(max_workers=4)
         self._api_pool = ThreadPoolExecutor(max_workers=2)
-        model_path = os.getenv(
-            "FACE_MODEL_PATH",
-            str(pathlib.Path(__file__).resolve().parent / "models" / "face_detection_yunet_2023mar.onnx"),
+        # `or` cobre env presente-porém-vazia (FACE_MODEL_PATH=) — mesmo
+        # comportamento do _env_int de infra/database.py.
+        model_path = (os.getenv("FACE_MODEL_PATH") or "").strip() or str(
+            pathlib.Path(__file__).resolve().parent / "models" / "face_detection_yunet_2023mar.onnx"
         )
         if not os.path.exists(model_path):
             raise ValueError(
