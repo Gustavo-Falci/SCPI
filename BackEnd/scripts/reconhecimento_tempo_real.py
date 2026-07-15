@@ -13,12 +13,19 @@ from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv, find_dotenv
 from core.config import COLLECTION_ID, FACE_MATCH_THRESHOLD_SALA
 from infra.aws_clientes import rekognition_client
+from scripts.confirmacao_burst import ConfirmadorBurst, Decisao, ResultadoFrame
 
 load_dotenv(find_dotenv())
 _API_URL = os.getenv("SCPI_API_URL", "https://api.scpi.me").rstrip("/")
 _SERVICE_TOKEN = os.getenv("CAMERA_SERVICE_TOKEN", "")
 _CAMERA_SALA = os.getenv("CAMERA_SALA", "")
 _CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
+
+# --- Liveness passivo (burst X-de-Y + pose) — ver spec 2026-07-15 ---
+_BURST_FRAMES = int(os.getenv("BURST_FRAMES", "5"))
+_BURST_MIN_MATCHES = int(os.getenv("BURST_MIN_MATCHES", "3"))
+_BURST_DURACAO_S = float(os.getenv("BURST_DURACAO_S", "2"))
+_LIVENESS_POSE_STD_MIN = float(os.getenv("LIVENESS_POSE_STD_MIN", "2.0"))
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -32,7 +39,11 @@ class SistemaReconhecimento:
         self.rodando = False
         self.frame_atual = None
 
-        self.INTERVALO_ENVIO_AWS = 1.5
+        self.COOLDOWN_ENTRE_BURSTS = 1.5  # segundos entre bursts (era o intervalo de envio contínuo)
+        self.confirmador = ConfirmadorBurst(
+            min_matches=_BURST_MIN_MATCHES,
+            pose_std_min=_LIVENESS_POSE_STD_MIN,
+        )
         self.CAM_INDEX = _CAMERA_INDEX
 
         self.chamada_id_atual = None
@@ -41,9 +52,17 @@ class SistemaReconhecimento:
         self.lock = threading.Lock()
         self._aws_pool = ThreadPoolExecutor(max_workers=4)
         self._api_pool = ThreadPoolExecutor(max_workers=2)
-        self.face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        model_path = os.getenv(
+            "FACE_MODEL_PATH",
+            str(pathlib.Path(__file__).resolve().parent / "models" / "face_detection_yunet_2023mar.onnx"),
         )
+        if not os.path.exists(model_path):
+            raise ValueError(
+                f"Modelo YuNet não encontrado em {model_path}. "
+                "Baixe-o conforme ops de setup (opencv_zoo) ou defina FACE_MODEL_PATH."
+            )
+        # input size é redefinido por frame em _crops_de_rostos
+        self.face_detector = cv2.FaceDetectorYN.create(model_path, "", (320, 320), 0.6)
 
     def _sincronizar_chamada(self):
         try:
@@ -80,8 +99,8 @@ class SistemaReconhecimento:
         except Exception as e:
             logger.error(f"Erro ao registrar presença via API: {e}")
 
-    def _enviar_para_aws(self, face_bytes, chamada_id_referencia):
-        """Função separada para lidar com a AWS sem travar o OpenCV"""
+    def _analisar_crop(self, face_bytes, chamada_id_referencia):
+        """SearchFaces + (se match novo) DetectFaces p/ pose. Retorna ResultadoFrame|None."""
         try:
             response = rekognition_client.search_faces_by_image(
                 CollectionId=COLLECTION_ID,
@@ -89,36 +108,68 @@ class SistemaReconhecimento:
                 MaxFaces=1,
                 FaceMatchThreshold=FACE_MATCH_THRESHOLD_SALA,
             )
-
             if not response['FaceMatches']:
-                return
-
-            match = response['FaceMatches'][0]
-            aluno_external_id = match['Face']['ExternalImageId']
+                return None
+            external_id = response['FaceMatches'][0]['Face']['ExternalImageId']
 
             with self.lock:
-                # Evita registrar se a chamada mudou enquanto a AWS processava
                 if self.chamada_id_atual != chamada_id_referencia:
-                    return
-                if aluno_external_id in self.presentes_chamada:
-                    return
-                self.presentes_chamada.add(aluno_external_id)
+                    return None
+                if external_id in self.presentes_chamada:
+                    # Já registrado: não gasta DetectFaces nem entra no burst.
+                    return None
 
-            logger.info(f"🎯 Reconhecido: {aluno_external_id}")
-            self._api_pool.submit(self._registrar_presenca, aluno_external_id)
+            yaw = pitch = None
+            try:
+                detalhe = rekognition_client.detect_faces(
+                    Image={'Bytes': face_bytes},
+                    Attributes=['DEFAULT'],
+                )
+                if detalhe.get('FaceDetails'):
+                    pose = detalhe['FaceDetails'][0].get('Pose', {})
+                    yaw = pose.get('Yaw')
+                    pitch = pose.get('Pitch')
+            except Exception as e:
+                # Sem pose => frame conta só p/ consenso; decisão vira PENDENTE
+                # se nenhum frame do burst tiver pose (fail-safe, não fail-open).
+                logger.debug(f"DetectFaces falhou (segue sem pose): {e}")
+
+            return ResultadoFrame(external_id=external_id, yaw=yaw, pitch=pitch)
 
         except botocore.exceptions.ClientError as e:
             code = e.response["Error"]["Code"]
             msg = e.response["Error"]["Message"]
             if code == "InvalidParameterException" and "no faces" in msg.lower():
-                logger.debug("Haar falso positivo ignorado: sem rosto válido no crop.")
+                logger.debug("Detector local falso positivo: sem rosto válido no crop.")
             else:
-                logger.error(f"Erro AWS (face individual): {code} - {msg}")
+                logger.error(f"Erro AWS (crop): {code} - {msg}")
+            return None
         except Exception as e:
-            logger.error(f"Erro AWS (face individual): {e}")
+            logger.error(f"Erro AWS (crop): {e}")
+            return None
+
+    def _crops_de_rostos(self, frame):
+        """Detecta rostos (YuNet) e devolve lista de crops JPEG (bytes)."""
+        h_img, w_img = frame.shape[:2]
+        self.face_detector.setInputSize((w_img, h_img))
+        _, faces = self.face_detector.detect(frame)
+        if faces is None:
+            return []
+        crops = []
+        for f in faces:
+            x, y, w, h = (int(v) for v in f[:4])
+            margin = int(0.2 * max(w, h))
+            x1, y1 = max(0, x - margin), max(0, y - margin)
+            x2, y2 = min(w_img, x + w + margin), min(h_img, y + h + margin)
+            if x2 <= x1 or y2 <= y1:
+                continue
+            ret, buffer = cv2.imencode('.jpg', frame[y1:y2, x1:x2])
+            if ret:
+                crops.append(buffer.tobytes())
+        return crops
 
     def _thread_processamento_visual(self):
-        ultimo_envio = 0
+        fim_cooldown = 0.0
 
         while self.rodando:
             try:
@@ -129,43 +180,64 @@ class SistemaReconhecimento:
                 if chamada_atual is None:
                     time.sleep(0.5)
                     continue
-
-                if frame is None:
-                    time.sleep(0.01)
-                    continue
-
-                img_para_processar = frame.copy()
-                gray = cv2.cvtColor(img_para_processar, cv2.COLOR_BGR2GRAY)
-                rostos_detectados = self.face_cascade.detectMultiScale(gray, 1.1, 5)
-
-                if len(rostos_detectados) == 0:
+                if frame is None or time.time() < fim_cooldown:
                     time.sleep(0.03)
                     continue
 
-                agora = time.time()
-                if agora - ultimo_envio < self.INTERVALO_ENVIO_AWS:
+                # Gatilho do burst: existe rosto no frame atual?
+                if not self._crops_de_rostos(frame):
                     time.sleep(0.03)
                     continue
 
-                ultimo_envio = agora
-                with self.lock:
-                    chamada_id_captura = self.chamada_id_atual
+                # ---- Burst: Y frames ao longo de BURST_DURACAO_S ----
+                intervalo = _BURST_DURACAO_S / max(1, _BURST_FRAMES)
+                futures = []
+                for _ in range(_BURST_FRAMES):
+                    with self.lock:
+                        frame_i = self.frame_atual
+                        chamada_i = self.chamada_id_atual
+                    if frame_i is None or chamada_i != chamada_atual:
+                        break
+                    for crop in self._crops_de_rostos(frame_i):
+                        futures.append(
+                            self._aws_pool.submit(self._analisar_crop, crop, chamada_atual)
+                        )
+                    time.sleep(intervalo)
 
-                h_img, w_img = img_para_processar.shape[:2]
-                for (x, y, w, h) in rostos_detectados:
-                    margin = int(0.2 * max(w, h))
-                    x1 = max(0, x - margin)
-                    y1 = max(0, y - margin)
-                    x2 = min(w_img, x + w + margin)
-                    y2 = min(h_img, y + h + margin)
+                resultados = []
+                for fut in futures:
+                    try:
+                        r = fut.result(timeout=15)
+                        if r is not None:
+                            resultados.append(r)
+                    except Exception as e:
+                        logger.error(f"Erro aguardando análise de crop: {e}")
 
-                    face_crop = img_para_processar[y1:y2, x1:x2]
-                    ret, buffer = cv2.imencode('.jpg', face_crop)
-                    if not ret:
-                        continue
-                    face_bytes = buffer.tobytes()
+                # ---- Decisão por aluno ----
+                for external_id, av in self.confirmador.avaliar_detalhado(resultados).items():
+                    if av.decisao is Decisao.REGISTRAR:
+                        with self.lock:
+                            if self.chamada_id_atual != chamada_atual:
+                                continue
+                            if external_id in self.presentes_chamada:
+                                continue
+                            self.presentes_chamada.add(external_id)
+                        logger.info(f"🎯 Confirmado (burst+pose): {external_id}")
+                        self._api_pool.submit(self._registrar_presenca, external_id)
+                    elif av.decisao is Decisao.PENDENTE:
+                        logger.info(
+                            f"⏳ Pendente (consenso ok, pose rígida — possível foto "
+                            f"ou pessoa parada): {external_id} "
+                            f"[matches={av.matches}, std_yaw={av.std_yaw}, "
+                            f"std_pitch={av.std_pitch}, limiar={_LIVENESS_POSE_STD_MIN}]"
+                        )
+                    else:
+                        logger.info(
+                            f"Descartado (consenso insuficiente): {external_id} "
+                            f"[matches={av.matches} < {_BURST_MIN_MATCHES}]"
+                        )
 
-                    self._aws_pool.submit(self._enviar_para_aws, face_bytes, chamada_id_captura)
+                fim_cooldown = time.time() + self.COOLDOWN_ENTRE_BURSTS
 
             except Exception as e:
                 logger.error(f"Erro no loop de processamento visual: {e}")
@@ -215,6 +287,9 @@ class SistemaReconhecimento:
                         time.sleep(1)
                         continue
 
+                    # Invariante: frame_atual é sempre REBIND de um array novo do
+                    # cap.read(); nunca mutar in-place — a thread de processamento
+                    # segura referências a ele sem copiar.
                     with self.lock:
                         self.frame_atual = frame
 

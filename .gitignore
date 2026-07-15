@@ -15,6 +15,7 @@ node_modules/
 admin-portal/dist/
 docs/*
 !docs/SECURITY_RUNBOOK.md
+BackEnd/scripts/models/*.onnx
 DESIGN.md
 logo-concept.svg
 MEMORIA_OBSIDIAN.md
