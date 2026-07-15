@@ -18,6 +18,7 @@ load_dotenv(find_dotenv())
 _API_URL = os.getenv("SCPI_API_URL", "https://api.scpi.me").rstrip("/")
 _SERVICE_TOKEN = os.getenv("CAMERA_SERVICE_TOKEN", "")
 _CAMERA_SALA = os.getenv("CAMERA_SALA", "")
+_CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ class SistemaReconhecimento:
         self.frame_atual = None
 
         self.INTERVALO_ENVIO_AWS = 1.5
-        self.CAM_INDEX = 1
+        self.CAM_INDEX = _CAMERA_INDEX
 
         self.chamada_id_atual = None
         self.presentes_chamada: set = set()
@@ -194,7 +195,10 @@ class SistemaReconhecimento:
                         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
                         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
                         if not cap.isOpened():
-                            logger.error("❌ Não foi possível abrir a câmera.")
+                            logger.error(
+                                f"❌ Não foi possível abrir a câmera no índice {self.CAM_INDEX}. "
+                                f"Ajuste CAMERA_INDEX se o dispositivo estiver em outro índice."
+                            )
                             time.sleep(5)
                             continue
                         logger.info("📷 Câmera ligada.")
