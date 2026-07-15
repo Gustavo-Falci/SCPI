@@ -48,7 +48,6 @@ def criar_usuario_admin():
             RETURNING usuario_id
         """, (usuario_uuid, NOME_ADMIN, EMAIL_ADMIN, senha_hash))
         
-        res = cur.fetchone()
         conn.commit()
 
         print("\n✅ SUCESSO! Usuário Administrador criado/atualizado.")

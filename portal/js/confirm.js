@@ -1,5 +1,3 @@
-import { icon } from './icons.js';
-
 let _resolve = null;
 
 export const confirm = {

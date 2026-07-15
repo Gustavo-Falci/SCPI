@@ -5,7 +5,7 @@ import { readSession, saveSession, clearSession } from './auth.js';
 import { api, setOnExpired, extractError } from './api.js';
 import { icon } from './icons.js';
 import { skeletons } from './skeleton.js';
-import { runCreate, hasCreate, clearCreate } from './registry.js';
+import { runCreate, clearCreate } from './registry.js';
 import { mount as mountTurmas } from './tabs/turmas.js';
 import { mount as mountHorarios } from './tabs/horarios.js';
 import { mount as mountProfessores } from './tabs/professores.js';

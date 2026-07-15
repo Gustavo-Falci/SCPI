@@ -9,17 +9,6 @@ def buscar_aluno_por_usuario_id(usuario_id):
         return cur.fetchone()
 
 
-def buscar_aluno_completo_por_usuario_id(usuario_id):
-    with get_db_cursor() as cur:
-        if not cur:
-            return None
-        cur.execute(
-            "SELECT aluno_id, ra FROM Alunos WHERE usuario_id = %s",
-            (usuario_id,),
-        )
-        return cur.fetchone()
-
-
 def obter_aluno_e_face_status(usuario_id):
     """Retorna (ra, face_cadastrada) para um usuário Aluno; (None, False) se não houver perfil."""
     with get_db_cursor() as cur:

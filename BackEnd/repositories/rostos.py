@@ -1,21 +1,6 @@
 from infra.database import get_db_cursor
 
 
-def obter_rosto_ativo_por_aluno(aluno_id):
-    with get_db_cursor() as cur:
-        if not cur:
-            return None
-        cur.execute(
-            """
-            SELECT face_id_rekognition, s3_path_cadastro
-            FROM Colecao_Rostos
-            WHERE aluno_id = %s AND revogado_em IS NULL
-            """,
-            (aluno_id,),
-        )
-        return cur.fetchone()
-
-
 def obter_path_biometria_por_usuario(usuario_id):
     with get_db_cursor() as cur:
         if not cur:
@@ -30,25 +15,6 @@ def obter_path_biometria_por_usuario(usuario_id):
             (usuario_id,),
         )
         return cur.fetchone()
-
-
-def existe_rosto_ativo_por_aluno(aluno_id):
-    with get_db_cursor() as cur:
-        if not cur:
-            return False
-        cur.execute(
-            "SELECT 1 FROM Colecao_Rostos WHERE aluno_id = %s AND revogado_em IS NULL",
-            (aluno_id,),
-        )
-        return cur.fetchone() is not None
-
-
-def existe_qualquer_rosto_por_aluno(aluno_id):
-    with get_db_cursor() as cur:
-        if not cur:
-            return False
-        cur.execute("SELECT 1 FROM Colecao_Rostos WHERE aluno_id = %s", (aluno_id,))
-        return cur.fetchone() is not None
 
 
 def upsert_rosto(aluno_id, external_id, face_id, filename, angulo='frontal'):
@@ -106,18 +72,6 @@ def listar_rostos_ativos_por_aluno(aluno_id):
             (aluno_id,),
         )
         return cur.fetchall()
-
-
-def contar_rostos_ativos_por_aluno(aluno_id):
-    with get_db_cursor() as cur:
-        if not cur:
-            return 0
-        cur.execute(
-            "SELECT COUNT(*) as total FROM Colecao_Rostos WHERE aluno_id = %s AND revogado_em IS NULL",
-            (aluno_id,),
-        )
-        row = cur.fetchone()
-        return row['total'] if row else 0
 
 
 def obter_path_foto_perfil_aluno(aluno_id):

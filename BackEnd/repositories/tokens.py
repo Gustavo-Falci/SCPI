@@ -102,25 +102,6 @@ def purgar_tokens_expirados():
         return cur.rowcount
 
 
-def invalidar_codigos_anteriores(email):
-    with get_db_cursor(commit=True) as cur:
-        if not cur:
-            return 0
-        cur.execute("UPDATE PasswordResetCodes SET used = TRUE WHERE email = %s AND used = FALSE", (email,))
-        return cur.rowcount
-
-
-def inserir_codigo_reset(email, code, expires_at):
-    with get_db_cursor(commit=True) as cur:
-        if not cur:
-            return False
-        cur.execute(
-            "INSERT INTO PasswordResetCodes (email, code, expires_at) VALUES (%s, %s, %s)",
-            (email, code, expires_at),
-        )
-        return True
-
-
 def substituir_codigo_reset(email, code_hash, expires_at):
     """Invalida códigos anteriores e cria novo no mesmo commit.
 

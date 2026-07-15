@@ -1,7 +1,7 @@
 import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { icon } from '../icons.js';
-import { debounce, escapeHtml } from '../utils.js';
+import { escapeHtml } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState } from '../state.js';
 import { openModal, closeModal } from '../main.js';

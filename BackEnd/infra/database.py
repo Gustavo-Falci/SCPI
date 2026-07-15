@@ -13,15 +13,6 @@ except ImportError:
     _pgpool = None
     _IS_PSYCOPG2 = False
 
-    class RealDictCursor:
-        def __init__(self, conn):
-            self.conn = conn
-
-        @staticmethod
-        def _row_factor(cursor, row):
-            col_names = [d[0] for d in cursor.description]
-            return dict(zip(col_names, row))
-
 from contextlib import contextmanager
 from dotenv import load_dotenv, find_dotenv
 import logging

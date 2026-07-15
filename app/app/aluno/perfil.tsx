@@ -78,7 +78,7 @@ export default function PerfilAluno() {
       } else {
         Alert.alert("Sucesso", `Arquivo salvo em: ${result.uri}`);
       }
-    } catch (err: any) {
+    } catch {
       Alert.alert("Erro", "Não foi possível exportar seus dados. Tente novamente.");
     } finally {
       setExportando(false);
