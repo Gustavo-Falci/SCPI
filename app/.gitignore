@@ -48,3 +48,6 @@ audit-after.json
 deps-before.txt
 deps-after.txt
 version-diff.md
+
+#Chave dos serviços do Firebase
+scpi-6f501-firebase-adminsdk-fbsvc-9c2402089d.json

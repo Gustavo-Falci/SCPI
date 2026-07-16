@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "504458239781",
+    "project_id": "scpi-6f501",
+    "storage_bucket": "scpi-6f501.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:504458239781:android:298c348020f1e32df704cc",
+        "android_client_info": {
+          "package_name": "com.gustavofalci.scpi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDsyrhCsSddm8TsSlW5kqtHeT9qLT3DJZ4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
