@@ -101,7 +101,7 @@ def ensure_base_schema():
                     chamada_id serial PRIMARY KEY,
                     turma_id uuid NOT NULL
                         REFERENCES Turmas(turma_id) ON DELETE CASCADE,
-                    professor_id uuid NOT NULL
+                    professor_id uuid
                         REFERENCES Professores(professor_id) ON DELETE CASCADE,
                     data_chamada date NOT NULL,
                     horario_inicio time NOT NULL,
@@ -154,6 +154,22 @@ def ensure_professor_departamento_dropped():
             )
     except Exception as e:
         logger.error("Falha ao remover coluna departamento: %s", e)
+
+
+def ensure_chamada_professor_nullable():
+    """Torna chamadas.professor_id nullable (idempotente).
+
+    A exclusão de professor orfana as chamadas (professor_id = NULL) para
+    preservar o histórico de presença. Espelha turmas.professor_id, que já é
+    nullable. Sem isso, excluir professor com chamada dá NotNullViolation.
+    """
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                "ALTER TABLE Chamadas ALTER COLUMN professor_id DROP NOT NULL"
+            )
+    except Exception as e:
+        logger.error("Falha ao tornar chamadas.professor_id nullable: %s", e)
 
 
 def ensure_lgpd_columns():
@@ -341,6 +357,7 @@ def ensure_chamada_aberta_unica():
 def _apply_all():
     ensure_base_schema()
     ensure_professor_departamento_dropped()
+    ensure_chamada_professor_nullable()
     ensure_refresh_tokens_table()
     ensure_lgpd_columns()
     ensure_multi_angle_faces()

@@ -57,7 +57,7 @@ CREATE TABLE public.alunos (
 CREATE TABLE public.chamadas (
     chamada_id integer NOT NULL,
     turma_id uuid NOT NULL,
-    professor_id uuid NOT NULL,
+    professor_id uuid,
     data_chamada date NOT NULL,
     horario_inicio time without time zone NOT NULL,
     horario_fim time without time zone,
