@@ -22,7 +22,7 @@ async function load() {
 function filtered() {
   if (!search) return data;
   const q = search.toLowerCase();
-  return data.filter(p => p.nome?.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q) || p.departamento?.toLowerCase().includes(q));
+  return data.filter(p => p.nome?.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q));
 }
 
 function renderList(container) {
@@ -48,7 +48,7 @@ function renderList(container) {
         ${avatar(p.nome, 38)}
         <div class="min-w-0 flex-1">
           <p class="font-black text-white text-sm truncate">${escapeHtml(p.nome)}</p>
-          <p class="text-gray-500 font-bold text-xs truncate mt-0.5">${escapeHtml(p.email)}${p.departamento ? ` · ${escapeHtml(p.departamento)}` : ''}</p>
+          <p class="text-gray-500 font-bold text-xs truncate mt-0.5">${escapeHtml(p.email)}</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <button data-id="${p.professor_id}" class="edit-btn w-8 h-8 rounded-xl bg-accent/10 hover:bg-accent/20 flex items-center justify-center text-accent transition-all">${icon('pencil', 14)}</button>
@@ -89,7 +89,6 @@ function showEditModal(prof, container) {
       <form id="edit-prof-form" class="space-y-4">
         <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome</label><input name="nome" type="text" value="${escapeHtml(prof.nome || '')}" class="scpi-input" required></div>
         <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email</label><input name="email" type="email" value="${escapeHtml(prof.email || '')}" class="scpi-input" required></div>
-        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Departamento</label><input name="departamento" type="text" value="${escapeHtml(prof.departamento || '')}" class="scpi-input"></div>
         <div class="flex gap-3 pt-2">
           <button type="button" onclick="closeModal()" class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
           <button type="submit" id="edit-prof-btn" class="flex-1 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Salvar</button>
@@ -104,7 +103,6 @@ function showEditModal(prof, container) {
       await api.patch(`/admin/professores/${prof.professor_id}`, {
         nome: e.target.querySelector('[name=nome]').value.trim(),
         email: e.target.querySelector('[name=email]').value.trim(),
-        departamento: e.target.querySelector('[name=departamento]').value.trim() || null,
       });
       invalidate('professores'); await load(); renderList(container);
       closeModal(); toast.success('Professor atualizado.');
@@ -142,10 +140,6 @@ function formHTML() {
         <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email *</label>
         <input name="email" type="email" placeholder="joao@escola.com" class="scpi-input" required>
       </div>
-      <div>
-        <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Departamento</label>
-        <input name="departamento" type="text" placeholder="Engenharia de Software" class="scpi-input">
-      </div>
       <button id="prof-create-btn" type="submit" class="w-full py-3 rounded-2xl bg-accent text-white font-black text-sm transition-all flex items-center justify-center gap-2">${icon('plus', 16)}<span>Criar Professor</span></button>
     </form>`;
 }
@@ -176,7 +170,6 @@ async function handleCreate(form, container) {
     const res = await api.post('/admin/usuarios/professor', {
       nome: form.querySelector('[name=nome]').value.trim(),
       email,
-      departamento: form.querySelector('[name=departamento]').value.trim() || null,
     });
     form.reset();
     invalidate('professores');
@@ -199,7 +192,7 @@ export async function mount(container) {
             ${icon('upload', 16)}<span>Importar CSV</span>
           </label>
           <input id="prof-csv-input" type="file" accept=".csv" class="hidden">
-          <p class="text-[10px] text-gray-600 font-bold mt-2 text-center">Colunas: nome, email, departamento</p>
+          <p class="text-[10px] text-gray-600 font-bold mt-2 text-center">Colunas: nome, email</p>
         </div>
       </div>
       <div class="flex-1 flex flex-col overflow-hidden gap-3 min-h-0">

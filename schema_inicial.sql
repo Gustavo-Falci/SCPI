@@ -214,7 +214,6 @@ ALTER SEQUENCE public.presencas_presenca_id_seq OWNED BY public.presencas.presen
 CREATE TABLE public.professores (
     professor_id uuid NOT NULL,
     usuario_id uuid NOT NULL,
-    departamento character varying(150),
     data_admissao date
 );
 

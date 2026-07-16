@@ -8,7 +8,6 @@ class UsuarioRegistro(BaseModel):
     senha: str = Field(..., min_length=12, max_length=128)
     tipo_usuario: str = Field(..., pattern=r"^(Professor|Aluno|Admin)$")
     ra: Optional[str] = Field(None, pattern=r"^[A-Za-z0-9]{4,20}$")
-    departamento: Optional[str] = Field(None, max_length=100)
 
 
 class Token(BaseModel):
