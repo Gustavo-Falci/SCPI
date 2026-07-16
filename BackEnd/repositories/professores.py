@@ -9,7 +9,7 @@ def listar_professores_para_admin():
             return []
         cur.execute(
             """
-            SELECT p.professor_id, u.nome, u.email, p.departamento
+            SELECT p.professor_id, u.nome, u.email
             FROM Professores p
             JOIN Usuarios u ON p.usuario_id = u.usuario_id
             ORDER BY u.nome ASC
@@ -18,7 +18,7 @@ def listar_professores_para_admin():
         return cur.fetchall()
 
 
-def criar_professor_com_usuario(usuario_id, professor_id, nome, email, senha_hash, departamento):
+def criar_professor_com_usuario(usuario_id, professor_id, nome, email, senha_hash):
     with get_db_cursor(commit=True) as cur:
         if not cur:
             return None
@@ -31,10 +31,10 @@ def criar_professor_com_usuario(usuario_id, professor_id, nome, email, senha_has
         )
         cur.execute(
             """
-            INSERT INTO Professores (professor_id, usuario_id, departamento)
-            VALUES (%s, %s, %s)
+            INSERT INTO Professores (professor_id, usuario_id)
+            VALUES (%s, %s)
             """,
-            (professor_id, usuario_id, departamento),
+            (professor_id, usuario_id),
         )
         return professor_id
 
@@ -109,7 +109,7 @@ def obter_dashboard_professor(usuario_id):
         return cur.fetchone()
 
 
-def atualizar_professor(professor_id, nome=None, email=None, departamento=None):
+def atualizar_professor(professor_id, nome=None, email=None):
     with get_db_cursor(commit=True) as cur:
         if not cur:
             return None
@@ -122,8 +122,6 @@ def atualizar_professor(professor_id, nome=None, email=None, departamento=None):
             cur.execute("UPDATE Usuarios SET nome = %s WHERE usuario_id = %s", (nome, usuario_id))
         if email is not None:
             cur.execute("UPDATE Usuarios SET email = %s WHERE usuario_id = %s", (email, usuario_id))
-        if departamento is not None:
-            cur.execute("UPDATE Professores SET departamento = %s WHERE professor_id = %s", (departamento, professor_id))
         return professor_id
 
 
@@ -135,7 +133,7 @@ def buscar_usuario_id_por_professor_id(professor_id):
         return cur.fetchone()
 
 
-def importar_professor_csv(nome, email, departamento, senha_hash):
+def importar_professor_csv(nome, email, senha_hash):
     """Insere usuario+professor em uma transação. Retorna (novo_usuario, email)."""
     with get_db_cursor(commit=True) as cur:
         if not cur:
@@ -166,10 +164,10 @@ def importar_professor_csv(nome, email, departamento, senha_hash):
             professor_uuid = str(uuid.uuid4())
             cur.execute(
                 """
-                INSERT INTO Professores (professor_id, usuario_id, departamento)
-                VALUES (%s, %s, %s)
+                INSERT INTO Professores (professor_id, usuario_id)
+                VALUES (%s, %s)
                 """,
-                (professor_uuid, usuario_id, departamento),
+                (professor_uuid, usuario_id),
             )
 
         return (novo_usuario, email)

@@ -261,7 +261,6 @@ def admin_atualizar_professor(
             professor_id,
             nome=dados.nome,
             email=dados.email.strip() if dados.email else None,
-            departamento=dados.departamento,
         )
         if not resultado:
             raise HTTPException(status_code=404, detail="Professor não encontrado.")
@@ -481,7 +480,6 @@ async def admin_importar_professores_csv(
             try:
                 nome = validar_celula_csv(row.get("nome", ""), "nome")
                 email = validar_celula_csv(row.get("email", ""), "email")
-                departamento = validar_celula_csv(row.get("departamento", ""), "departamento")
 
                 if not nome or not email:
                     continue
@@ -495,7 +493,7 @@ async def admin_importar_professores_csv(
                 senha_hash = get_password_hash(senha_temporaria)
 
                 novo_usuario, _ = importar_professor_csv(
-                    nome, email, departamento or None, senha_hash
+                    nome, email, senha_hash
                 )
 
                 if novo_usuario:
@@ -538,7 +536,7 @@ def admin_criar_professor(dados: CriarProfessorAdmin, request: Request, backgrou
         usuario_id = str(uuid.uuid4())
         professor_id = str(uuid.uuid4())
 
-        criar_professor_com_usuario(usuario_id, professor_id, dados.nome, email_limpo, senha_hash, dados.departamento)
+        criar_professor_com_usuario(usuario_id, professor_id, dados.nome, email_limpo, senha_hash)
 
         background_tasks.add_task(send_email_senha_temporaria, email_limpo, dados.nome, senha_temporaria, "Professor")
 

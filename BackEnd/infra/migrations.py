@@ -39,7 +39,6 @@ def ensure_base_schema():
                     professor_id uuid PRIMARY KEY,
                     usuario_id uuid NOT NULL UNIQUE
                         REFERENCES Usuarios(usuario_id) ON DELETE CASCADE,
-                    departamento varchar(150),
                     data_admissao date
                 )
                 """
@@ -140,6 +139,21 @@ def ensure_base_schema():
             )
     except Exception as e:
         logger.error("Falha ao aplicar schema base: %s", e)
+
+
+def ensure_professor_departamento_dropped():
+    """Remove a coluna departamento de Professores (idempotente).
+
+    Campo cosmético sem uso em nenhuma regra de negócio. Produção não tinha
+    dado preenchido, então o DROP não perde informação relevante.
+    """
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                "ALTER TABLE Professores DROP COLUMN IF EXISTS departamento"
+            )
+    except Exception as e:
+        logger.error("Falha ao remover coluna departamento: %s", e)
 
 
 def ensure_lgpd_columns():
@@ -326,6 +340,7 @@ def ensure_chamada_aberta_unica():
 
 def _apply_all():
     ensure_base_schema()
+    ensure_professor_departamento_dropped()
     ensure_refresh_tokens_table()
     ensure_lgpd_columns()
     ensure_multi_angle_faces()

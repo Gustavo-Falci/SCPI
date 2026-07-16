@@ -31,7 +31,6 @@ class MatricularAlunos(BaseModel):
 class CriarProfessorAdmin(BaseModel):
     nome: str = Field(..., min_length=3, max_length=100)
     email: EmailStr
-    departamento: Optional[str] = Field(None, max_length=100)
 
 
 class CriarAlunoAdmin(BaseModel):
@@ -51,4 +50,3 @@ class AtualizarAlunoAdmin(BaseModel):
 class AtualizarProfessorAdmin(BaseModel):
     nome: Optional[str] = Field(None, min_length=3, max_length=100)
     email: Optional[EmailStr] = None
-    departamento: Optional[str] = Field(None, max_length=100)
