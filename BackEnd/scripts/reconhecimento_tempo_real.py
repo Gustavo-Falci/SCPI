@@ -25,7 +25,10 @@ _CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
 _BURST_FRAMES = int(os.getenv("BURST_FRAMES", "5"))
 _BURST_MIN_MATCHES = int(os.getenv("BURST_MIN_MATCHES", "3"))
 _BURST_DURACAO_S = float(os.getenv("BURST_DURACAO_S", "2"))
-_LIVENESS_POSE_STD_MIN = float(os.getenv("LIVENESS_POSE_STD_MIN", "2.0"))
+# Limiar da MAGNITUDE COMBINADA hypot(std_yaw, std_pitch), não mais por-eixo.
+# 3.0 exige variação acumulada nos dois eixos (rosto vivo) e barra foto que
+# tomba num eixo só. Calibrar em campo pelos logs de magnitude (REGISTRAR/PENDENTE).
+_LIVENESS_POSE_STD_MIN = float(os.getenv("LIVENESS_POSE_STD_MIN", "3.0"))
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -223,14 +226,22 @@ class SistemaReconhecimento:
                             if external_id in self.presentes_chamada:
                                 continue
                             self.presentes_chamada.add(external_id)
-                        logger.info(f"🎯 Confirmado (burst+pose): {external_id}")
+                        # Loga magnitude p/ calibração: baseline do rosto VIVO
+                        # real (antes só PENDENTE logava — sem baseline de vivo).
+                        logger.info(
+                            f"🎯 Confirmado (burst+pose): {external_id} "
+                            f"[matches={av.matches}, magnitude={av.magnitude}, "
+                            f"std_yaw={av.std_yaw}, std_pitch={av.std_pitch}, "
+                            f"limiar={_LIVENESS_POSE_STD_MIN}]"
+                        )
                         self._api_pool.submit(self._registrar_presenca, external_id)
                     elif av.decisao is Decisao.PENDENTE:
                         logger.info(
-                            f"⏳ Pendente (consenso ok, pose rígida — possível foto "
+                            f"⏳ Pendente (consenso ok, magnitude baixa — possível foto "
                             f"ou pessoa parada): {external_id} "
-                            f"[matches={av.matches}, std_yaw={av.std_yaw}, "
-                            f"std_pitch={av.std_pitch}, limiar={_LIVENESS_POSE_STD_MIN}]"
+                            f"[matches={av.matches}, magnitude={av.magnitude}, "
+                            f"std_yaw={av.std_yaw}, std_pitch={av.std_pitch}, "
+                            f"limiar={_LIVENESS_POSE_STD_MIN}]"
                         )
                     else:
                         logger.info(

@@ -112,6 +112,35 @@ def test_avaliar_detalhado_expoe_metricas():
     assert detalhe.matches == 3
     assert detalhe.std_yaw == pytest.approx(4.0824, abs=1e-3)
     assert detalhe.std_pitch == 0.0
+    # magnitude = hypot(std_yaw, std_pitch); pitch constante => = std_yaw.
+    assert detalhe.magnitude == pytest.approx(4.0824, abs=1e-3)
+
+
+def test_magnitude_none_sem_pose():
+    r = [ResultadoFrame("aluno_a", None, None) for _ in range(3)]
+    assert _conf().avaliar_detalhado(r)["aluno_a"].magnitude is None
+
+
+# --- Magnitude combinada (hypot) — paliativo anti-foto 2026-07-18 ---
+# Assinatura de foto: variação concentrada num eixo. Rosto vivo: nos dois.
+# hypot acumula os eixos, então dá pra SUBIR o limiar barrando a foto de
+# um-eixo sem perder o rosto-vivo de dois-eixos (que OR barraria no mesmo limiar).
+
+def test_foto_um_eixo_forte_barra_no_limiar_alto():
+    # std_yaw=2.5, std_pitch=0 => hypot=2.5 < 3.0 => PENDENTE (foto tombada).
+    r = _frames("foto", [(0.0, 0.0), (5.0, 0.0)])
+    av = _conf(min_matches=2, pose_std_min=3.0).avaliar_detalhado(r)["foto"]
+    assert av.magnitude == pytest.approx(2.5, abs=1e-6)
+    assert av.decisao == Decisao.PENDENTE
+
+
+def test_rosto_vivo_dois_eixos_registra_no_limiar_alto():
+    # std_yaw=2.5 E std_pitch=2.5 => hypot=3.54 >= 3.0 => REGISTRAR (rosto vivo).
+    # OR por-eixo no MESMO limiar 3.0 barraria (2.5 < 3.0): é o resgate do hypot.
+    r = _frames("vivo", [(0.0, 0.0), (5.0, 5.0)])
+    av = _conf(min_matches=2, pose_std_min=3.0).avaliar_detalhado(r)["vivo"]
+    assert av.magnitude == pytest.approx(3.5355, abs=1e-3)
+    assert av.decisao == Decisao.REGISTRAR
 
 
 def test_avaliar_continua_devolvendo_so_decisoes():
