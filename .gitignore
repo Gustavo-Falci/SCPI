@@ -1,5 +1,7 @@
 .vscode/
 .env
+# Amostras da validação Fase 0 de anti-spoofing (scripts/_validar_liveness.py)
+.liveness_samples/
 # Logs de aplicação (retenção 90 dias via TimedRotatingFileHandler)
 BackEnd/logs/
 logs/
