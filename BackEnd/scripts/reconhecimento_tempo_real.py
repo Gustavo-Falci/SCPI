@@ -14,6 +14,7 @@ from dotenv import load_dotenv, find_dotenv
 from core.config import COLLECTION_ID, FACE_MATCH_THRESHOLD_SALA
 from infra.aws_clientes import rekognition_client
 from scripts.confirmacao_burst import ConfirmadorBurst, Decisao, ResultadoFrame
+from scripts.anti_spoofing import DetectorTextura
 
 load_dotenv(find_dotenv())
 _API_URL = os.getenv("SCPI_API_URL", "https://api.scpi.me").rstrip("/")
@@ -25,10 +26,14 @@ _CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
 _BURST_FRAMES = int(os.getenv("BURST_FRAMES", "5"))
 _BURST_MIN_MATCHES = int(os.getenv("BURST_MIN_MATCHES", "3"))
 _BURST_DURACAO_S = float(os.getenv("BURST_DURACAO_S", "2"))
-# Limiar da MAGNITUDE COMBINADA hypot(std_yaw, std_pitch), não mais por-eixo.
-# 3.0 exige variação acumulada nos dois eixos (rosto vivo) e barra foto que
-# tomba num eixo só. Calibrar em campo pelos logs de magnitude (REGISTRAR/PENDENTE).
+# Pose-variance (hypot) — ADVISORY quando textura ligada; gate só no fallback.
 _LIVENESS_POSE_STD_MIN = float(os.getenv("LIVENESS_POSE_STD_MIN", "3.0"))
+
+# --- Anti-spoofing por TEXTURA (modelo CNN local) — ver spec 2026-07-19 ---
+# Gate de vida primário. facenox best_model.onnx NÃO-quantizado (1.9 MB).
+_ENABLE_TEXTURE = (os.getenv("ENABLE_TEXTURE", "1").strip().lower()
+                   not in ("0", "false", "no", ""))
+_TEXTURE_LIVENESS_MIN = float(os.getenv("TEXTURE_LIVENESS_MIN", "0.20"))
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -46,6 +51,8 @@ class SistemaReconhecimento:
         self.confirmador = ConfirmadorBurst(
             min_matches=_BURST_MIN_MATCHES,
             pose_std_min=_LIVENESS_POSE_STD_MIN,
+            texture_min=_TEXTURE_LIVENESS_MIN,
+            gate="textura" if _ENABLE_TEXTURE else "pose",
         )
         self.CAM_INDEX = _CAMERA_INDEX
 
@@ -67,6 +74,24 @@ class SistemaReconhecimento:
             )
         # input size é redefinido por frame em _crops_de_rostos
         self.face_detector = cv2.FaceDetectorYN.create(model_path, "", (320, 320), 0.6)
+
+        # Detector de textura (gate de vida). Fail-closed: se ENABLE_TEXTURE e o
+        # modelo faltar/não carregar, o boot falha — não se roda sem anti-spoof.
+        self.detector_textura = None
+        if _ENABLE_TEXTURE:
+            texture_path = (os.getenv("TEXTURE_MODEL_PATH") or "").strip() or str(
+                pathlib.Path(__file__).resolve().parent / "models" / "best_model.onnx"
+            )
+            if not os.path.exists(texture_path):
+                raise ValueError(
+                    f"Modelo de textura não encontrado em {texture_path}. Baixe o "
+                    "facenox best_model.onnx NÃO-quantizado (1.9 MB) ou defina "
+                    "TEXTURE_MODEL_PATH. Para rodar sem textura: ENABLE_TEXTURE=0."
+                )
+            self.detector_textura = DetectorTextura(texture_path, _TEXTURE_LIVENESS_MIN)
+            logger.info(f"🧬 Anti-spoofing de textura ativo (limiar={_TEXTURE_LIVENESS_MIN}).")
+        else:
+            logger.warning("⚠️  ENABLE_TEXTURE=0 — sem gate de textura; fallback para pose (paliativo).")
 
     def _sincronizar_chamada(self):
         try:
@@ -103,8 +128,9 @@ class SistemaReconhecimento:
         except Exception as e:
             logger.error(f"Erro ao registrar presença via API: {e}")
 
-    def _analisar_crop(self, face_bytes, chamada_id_referencia):
-        """SearchFaces + (se match novo) DetectFaces p/ pose. Retorna ResultadoFrame|None."""
+    def _analisar_crop(self, face_bytes, chamada_id_referencia, textura=None):
+        """SearchFaces + (se match novo) DetectFaces p/ pose. Retorna ResultadoFrame|None.
+        `textura` = score de vida do crop (calculado local antes do envio)."""
         try:
             response = rekognition_client.search_faces_by_image(
                 CollectionId=COLLECTION_ID,
@@ -138,7 +164,7 @@ class SistemaReconhecimento:
                 # se nenhum frame do burst tiver pose (fail-safe, não fail-open).
                 logger.debug(f"DetectFaces falhou (segue sem pose): {e}")
 
-            return ResultadoFrame(external_id=external_id, yaw=yaw, pitch=pitch)
+            return ResultadoFrame(external_id=external_id, yaw=yaw, pitch=pitch, textura=textura)
 
         except botocore.exceptions.ClientError as e:
             code = e.response["Error"]["Code"]
@@ -153,7 +179,9 @@ class SistemaReconhecimento:
             return None
 
     def _crops_de_rostos(self, frame):
-        """Detecta rostos (YuNet) e devolve lista de crops JPEG (bytes)."""
+        """Detecta rostos (YuNet). Devolve lista de (bbox, jpeg_bytes):
+        bbox=(x,y,w,h) cru do YuNet (p/ o detector de textura), jpeg do crop
+        com margem 0.2 (p/ a AWS)."""
         h_img, w_img = frame.shape[:2]
         self.face_detector.setInputSize((w_img, h_img))
         _, faces = self.face_detector.detect(frame)
@@ -169,7 +197,7 @@ class SistemaReconhecimento:
                 continue
             ret, buffer = cv2.imencode('.jpg', frame[y1:y2, x1:x2])
             if ret:
-                crops.append(buffer.tobytes())
+                crops.append(((x, y, w, h), buffer.tobytes()))
         return crops
 
     def _thread_processamento_visual(self):
@@ -202,9 +230,16 @@ class SistemaReconhecimento:
                         chamada_i = self.chamada_id_atual
                     if frame_i is None or chamada_i != chamada_atual:
                         break
-                    for crop in self._crops_de_rostos(frame_i):
+                    for bbox, crop in self._crops_de_rostos(frame_i):
+                        # Textura pontuada localmente (crop no frame BGR, sem re-decode).
+                        tex = None
+                        if self.detector_textura is not None:
+                            try:
+                                tex = self.detector_textura.score(frame_i, bbox)
+                            except Exception as e:
+                                logger.debug(f"Score de textura falhou (segue None): {e}")
                         futures.append(
-                            self._aws_pool.submit(self._analisar_crop, crop, chamada_atual)
+                            self._aws_pool.submit(self._analisar_crop, crop, chamada_atual, tex)
                         )
                     time.sleep(intervalo)
 
@@ -226,22 +261,24 @@ class SistemaReconhecimento:
                             if external_id in self.presentes_chamada:
                                 continue
                             self.presentes_chamada.add(external_id)
-                        # Loga magnitude p/ calibração: baseline do rosto VIVO
-                        # real (antes só PENDENTE logava — sem baseline de vivo).
+                        # Loga textura (gate) + magnitude (advisory) p/ calibração.
+                        gate = self.confirmador.gate
                         logger.info(
-                            f"🎯 Confirmado (burst+pose): {external_id} "
-                            f"[matches={av.matches}, magnitude={av.magnitude}, "
-                            f"std_yaw={av.std_yaw}, std_pitch={av.std_pitch}, "
-                            f"limiar={_LIVENESS_POSE_STD_MIN}]"
+                            f"🎯 Confirmado ({gate}): {external_id} "
+                            f"[matches={av.matches}, texture_max={av.texture_max}, "
+                            f"tex_limiar={_TEXTURE_LIVENESS_MIN}, magnitude={av.magnitude}, "
+                            f"pose_limiar={_LIVENESS_POSE_STD_MIN}]"
                         )
                         self._api_pool.submit(self._registrar_presenca, external_id)
                     elif av.decisao is Decisao.PENDENTE:
+                        gate = self.confirmador.gate
+                        motivo = "textura baixa — possível foto" if gate == "textura" \
+                            else "magnitude baixa — possível foto ou pessoa parada"
                         logger.info(
-                            f"⏳ Pendente (consenso ok, magnitude baixa — possível foto "
-                            f"ou pessoa parada): {external_id} "
-                            f"[matches={av.matches}, magnitude={av.magnitude}, "
-                            f"std_yaw={av.std_yaw}, std_pitch={av.std_pitch}, "
-                            f"limiar={_LIVENESS_POSE_STD_MIN}]"
+                            f"⏳ Pendente (consenso ok, {motivo}): {external_id} "
+                            f"[matches={av.matches}, texture_max={av.texture_max}, "
+                            f"tex_limiar={_TEXTURE_LIVENESS_MIN}, magnitude={av.magnitude}, "
+                            f"pose_limiar={_LIVENESS_POSE_STD_MIN}]"
                         )
                     else:
                         logger.info(
