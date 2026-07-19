@@ -175,19 +175,22 @@ def _crop_com_scale(frame, box, scale):
 
 def _liveness_score(net, frame, box, preproc):
     if preproc == "minivision":
+        # garciafido/minifasnet_v2.onnx está QUEBRADO: colapsa em 1 classe
+        # (~0.994) p/ real E fake, confirmado nas imagens de demo do minivision
+        # via cv2.dnn E onnxruntime. No minivision original classe 1 = real.
         crop = _crop_com_scale(frame, box, 2.7)
         blob = cv2.dnn.blobFromImage(crop, 1 / 255.0, (80, 80), swapRB=False)
         net.setInput(blob)
-        out = net.forward().flatten()
-        p = _softmax(out)  # [live, print, replay]
-        return float(p[0]) if len(p) >= 3 else float(p[0])
-    # facenox: 128x128 RGB /255, 2 classes [?]. Best-effort; ajuste se preciso.
+        p = _softmax(net.forward().flatten())
+        return float(p[1])  # classe 1 = live (minivision)
+    # facenox best_model_quantized: preproc VALIDADO em ground-truth (T/F do
+    # minivision) — scale 1.4, RGB (swapRB), /255, classe 0 = live.
+    # Separou real=0.998 vs fake=0.000 em close-up. Falta confirmar a 2m.
     crop = _crop_com_scale(frame, box, 1.4)
     blob = cv2.dnn.blobFromImage(crop, 1 / 255.0, (128, 128), swapRB=True)
     net.setInput(blob)
-    out = net.forward().flatten()
-    p = _softmax(out)
-    return float(p[0])  # assume classe 0 = real; VERIFICAR na saída
+    p = _softmax(net.forward().flatten())
+    return float(p[0])  # classe 0 = live (facenox)
 
 
 def _preproc_blob(frame, box, preproc):
@@ -233,6 +236,7 @@ def testar(modelo_path, preproc):
             "=> este modelo exigiria onnxruntime (dep nova). Ponto #2 do advisor."
         )
     print(f"Modelo carregado em cv2.dnn OK. preproc={preproc}")
+    _estatisticas_tamanho()  # px do rosto (risco distância)
     _debug_saida_crua(net, preproc)
 
     resumo = {}
@@ -274,7 +278,8 @@ def testar(modelo_path, preproc):
 def main():
     ap = argparse.ArgumentParser(description="Fase 0 — validação de anti-spoofing.")
     ap.add_argument("--test", metavar="MODELO.onnx", help="roda modelo nas amostras coletadas")
-    ap.add_argument("--preproc", choices=["minivision", "facenox"], default="minivision")
+    # facenox é o default: garciafido/minivision onnx testado veio quebrado.
+    ap.add_argument("--preproc", choices=["minivision", "facenox"], default="facenox")
     args = ap.parse_args()
     if args.test:
         testar(args.test, args.preproc)
