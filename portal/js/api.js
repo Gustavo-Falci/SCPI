@@ -43,6 +43,9 @@ async function refreshSession() {
       const res = await fetch(`${API_URL}/auth/refresh`, {
         method: 'POST',
         credentials: 'include',
+        // Timeout: um /auth/refresh pendurado no boot prenderia o portal antes
+        // de qualquer tela ser decidida.
+        signal: AbortSignal.timeout(8000),
         headers: {
           'Content-Type': 'application/json',
           'X-Requested-With': 'XMLHttpRequest',

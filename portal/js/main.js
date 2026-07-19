@@ -120,8 +120,15 @@ function initKeyboard() {
   });
 }
 
+// style inline em vez de classe: vence qualquer utilitário de display e não
+// depende da ordem em que o Tailwind CDN gerou .hidden/.flex.
+function hideBoot() {
+  const boot = document.getElementById('view-boot');
+  if (boot) boot.style.display = 'none';
+}
+
 function showDashboard(user) {
-  document.getElementById('view-boot')?.classList.add('hidden');
+  hideBoot();
   document.getElementById('view-login').classList.add('hidden');
   document.getElementById('view-dashboard').classList.remove('hidden');
   document.getElementById('sidebar-username').textContent = user.user_name || user.nome || 'Administrador';
@@ -131,7 +138,7 @@ function showDashboard(user) {
 }
 
 function showLogin() {
-  document.getElementById('view-boot')?.classList.add('hidden');
+  hideBoot();
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-login').classList.remove('hidden');
   // Zera a navegação móvel para não sobrar estado da sessão anterior caso o

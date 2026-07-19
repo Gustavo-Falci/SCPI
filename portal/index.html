@@ -34,16 +34,30 @@
   <a href="#tab-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-accent focus:text-white focus:rounded-xl focus:font-black focus:text-sm">Ir para conteúdo</a>
 
   <!-- ============================== BOOT GATE ============================== -->
-  <!-- Visível até init() confirmar a sessão no servidor. Evita renderizar
-       login ou dashboard com base apenas no perfil em localStorage. -->
-  <div id="view-boot" class="min-h-[100dvh] flex items-center justify-center p-4">
+  <!-- Overlay (fixed, fora do fluxo): cobre o login enquanto init() confirma a
+       sessão, sem empurrar nada para baixo. Login é o estado visível padrão —
+       se o JS falhar, quebrar ou vier desatualizado do cache, o usuário cai no
+       login, nunca num spinner eterno. -->
+  <div id="view-boot" class="fixed inset-0 z-[90] bg-surface flex items-center justify-center p-4">
     <div class="spin opacity-40 text-accent">
       <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
     </div>
   </div>
+  <script>
+    // Rede de segurança independente de main.js (inclusive versão em cache).
+    (function () {
+      var boot = document.getElementById('view-boot');
+      if (!boot) return;
+      var dismiss = function () { boot.style.display = 'none'; };
+      // Sem perfil salvo não há o que validar: vai direto ao login, sem splash.
+      try { if (!localStorage.getItem('admin_user')) return dismiss(); } catch (e) { return dismiss(); }
+      // Teto absoluto: nenhum caminho deixa o splash preso.
+      setTimeout(dismiss, 6000);
+    })();
+  </script>
 
   <!-- ============================== LOGIN ============================== -->
-  <div id="view-login" class="hidden relative min-h-[100dvh] flex items-center justify-center p-4 pb-12">
+  <div id="view-login" class="relative min-h-[100dvh] flex items-center justify-center p-4 pb-12">
     <div class="w-full max-w-sm">
       <div class="text-center mb-8">
         <div class="w-16 h-16 bg-accent rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-accent/40">
@@ -226,6 +240,8 @@
   <!-- ============================== TOASTS ============================== -->
   <div id="toast-container" class="fixed top-4 right-4 z-[80] flex flex-col gap-2 pointer-events-none max-w-sm w-full"></div>
 
-  <script type="module" src="js/main.js"></script>
+  <!-- ?v= força o browser a buscar o bundle novo; sem isso um main.js em cache
+       roda contra um index.html já atualizado. Incrementar a cada deploy. -->
+  <script type="module" src="js/main.js?v=3"></script>
 </body>
 </html>
