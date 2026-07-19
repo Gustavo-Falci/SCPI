@@ -218,6 +218,22 @@ def refresh_access_token(
         raise internal_error(e, "refresh_access_token")
 
 
+@router.get("/session")
+@limiter.limit("60/minute")
+def validar_sessao(request: Request, current_user: dict = Depends(get_current_user)):
+    """Confirma que o access token/cookie ainda é válido.
+
+    Usado no boot do portal para decidir entre login e dashboard sem confiar no
+    perfil guardado em localStorage. Não toca no refresh token — validar sessão
+    não pode disparar rotação nem detecção de reuso entre abas.
+    """
+    return {
+        "usuario_id": current_user.get("sub"),
+        "email": current_user.get("email"),
+        "role": current_user.get("role"),
+    }
+
+
 @router.post("/logout")
 def logout(
     response: Response,

@@ -91,6 +91,19 @@ async function request(path, opts = {}, retry = true) {
   return data;
 }
 
+// Boot do portal: confirma no servidor que a sessão vale antes de renderizar o
+// dashboard — o perfil em localStorage não prova nada. Vai por GET /auth/session
+// (não por /auth/refresh) para não rotacionar o refresh token a cada load, o que
+// dispararia detecção de reuso com várias abas abertas. O 401 aqui ainda passa
+// pelo retry normal do request(), que renova a sessão quando cabe.
+export async function validateSession() {
+  try {
+    // Timeout: sem ele, um fetch pendurado deixaria o portal no splash de boot.
+    await request('/auth/session', { method: 'GET', signal: AbortSignal.timeout(8000) });
+    return true;
+  } catch { return false; }
+}
+
 export const api = {
   get: (path) => request(path, { method: 'GET' }),
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),

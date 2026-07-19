@@ -31,8 +31,17 @@
   <!-- Skip link para acessibilidade via teclado -->
   <a href="#tab-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-accent focus:text-white focus:rounded-xl focus:font-black focus:text-sm">Ir para conteúdo</a>
 
+  <!-- ============================== BOOT GATE ============================== -->
+  <!-- Visível até init() confirmar a sessão no servidor. Evita renderizar
+       login ou dashboard com base apenas no perfil em localStorage. -->
+  <div id="view-boot" class="min-h-screen flex items-center justify-center p-4">
+    <div class="spin opacity-40 text-accent">
+      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+    </div>
+  </div>
+
   <!-- ============================== LOGIN ============================== -->
-  <div id="view-login" class="min-h-screen flex items-center justify-center p-4">
+  <div id="view-login" class="hidden min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-sm">
       <div class="text-center mb-8">
         <div class="w-16 h-16 bg-accent rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-accent/40">
@@ -161,6 +170,22 @@
       <!-- Tab content -->
       <main id="tab-content" role="main" tabindex="-1" class="flex-1 overflow-hidden p-4 sm:p-6 min-h-0 flex flex-col gap-4"></main>
     </div>
+
+    <!-- ============================== BOTTOM NAV (mobile) ============================== -->
+    <!-- Dentro de #view-dashboard: o display:none do container esconde nav e FAB
+         em todo caminho de logout/sessão expirada sem toggle extra. -->
+    <nav id="bottom-nav" aria-label="Navegação móvel"
+      class="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-white/5 flex items-stretch"
+      style="background:rgba(21,23,24,0.97);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);height:56px">
+      <!-- Populated by main.js buildBottomNav() -->
+    </nav>
+
+    <!-- ============================== FAB (mobile) ============================== -->
+    <button id="fab"
+      class="hidden lg:hidden fixed bottom-20 right-4 z-40 w-14 h-14 rounded-2xl flex items-center justify-center text-white transition-all active:scale-90"
+      style="background:linear-gradient(135deg,#6257FF,#4B39EF)">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+    </button>
   </div>
 
   <!-- ============================== MODAL ============================== -->
@@ -191,20 +216,6 @@
 
   <!-- ============================== TOASTS ============================== -->
   <div id="toast-container" class="fixed top-4 right-4 z-[80] flex flex-col gap-2 pointer-events-none max-w-sm w-full"></div>
-
-  <!-- ============================== BOTTOM NAV (mobile) ============================== -->
-  <nav id="bottom-nav" aria-label="Navegação móvel"
-    class="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-white/5 flex items-stretch"
-    style="background:rgba(21,23,24,0.97);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);height:56px">
-    <!-- Populated by main.js buildBottomNav() -->
-  </nav>
-
-  <!-- ============================== FAB (mobile) ============================== -->
-  <button id="fab"
-    class="hidden lg:hidden fixed bottom-20 right-4 z-40 w-14 h-14 rounded-2xl flex items-center justify-center text-white transition-all active:scale-90"
-    style="background:linear-gradient(135deg,#6257FF,#4B39EF)">
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
-  </button>
 
   <script type="module" src="js/main.js"></script>
   <footer style="text-align:center;padding:24px;color:#6b7280;font-size:0.85rem;border-top:1px solid #e5e7eb;margin-top:40px;">

@@ -2,7 +2,7 @@ import { toast } from './toast.js';
 import { confirm } from './confirm.js';
 import { getState, setState } from './state.js';
 import { readSession, saveSession, clearSession } from './auth.js';
-import { api, setOnExpired, extractError } from './api.js';
+import { api, setOnExpired, extractError, validateSession } from './api.js';
 import { icon } from './icons.js';
 import { skeletons } from './skeleton.js';
 import { runCreate, clearCreate } from './registry.js';
@@ -121,6 +121,7 @@ function initKeyboard() {
 }
 
 function showDashboard(user) {
+  document.getElementById('view-boot')?.classList.add('hidden');
   document.getElementById('view-login').classList.add('hidden');
   document.getElementById('view-dashboard').classList.remove('hidden');
   document.getElementById('sidebar-username').textContent = user.user_name || user.nome || 'Administrador';
@@ -130,8 +131,14 @@ function showDashboard(user) {
 }
 
 function showLogin() {
+  document.getElementById('view-boot')?.classList.add('hidden');
   document.getElementById('view-dashboard').classList.add('hidden');
   document.getElementById('view-login').classList.remove('hidden');
+  // Zera a navegação móvel para não sobrar estado da sessão anterior caso o
+  // dashboard volte a ser exibido para outro usuário.
+  const nav = document.getElementById('bottom-nav');
+  if (nav) nav.innerHTML = '';
+  document.getElementById('fab')?.classList.add('hidden');
   clearSession();
 }
 
@@ -225,7 +232,7 @@ async function initLogin() {
   });
 }
 
-function init() {
+async function init() {
   toast.init();
   confirm.init();
   setOnExpired(() => { toast.error('Sessão expirada. Faça login novamente.'); showLogin(); });
@@ -249,7 +256,11 @@ function init() {
   initFilters();
 
   const session = readSession();
-  if (session.ok) showDashboard(session.user);
+  if (!session.ok) { showLogin(); return; }
+
+  // O perfil em localStorage não prova sessão: confirma com o backend antes de
+  // montar o dashboard. Cookie expirado/ausente cai direto no login.
+  if (await validateSession()) showDashboard(session.user);
   else showLogin();
 }
 
@@ -271,4 +282,5 @@ export async function animateRemove(el) {
   await new Promise(r => setTimeout(r, 200));
 }
 
-document.addEventListener('DOMContentLoaded', init);
+// Qualquer falha no init cai no login — nunca deixa o splash de boot preso.
+document.addEventListener('DOMContentLoaded', () => { init().catch(() => showLogin()); });
