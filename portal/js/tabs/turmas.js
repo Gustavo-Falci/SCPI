@@ -49,33 +49,99 @@ function renderList(container) {
       </div>`;
     document.getElementById('cta-create-turma')?.addEventListener('click', () => document.querySelector('#turma-form [name=nome_disciplina]')?.focus());
   } else {
+    // Ações: `hidden lg:flex` em vez de `opacity-0 group-hover:opacity-100`.
+    // opacity-0 escondia visualmente mas mantinha os ~168px no fluxo (o que
+    // truncava o texto cedo demais no celular) e os botões seguiam clicáveis —
+    // incluindo Excluir, invisível e sujeito a toque acidental.
     list.innerHTML = items.map((t, i) => `
-      <div data-turma-id="${t.turma_id}" class="anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-5 py-4 rounded-2xl border border-white/5 flex items-center justify-between gap-4 transition-all hover:border-white/10" style="animation-delay:${i * 45}ms">
-        <div class="flex items-center gap-4 min-w-0 flex-1">
+      <div data-turma-id="${t.turma_id}" class="turma-card anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-4 sm:px-5 py-4 rounded-2xl border border-white/5 flex items-center justify-between gap-3 sm:gap-4 transition-all hover:border-white/10" style="animation-delay:${i * 45}ms">
+        <div class="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
           <div class="w-10 h-10 rounded-2xl flex items-center justify-center font-black text-base flex-shrink-0 ${colorBadge}">${t.semestre}º</div>
           <div class="min-w-0">
-            <p class="font-black text-white text-sm truncate">${t.nome_disciplina}</p>
-            <p class="text-gray-500 font-bold text-xs truncate">${t.codigo_turma} · ${t.professor_nome || 'Sem professor'} · ${t.total_alunos ?? 0} alunos</p>
+            <p class="font-black text-white text-sm truncate">${escapeHtml(t.nome_disciplina)}</p>
+            <p class="text-gray-500 font-bold text-xs truncate">${escapeHtml(t.codigo_turma)} · ${escapeHtml(t.professor_nome || 'Sem professor')}<span class="hidden lg:inline"> · ${t.total_alunos ?? 0} alunos</span></p>
+            <p class="text-gray-600 font-bold text-xs lg:hidden">${t.total_alunos ?? 0} alunos</p>
           </div>
         </div>
-        <div class="flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div class="hidden lg:flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <button title="Atribuir professor" data-id="${t.turma_id}" class="btn-prof w-8 h-8 rounded-xl bg-accent/10 hover:bg-accent/20 flex items-center justify-center text-accent transition-all">${icon('user-check', 14)}</button>
           <button title="Matricular alunos" data-id="${t.turma_id}" class="btn-mat w-8 h-8 rounded-xl bg-green-500/10 hover:bg-green-500/20 flex items-center justify-center text-green-400 transition-all">${icon('user-plus', 14)}</button>
           <button title="Importar CSV" data-id="${t.turma_id}" class="btn-csv w-8 h-8 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 flex items-center justify-center text-yellow-400 transition-all">${icon('upload', 14)}</button>
           <button title="Excluir" data-id="${t.turma_id}" class="btn-del w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all">${icon('trash-2', 14)}</button>
         </div>
+        <span class="lg:hidden text-gray-600 flex-shrink-0" aria-hidden="true">${icon('chevron-right', 18)}</span>
       </div>
     `).join('');
 
-    list.querySelectorAll('.btn-prof').forEach(btn => {
-      const t = turmas.find(x => String(x.turma_id) === String(btn.dataset.id));
-      btn.addEventListener('click', () => showProfModal(t, container));
+    // stopPropagation: no desktop os atalhos de hover não podem abrir o modal
+    // de detalhe junto com a própria ação.
+    const bindAction = (sel, fn) => list.querySelectorAll(sel).forEach(btn => {
+      btn.addEventListener('click', e => { e.stopPropagation(); fn(btn); });
     });
-    list.querySelectorAll('.btn-mat').forEach(btn => btn.addEventListener('click', () => showMatriculaModal(btn.dataset.id, container)));
-    list.querySelectorAll('.btn-csv').forEach(btn => btn.addEventListener('click', () => importCSV(btn.dataset.id, container)));
-    list.querySelectorAll('.btn-del').forEach(btn => btn.addEventListener('click', () => deleteTurma(btn.dataset.id, container)));
+    bindAction('.btn-prof', btn => showProfModal(turmas.find(x => String(x.turma_id) === String(btn.dataset.id)), container));
+    bindAction('.btn-mat', btn => showMatriculaModal(btn.dataset.id, container));
+    bindAction('.btn-csv', btn => importCSV(btn.dataset.id, container));
+    bindAction('.btn-del', btn => deleteTurma(btn.dataset.id, container));
+
+    list.querySelectorAll('.turma-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const t = turmas.find(x => String(x.turma_id) === String(card.dataset.turmaId));
+        if (t) showTurmaDetail(t, container);
+      });
+    });
   }
   renderPagination(pag, { page, total, count, perPage: PER_PAGE }, p => { page = p; renderList(container); });
+}
+
+// Detalhe da turma: no celular é a única via para as ações, já que os atalhos
+// de hover só existem em lg+. Nome sem truncate e ações com rótulo — é aqui
+// que a informação cortada na lista aparece inteira.
+function showTurmaDetail(turma, container) {
+  const acao = (cls, iconName, label, tone) => `
+    <button class="${cls} w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl font-black text-sm text-left transition-colors ${tone}">
+      ${icon(iconName, 18)}<span>${label}</span>
+    </button>`;
+
+  openModal(`
+    <div class="p-6">
+      <div class="flex items-start justify-between gap-3 mb-1">
+        <h3 class="font-black text-lg leading-tight">${escapeHtml(turma.nome_disciplina)}</h3>
+        <button id="td-close" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 flex-shrink-0">${icon('x', 16)}</button>
+      </div>
+      <p class="text-gray-500 text-xs font-bold mb-5">
+        ${escapeHtml(turma.codigo_turma)} · ${turma.semestre}º semestre · ${escapeHtml(turma.turno || '')}${turma.sala_padrao ? ` · Sala ${escapeHtml(turma.sala_padrao)}` : ''}
+      </p>
+
+      <div class="grid grid-cols-2 gap-2 mb-5">
+        <div class="px-4 py-3 rounded-2xl bg-surface border border-white/5 min-w-0">
+          <p class="text-[10px] font-black text-gray-600 uppercase tracking-widest">Professor</p>
+          <p class="font-black text-sm truncate mt-0.5">${escapeHtml(turma.professor_nome || 'Sem professor')}</p>
+        </div>
+        <div class="px-4 py-3 rounded-2xl bg-surface border border-white/5">
+          <p class="text-[10px] font-black text-gray-600 uppercase tracking-widest">Alunos</p>
+          <p class="font-black text-sm mt-0.5">${turma.total_alunos ?? 0}</p>
+        </div>
+      </div>
+
+      <div class="space-y-1.5">
+        ${acao('td-prof', 'user-check', 'Atribuir professor', 'text-accent hover:bg-accent/10')}
+        ${acao('td-mat', 'user-plus', 'Matricular alunos', 'text-green-400 hover:bg-green-500/10')}
+        ${acao('td-csv', 'upload', 'Importar alunos por CSV', 'text-yellow-400 hover:bg-yellow-500/10')}
+      </div>
+      <div class="mt-4 pt-4 border-t border-white/5">
+        ${acao('td-del', 'trash-2', 'Excluir turma', 'text-red-400 hover:bg-red-500/10')}
+      </div>
+    </div>
+  `);
+
+  const box = document.getElementById('modal-box');
+  box.querySelector('#td-close').addEventListener('click', closeModal);
+  // Cada ação substitui o conteúdo do modal (showProfModal/showMatriculaModal
+  // chamam openModal de novo) ou o fecha antes de seguir.
+  box.querySelector('.td-prof').addEventListener('click', () => showProfModal(turma, container));
+  box.querySelector('.td-mat').addEventListener('click', () => showMatriculaModal(turma.turma_id, container));
+  box.querySelector('.td-csv').addEventListener('click', () => { closeModal(); importCSV(turma.turma_id, container); });
+  box.querySelector('.td-del').addEventListener('click', () => { closeModal(); deleteTurma(turma.turma_id, container); });
 }
 
 async function deleteTurma(id, container) {

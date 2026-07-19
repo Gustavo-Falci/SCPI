@@ -147,8 +147,11 @@
     <!-- Main area -->
     <div class="flex-1 flex flex-col overflow-hidden min-w-0">
 
-      <!-- Header -->
-      <header class="bg-card border-b border-white/5 px-4 sm:px-6 py-4 flex items-center justify-between gap-3 flex-shrink-0">
+      <!-- Header — mobile: 2 linhas (título em cima, filtros embaixo).
+           lg: volta a ser uma linha só, título à esquerda e filtros à direita.
+           Antes era sempre 1 linha: os filtros, flex-shrink-0, esmagavam o
+           bloco do título até largura zero no celular. -->
+      <header class="bg-card border-b border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 flex-shrink-0">
         <div class="flex items-center gap-3 min-w-0">
           <!-- Hamburger -->
           <button id="hamburger"
@@ -157,12 +160,15 @@
           </button>
           <div class="min-w-0">
             <h2 id="header-title" class="font-black text-base sm:text-lg leading-tight truncate"></h2>
-            <p id="header-subtitle" class="text-[10px] sm:text-xs text-gray-500 font-bold hidden sm:block"></p>
+            <p id="header-subtitle" class="text-[11px] sm:text-xs text-gray-500 font-bold truncate"></p>
           </div>
         </div>
 
-        <!-- Filters -->
-        <div id="filters-row" class="flex items-center gap-2 flex-shrink-0 transition-all duration-200">
+        <!-- Filters — no mobile ocupam a linha inteira e rolam na horizontal;
+             o padding negativo faz a rolagem sangrar até a borda da tela. -->
+        <div id="filters-row"
+          class="flex items-center gap-2 lg:flex-shrink-0 overflow-x-auto lg:overflow-visible -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 transition-all duration-200"
+          style="scrollbar-width:none;-webkit-overflow-scrolling:touch">
 
           <!-- Turno: segmented control com cores semânticas -->
           <div id="turno-control" class="relative flex bg-surface rounded-2xl p-1 border border-white/5 flex-shrink-0">
@@ -242,6 +248,6 @@
 
   <!-- ?v= força o browser a buscar o bundle novo; sem isso um main.js em cache
        roda contra um index.html já atualizado. Incrementar a cada deploy. -->
-  <script type="module" src="js/main.js?v=3"></script>
+  <script type="module" src="js/main.js?v=4"></script>
 </body>
 </html>
