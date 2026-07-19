@@ -190,6 +190,38 @@ def _liveness_score(net, frame, box, preproc):
     return float(p[0])  # assume classe 0 = real; VERIFICAR na saída
 
 
+def _preproc_blob(frame, box, preproc):
+    if preproc == "minivision":
+        crop = _crop_com_scale(frame, box, 2.7)
+        return cv2.dnn.blobFromImage(crop, 1 / 255.0, (80, 80), swapRB=False)
+    crop = _crop_com_scale(frame, box, 1.4)
+    return cv2.dnn.blobFromImage(crop, 1 / 255.0, (128, 128), swapRB=True)
+
+
+def _debug_saida_crua(net, preproc):
+    """Imprime shape + valores crus do modelo p/ 1 amostra de cada label.
+    Revela a interpretação correta do output (índice da classe 'live')."""
+    print("\n--- DEBUG saída crua (1 amostra por label) ---")
+    for lbl in _LABELS.values():
+        txts = sorted(glob.glob(str(_SAMPLES_DIR / lbl / "*.txt")))
+        if not txts:
+            print(f"  {lbl:6s}: (sem amostras)")
+            continue
+        jpg = txts[0][:-4] + ".jpg"
+        frame = cv2.imread(jpg)
+        if frame is None:
+            continue
+        with open(txts[0]) as fh:
+            box = tuple(int(v) for v in fh.read().split())
+        blob = _preproc_blob(frame, box, preproc)
+        net.setInput(blob)
+        out = net.forward()
+        raw = out.flatten()
+        print(f"  {lbl:6s}: shape={out.shape} raw={np.round(raw, 4).tolist()} "
+              f"softmax={np.round(_softmax(raw), 4).tolist()}")
+    print("--- fim debug ---\n")
+
+
 def testar(modelo_path, preproc):
     if not os.path.exists(modelo_path):
         raise SystemExit(f"Modelo não encontrado: {modelo_path}")
@@ -201,6 +233,7 @@ def testar(modelo_path, preproc):
             "=> este modelo exigiria onnxruntime (dep nova). Ponto #2 do advisor."
         )
     print(f"Modelo carregado em cv2.dnn OK. preproc={preproc}")
+    _debug_saida_crua(net, preproc)
 
     resumo = {}
     for lbl in _LABELS.values():
