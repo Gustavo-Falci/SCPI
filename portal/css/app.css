@@ -50,7 +50,14 @@ select.scpi-input option { background: #151718; color: #fff; }
 .checkbox-ui.indeterminate::after { content: ''; display: block; width: 8px; height: 2px; background: white; }
 
 /* Group hover for rostos buttons */
-.group-row:hover .group-hover-btn { opacity: 1 !important; }
+/* Sem hover no celular, opacity:0 deixaria este botão de exclusão invisível e
+   ainda assim clicável. Abaixo de lg ele fica sempre visível; o reveal por
+   hover só vale onde hover existe. */
+.group-hover-btn { opacity: 1; }
+@media (min-width: 1024px) {
+  .group-hover-btn { opacity: 0; }
+  .group-row:hover .group-hover-btn { opacity: 1 !important; }
+}
 
 /* Login bg gradient */
 #view-login { background: radial-gradient(ellipse at top, rgba(75,57,239,0.15) 0%, #0C0C12 60%); }

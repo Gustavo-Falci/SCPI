@@ -79,7 +79,7 @@ function renderPanel(container, panelId) {
             <p class="font-black text-sm text-white truncate">${g.name}</p>
             <p class="text-xs text-gray-600 font-bold">${allIds.length} ${isRek ? 'face(s)' : 'arquivo(s)'}</p>
           </div>
-          <button data-panel="${panelId}" data-ids='${JSON.stringify(allIds)}' class="del-group w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0 opacity-0 group-hover-btn">${icon('trash-2', 13)}</button>
+          <button data-panel="${panelId}" data-ids='${JSON.stringify(allIds)}' class="del-group w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0 group-hover-btn">${icon('trash-2', 13)}</button>
           <span class="text-gray-600 transition-transform ${isOpen ? 'rotate-90' : ''}">${icon('chevron-right', 14)}</span>
         </div>
         ${isOpen ? `

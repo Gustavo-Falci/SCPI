@@ -48,18 +48,24 @@ function renderList(container) {
     document.getElementById('cta-create-aluno')?.addEventListener('click', () => document.querySelector('#aluno-form [name=nome]')?.focus());
   } else {
     list.innerHTML = items.map((a, i) => `
-      <div data-aluno-id="${a.aluno_id}" class="anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-5 py-4 rounded-2xl border border-white/5 flex items-center gap-4 transition-all hover:border-white/10" style="animation-delay:${i * 45}ms">
+      <div data-aluno-id="${a.aluno_id}" class="anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-4 sm:px-5 py-4 rounded-2xl border border-white/5 flex items-center gap-3 sm:gap-4 transition-all hover:border-white/10" style="animation-delay:${i * 45}ms">
         ${avatar(a.nome, 38)}
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 mb-0.5">
             <p class="font-black text-white text-sm truncate">${escapeHtml(a.nome)}</p>
             ${turnoBadge(a.turno)}
           </div>
-          <p class="text-gray-500 font-bold text-xs truncate">${escapeHtml(a.email)}${a.ra ? ` · RA/CPF: ${escapeHtml(a.ra)}` : ''}</p>
+          <!-- Email e RA numa linha só truncavam os dois no celular; em lg+
+               cabem inline, então lá seguem juntos. -->
+          <p class="text-gray-500 font-bold text-xs truncate">${escapeHtml(a.email)}${a.ra ? `<span class="hidden lg:inline"> · RA/CPF: ${escapeHtml(a.ra)}</span>` : ''}</p>
+          ${a.ra ? `<p class="text-gray-600 font-bold text-xs truncate lg:hidden">RA/CPF: ${escapeHtml(a.ra)}</p>` : ''}
         </div>
-        <div class="flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button data-id="${a.aluno_id}" class="edit-btn w-8 h-8 rounded-xl bg-accent/10 hover:bg-accent/20 flex items-center justify-center text-accent transition-all">${icon('pencil', 14)}</button>
-          <button data-id="${a.aluno_id}" class="del-btn w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all">${icon('trash-2', 14)}</button>
+        <!-- Mobile: sempre visíveis. opacity-0 sem hover deixava os botões
+             invisíveis mas ainda clicáveis — incluindo Excluir. Só em lg+,
+             onde hover existe, eles voltam a aparecer no hover. -->
+        <div class="flex items-center gap-2 flex-shrink-0 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+          <button title="Editar" data-id="${a.aluno_id}" class="edit-btn w-9 h-9 lg:w-8 lg:h-8 rounded-xl bg-accent/10 hover:bg-accent/20 flex items-center justify-center text-accent transition-all">${icon('pencil', 14)}</button>
+          <button title="Excluir" data-id="${a.aluno_id}" class="del-btn w-9 h-9 lg:w-8 lg:h-8 rounded-xl bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all">${icon('trash-2', 14)}</button>
         </div>
       </div>`).join('');
     list.querySelectorAll('.edit-btn').forEach(btn => {

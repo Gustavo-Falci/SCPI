@@ -42,7 +42,8 @@ function renderGrid(container) {
                   ${icon('map-pin', 10)}
                   <span class="text-[10px] font-black uppercase">${h.sala || '—'}</span>
                 </div>
-                <button data-id="${h.horario_id}" class="del-horario w-6 h-6 rounded-lg bg-red-500/20 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0 opacity-0 group-hover:opacity-100">${icon('trash-2', 11)}</button>
+                <!-- Mobile: sempre visível. Ver comentário equivalente em alunos.js. -->
+                <button title="Excluir aula" data-id="${h.horario_id}" class="del-horario w-8 h-8 lg:w-6 lg:h-6 rounded-lg bg-red-500/20 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0 lg:opacity-0 lg:group-hover:opacity-100">${icon('trash-2', 11)}</button>
               </div>
             </div>
           `).join('')}

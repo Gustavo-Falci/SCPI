@@ -50,9 +50,10 @@ function renderList(container) {
           <p class="font-black text-white text-sm truncate">${escapeHtml(p.nome)}</p>
           <p class="text-gray-500 font-bold text-xs truncate mt-0.5">${escapeHtml(p.email)}</p>
         </div>
-        <div class="flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button data-id="${p.professor_id}" class="edit-btn w-8 h-8 rounded-xl bg-accent/10 hover:bg-accent/20 flex items-center justify-center text-accent transition-all">${icon('pencil', 14)}</button>
-          <button data-id="${p.professor_id}" class="del-btn w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all">${icon('trash-2', 14)}</button>
+        <!-- Mobile: sempre visíveis. Ver comentário equivalente em alunos.js. -->
+        <div class="flex items-center gap-2 flex-shrink-0 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+          <button title="Editar" data-id="${p.professor_id}" class="edit-btn w-9 h-9 lg:w-8 lg:h-8 rounded-xl bg-accent/10 hover:bg-accent/20 flex items-center justify-center text-accent transition-all">${icon('pencil', 14)}</button>
+          <button title="Excluir" data-id="${p.professor_id}" class="del-btn w-9 h-9 lg:w-8 lg:h-8 rounded-xl bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all">${icon('trash-2', 14)}</button>
         </div>
       </div>`).join('');
     list.querySelectorAll('.edit-btn').forEach(btn => {
