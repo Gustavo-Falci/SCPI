@@ -33,7 +33,9 @@ _LIVENESS_POSE_STD_MIN = float(os.getenv("LIVENESS_POSE_STD_MIN", "3.0"))
 # Gate de vida primário. facenox best_model.onnx NÃO-quantizado (1.9 MB).
 _ENABLE_TEXTURE = (os.getenv("ENABLE_TEXTURE", "1").strip().lower()
                    not in ("0", "false", "no", ""))
-_TEXTURE_LIVENESS_MIN = float(os.getenv("TEXTURE_LIVENESS_MIN", "0.20"))
+# 0.08 calibrado em campo no frame RAW (foto ~0.003, rosto real ~0.16-0.69).
+# No JPEG a separação era mais folgada (0.20); o raw derruba o score do rosto.
+_TEXTURE_LIVENESS_MIN = float(os.getenv("TEXTURE_LIVENESS_MIN", "0.08"))
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
