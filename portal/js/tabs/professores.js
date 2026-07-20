@@ -2,7 +2,7 @@ import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { confirm } from '../confirm.js';
 import { icon } from '../icons.js';
-import { avatar, debounce, escapeHtml } from '../utils.js';
+import { avatar, baixarModeloCsv, debounce, escapeHtml } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState, invalidate } from '../state.js';
 import { openModal, closeModal, animateRemove } from '../main.js';
@@ -194,6 +194,7 @@ export async function mount(container) {
           </label>
           <input id="prof-csv-input" type="file" accept=".csv" class="hidden">
           <p class="text-[10px] text-gray-600 font-bold mt-2 text-center">Colunas: nome, email</p>
+          <button id="prof-csv-modelo" class="w-full mt-2 text-[10px] font-black text-accent hover:underline">Baixar modelo</button>
         </div>
       </div>
       <div class="flex-1 flex flex-col overflow-hidden gap-3 min-h-0">
@@ -235,6 +236,12 @@ export async function mount(container) {
       csvInput.value = '';
     });
   }
+
+  container.querySelector('#prof-csv-modelo')?.addEventListener('click', () => baixarModeloCsv(
+    'modelo-professores.csv',
+    ['nome', 'email'],
+    ['João Silva', 'joao@escola.com'],
+  ));
 
   try { await load(); renderList(container); } catch (err) { toast.error(extractError(err)); }
 }

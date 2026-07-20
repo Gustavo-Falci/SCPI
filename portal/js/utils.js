@@ -9,6 +9,18 @@ export function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, ch => HTML_ENTITIES[ch]);
 }
 
+// ';' + BOM: é o que o Excel pt-BR abre em colunas separadas. O backend detecta
+// o delimitador, então vírgula continua funcionando no upload.
+export function baixarModeloCsv(nomeArquivo, colunas, exemplo) {
+  const conteudo = '﻿' + colunas.join(';') + '\n' + exemplo.join(';') + '\n';
+  const url = URL.createObjectURL(new Blob([conteudo], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivo;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 const PALETTE = ['#4B39EF','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4','#F97316'];
 
 export function avatar(nome = '?', size = 36) {

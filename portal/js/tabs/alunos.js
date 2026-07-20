@@ -2,7 +2,7 @@ import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { confirm } from '../confirm.js';
 import { icon } from '../icons.js';
-import { avatar, debounce, escapeHtml } from '../utils.js';
+import { avatar, baixarModeloCsv, debounce, escapeHtml } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState, invalidate } from '../state.js';
 import { openModal, closeModal, animateRemove } from '../main.js';
@@ -185,18 +185,6 @@ async function handleCreate(form, container) {
   finally { btn.disabled = false; btn.querySelector('span').textContent = 'Criar Aluno'; }
 }
 
-function baixarModeloCsv() {
-  // ';' + BOM: é o que o Excel pt-BR abre em colunas separadas. O backend
-  // detecta o delimitador, então vírgula continua funcionando no upload.
-  const conteudo = '﻿nome;email;ra;turno;turma\nMaria Santos;maria@escola.com;2024001;Matutino;MAT-101\n';
-  const url = URL.createObjectURL(new Blob([conteudo], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'modelo-alunos.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function showImportResultModal(res) {
   window.closeModal = closeModal;
   const card = (valor, rotulo) => `
@@ -278,7 +266,11 @@ export async function mount(container) {
     await handleImportCsv(csvInput.files[0], container);
     csvInput.value = '';  // permite reenviar o mesmo arquivo depois de corrigir
   });
-  container.querySelector('#aluno-csv-modelo').addEventListener('click', baixarModeloCsv);
+  container.querySelector('#aluno-csv-modelo').addEventListener('click', () => baixarModeloCsv(
+    'modelo-alunos.csv',
+    ['nome', 'email', 'ra', 'turno', 'turma'],
+    ['Maria Santos', 'maria@escola.com', '2024001', 'Matutino', 'MAT-101'],
+  ));
 
   setCreate(() => {
     window.closeModal = closeModal;
