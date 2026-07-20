@@ -259,3 +259,54 @@ def test_validar_upload_csv_rejeita_extensao():
 def test_validar_upload_csv_aceita_maiusculo():
     from routers.admin import _validar_extensao_csv
     _validar_extensao_csv("ALUNOS.CSV")  # não levanta
+
+
+# ---------------------------------------------------- leitor CSV tolerante
+
+def test_criar_leitor_csv_ignora_bom_do_header():
+    from core.csv_utils import criar_leitor_csv
+    decoded = "﻿nome,email,ra\nMaria Santos,maria@escola.com,2024001\n"
+    linhas = list(criar_leitor_csv(decoded, ["nome", "email", "ra"]))
+    assert linhas[0]["nome"] == "Maria Santos"
+
+
+def test_criar_leitor_csv_aceita_ponto_e_virgula():
+    from core.csv_utils import criar_leitor_csv
+    decoded = "nome;email;ra\nMaria Santos;maria@escola.com;2024001\n"
+    linhas = list(criar_leitor_csv(decoded, ["nome", "email", "ra"]))
+    assert linhas[0]["email"] == "maria@escola.com"
+
+
+def test_criar_leitor_csv_normaliza_header_com_espaco_e_maiuscula():
+    from core.csv_utils import criar_leitor_csv
+    decoded = "Nome, Email ,RA\nMaria Santos,maria@escola.com,2024001\n"
+    linhas = list(criar_leitor_csv(decoded, ["nome", "email", "ra"]))
+    assert linhas[0]["nome"] == "Maria Santos"
+    assert linhas[0]["ra"] == "2024001"
+
+
+def test_criar_leitor_csv_erro_quando_falta_coluna():
+    from core.csv_utils import criar_leitor_csv
+    with pytest.raises(ValueError) as exc:
+        criar_leitor_csv("nome,email\nMaria,m@e.com\n", ["nome", "email", "ra"])
+    assert "ra" in str(exc.value)
+
+
+def test_processar_csv_com_bom_e_ponto_e_virgula_importa():
+    conteudo = ("﻿nome;email;ra;turno;turma\n"
+                "Maria Santos;maria@escola.com;2024001;Matutino;MAT-101\n").encode("utf-8")
+    p_imp, p_mapa = _patch_service(importar_retorno=(True, "maria@escola.com", True))
+    with p_imp as imp, p_mapa:
+        from services.import_alunos import processar_csv_alunos
+        res = processar_csv_alunos(conteudo)
+    assert res.importados == 1
+    assert res.erros == []
+    assert imp.call_args[0][0] == "t1"
+
+
+def test_processar_csv_header_errado_400():
+    from services.import_alunos import processar_csv_alunos
+    with pytest.raises(HTTPException) as exc:
+        processar_csv_alunos(b"aluno,mail\nMaria,m@e.com\n")
+    assert exc.value.status_code == 400
+    assert "nome" in exc.value.detail

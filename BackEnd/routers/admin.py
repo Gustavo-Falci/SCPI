@@ -1,5 +1,3 @@
-import csv
-import io
 import logging
 import uuid
 from typing import List, Optional
@@ -9,7 +7,7 @@ from pydantic import BaseModel
 
 from core.auth_utils import get_password_hash
 from core.config import BUCKET_NAME, COLLECTION_ID
-from core.csv_utils import EMAIL_REGEX, MAX_CSV_BYTES, validar_celula_csv
+from core.csv_utils import EMAIL_REGEX, MAX_CSV_BYTES, criar_leitor_csv, validar_celula_csv
 from core.helpers import audit, client_ip, gerar_senha_temporaria, internal_error
 from core.security import require_role
 from infra.aws_clientes import rekognition_client, s3_client
@@ -441,9 +439,7 @@ async def admin_importar_professores_csv(
     file: UploadFile = File(...),
     current_user: dict = Depends(require_role("Admin")),
 ):
-    filename = (file.filename or "").lower()
-    if not filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Apenas arquivos .csv são aceitos.")
+    _validar_extensao_csv(file.filename)
 
     content = await file.read()
     if not content:
@@ -452,13 +448,17 @@ async def admin_importar_professores_csv(
         raise HTTPException(status_code=413, detail="CSV muito grande (limite: 2 MB).")
 
     try:
-        decoded = content.decode("utf-8")
+        # utf-8-sig descarta o BOM gravado pelo Excel.
+        decoded = content.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="CSV deve estar em UTF-8.")
 
     try:
-        csv_reader = csv.DictReader(io.StringIO(decoded))
+        csv_reader = criar_leitor_csv(decoded, ["nome", "email"])
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
 
+    try:
         importados = 0
         duplicados = 0
         emails_enviados = 0
