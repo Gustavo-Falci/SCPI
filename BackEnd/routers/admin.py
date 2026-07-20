@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from core.auth_utils import get_password_hash
 from core.config import BUCKET_NAME, COLLECTION_ID
-from core.csv_utils import EMAIL_REGEX, MAX_CSV_BYTES, RA_REGEX, validar_celula_csv
+from core.csv_utils import EMAIL_REGEX, MAX_CSV_BYTES, validar_celula_csv
 from core.helpers import audit, client_ip, gerar_senha_temporaria, internal_error
 from core.security import require_role
 from infra.aws_clientes import rekognition_client, s3_client
@@ -20,7 +20,6 @@ from repositories.alunos import (
     criar_aluno_com_usuario,
     excluir_aluno_em_cascata,
     existe_aluno_por_ra,
-    importar_aluno_csv,
     listar_alunos_para_admin,
     listar_alunos_por_ids,
 )
@@ -50,6 +49,7 @@ from repositories.turmas import (
     obter_turno_turma,
 )
 from repositories.usuarios import buscar_usuario_por_email
+from services.import_alunos import processar_csv_alunos
 from schemas.admin import (
     AtribuirProfessor,
     AtualizarAlunoAdmin,
@@ -365,6 +365,11 @@ def admin_desmatricular_alunos(
         raise internal_error(e)
 
 
+def _validar_extensao_csv(filename):
+    if not (filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Apenas arquivos .csv são aceitos.")
+
+
 @router.post("/turmas/{turma_id}/importar-alunos")
 async def admin_importar_alunos_csv(
     turma_id: str,
@@ -373,77 +378,60 @@ async def admin_importar_alunos_csv(
     file: UploadFile = File(...),
     current_user: dict = Depends(require_role("Admin")),
 ):
-    filename = (file.filename or "").lower()
-    if not filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Apenas arquivos .csv são aceitos.")
+    _validar_extensao_csv(file.filename)
+    conteudo = await file.read()
 
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Arquivo vazio.")
-    if len(content) > MAX_CSV_BYTES:
-        raise HTTPException(status_code=413, detail="CSV muito grande (limite: 2 MB).")
+    def agendar_email(email, nome, senha):
+        background_tasks.add_task(send_email_senha_temporaria, email, nome, senha, "Aluno")
 
     try:
-        decoded = content.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="CSV deve estar em UTF-8.")
-
-    try:
-        csv_reader = csv.DictReader(io.StringIO(decoded))
-
-        importados = 0
-        emails_enviados = 0
-        erros = []
-
-        for linha_num, row in enumerate(csv_reader, start=2):  # 1 = header
-            try:
-                nome = validar_celula_csv(row.get("nome", ""), "nome")
-                email = validar_celula_csv(row.get("email", ""), "email")
-                ra = validar_celula_csv(row.get("ra", ""), "ra")
-                turno = validar_celula_csv(row.get("turno", ""), "turno")
-
-                if not nome or not email or not ra:
-                    continue
-
-                if len(nome) < 3:
-                    raise ValueError("Nome deve ter ao menos 3 caracteres.")
-                if not EMAIL_REGEX.match(email):
-                    raise ValueError("E-mail em formato inválido.")
-                if not RA_REGEX.match(ra):
-                    raise ValueError("RA deve ter de 4 a 20 caracteres alfanuméricos.")
-
-                if turno not in ("Matutino", "Noturno"):
-                    turno = None
-
-                senha_temporaria = gerar_senha_temporaria()
-                senha_hash = get_password_hash(senha_temporaria)
-
-                novo_usuario, _ = importar_aluno_csv(turma_id, nome, email, ra, turno, senha_hash)
-
-                if novo_usuario:
-                    background_tasks.add_task(
-                        send_email_senha_temporaria, email, nome, senha_temporaria, "Aluno"
-                    )
-                    emails_enviados += 1
-
-                importados += 1
-            except ValueError as ve:
-                erros.append(f"Linha {linha_num}: {ve}")
-            except Exception as e:
-                erros.append(f"Linha {linha_num}: erro inesperado ({type(e).__name__}).")
-                logger.warning("Erro na importação CSV linha %s: %s", linha_num, e)
-
+        res = processar_csv_alunos(conteudo, turma_id_fixo=turma_id, on_novo_usuario=agendar_email)
+        total = res.importados + res.duplicados
         audit("Importação CSV alunos", admin=current_user.get("sub"), turma_id=turma_id,
-              importados=importados, emails=emails_enviados, erros=len(erros), ip=client_ip(request))
+              importados=total, emails=res.emails_enviados, erros=len(res.erros),
+              ip=client_ip(request))
         return {
-            "mensagem": f"Importação concluída: {importados} alunos matriculados.",
-            "emails_enviados": emails_enviados,
-            "erros": erros,
+            "mensagem": f"Importação concluída: {total} alunos matriculados.",
+            "emails_enviados": res.emails_enviados,
+            "erros": res.erros,
         }
     except HTTPException:
         raise
     except Exception as e:
         raise internal_error(e, "admin_importar_alunos_csv")
+
+
+@router.post("/importar-alunos")
+async def admin_importar_alunos_csv_global(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_role("Admin")),
+):
+    _validar_extensao_csv(file.filename)
+    conteudo = await file.read()
+
+    def agendar_email(email, nome, senha):
+        background_tasks.add_task(send_email_senha_temporaria, email, nome, senha, "Aluno")
+
+    try:
+        res = processar_csv_alunos(conteudo, on_novo_usuario=agendar_email)
+        audit("Importação CSV alunos (global)", admin=current_user.get("sub"),
+              importados=res.importados, duplicados=res.duplicados,
+              matriculados=res.matriculados, emails=res.emails_enviados,
+              erros=len(res.erros), ip=client_ip(request))
+        return {
+            "mensagem": f"Importação concluída: {res.importados} aluno(s) cadastrado(s).",
+            "importados": res.importados,
+            "duplicados": res.duplicados,
+            "matriculados": res.matriculados,
+            "emails_enviados": res.emails_enviados,
+            "erros": res.erros,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "admin_importar_alunos_csv_global")
 
 
 @router.post("/importar-professores")

@@ -204,3 +204,12 @@ def listar_alunos_com_push_token_da_turma(turma_id):
             (turma_id,),
         )
         return cur.fetchall()
+
+
+def mapear_codigos_turma():
+    """Retorna {codigo_turma: turma_id} para resolver turmas de um CSV sem N queries."""
+    with get_db_cursor() as cur:
+        if not cur:
+            return {}
+        cur.execute("SELECT turma_id, codigo_turma FROM Turmas")
+        return {row["codigo_turma"]: row["turma_id"] for row in cur.fetchall()}
