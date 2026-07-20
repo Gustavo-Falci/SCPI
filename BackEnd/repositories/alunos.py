@@ -238,12 +238,15 @@ def criar_aluno_com_usuario(usuario_id, aluno_id, nome, email, senha_hash, ra, t
 
 
 def importar_aluno_csv(turma_id, nome, email, ra, turno, senha_hash):
-    """Insere usuário+aluno+matrícula em uma transação. Retorna (novo_usuario, email)."""
+    """Insere usuário+aluno (+matrícula se turma_id) numa transação.
+
+    Retorna (novo_usuario, email, matriculado). turma_id=None cadastra sem matricular.
+    """
     import uuid
 
     with get_db_cursor(commit=True) as cur:
         if not cur:
-            return (False, None)
+            return (False, None, False)
 
         user_uuid = str(uuid.uuid4())
         cur.execute(
@@ -263,7 +266,7 @@ def importar_aluno_csv(turma_id, nome, email, ra, turno, senha_hash):
             cur.execute("SELECT usuario_id FROM Usuarios WHERE email = %s", (email,))
             row = cur.fetchone()
             if not row:
-                return None
+                return (False, None, False)
             usuario_id = row["usuario_id"]
 
         aluno_uuid = str(uuid.uuid4())
@@ -283,8 +286,11 @@ def importar_aluno_csv(turma_id, nome, email, ra, turno, senha_hash):
             cur.execute("SELECT aluno_id FROM Alunos WHERE ra = %s", (ra,))
             row = cur.fetchone()
             if not row:
-                return None
+                return (novo_usuario, email, False)
             aluno_id = row["aluno_id"]
+
+        if not turma_id:
+            return (novo_usuario, email, False)
 
         cur.execute(
             """
@@ -295,7 +301,7 @@ def importar_aluno_csv(turma_id, nome, email, ra, turno, senha_hash):
             (turma_id, aluno_id),
         )
 
-        return (novo_usuario, email)
+        return (novo_usuario, email, True)
 
 
 def buscar_dados_titular(usuario_id: str) -> dict | None:
