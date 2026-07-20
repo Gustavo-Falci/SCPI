@@ -186,7 +186,9 @@ async function handleCreate(form, container) {
 }
 
 function baixarModeloCsv() {
-  const conteudo = 'nome,email,ra,turno,turma\nMaria Santos,maria@escola.com,2024001,Matutino,MAT-101\n';
+  // ';' + BOM: é o que o Excel pt-BR abre em colunas separadas. O backend
+  // detecta o delimitador, então vírgula continua funcionando no upload.
+  const conteudo = '﻿nome;email;ra;turno;turma\nMaria Santos;maria@escola.com;2024001;Matutino;MAT-101\n';
   const url = URL.createObjectURL(new Blob([conteudo], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a');
   a.href = url;

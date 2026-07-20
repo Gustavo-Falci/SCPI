@@ -1,13 +1,17 @@
 """Core da importação de alunos por CSV, compartilhado pelas rotas com e sem turma."""
-import csv
-import io
 import logging
 from dataclasses import dataclass, field
 
 from fastapi import HTTPException
 
 from core.auth_utils import get_password_hash
-from core.csv_utils import EMAIL_REGEX, MAX_CSV_BYTES, RA_REGEX, validar_celula_csv
+from core.csv_utils import (
+    EMAIL_REGEX,
+    MAX_CSV_BYTES,
+    RA_REGEX,
+    criar_leitor_csv,
+    validar_celula_csv,
+)
 from core.helpers import gerar_senha_temporaria
 from repositories.alunos import importar_aluno_csv
 from repositories.turmas import mapear_codigos_turma
@@ -30,7 +34,9 @@ def _decodificar(conteudo):
     if len(conteudo) > MAX_CSV_BYTES:
         raise HTTPException(status_code=413, detail="CSV muito grande (limite: 2 MB).")
     try:
-        return conteudo.decode("utf-8")
+        # utf-8-sig descarta o BOM que o Excel grava — sem isso a primeira coluna
+        # do header vira "﻿nome" e nenhuma linha é reconhecida.
+        return conteudo.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="CSV deve estar em UTF-8.")
 
@@ -52,7 +58,10 @@ def processar_csv_alunos(conteudo, turma_id_fixo=None, on_novo_usuario=None):
     on_novo_usuario: callback (email, nome, senha_temporaria) para cada usuário novo.
     """
     decoded = _decodificar(conteudo)
-    reader = csv.DictReader(io.StringIO(decoded))
+    try:
+        reader = criar_leitor_csv(decoded, ["nome", "email", "ra"])
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     mapa_turmas = {} if turma_id_fixo else mapear_codigos_turma()
     res = ResultadoImport()
 

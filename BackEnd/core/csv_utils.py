@@ -1,3 +1,5 @@
+import csv
+import io
 import re
 
 MAX_CSV_BYTES = 2 * 1024 * 1024  # 2 MB — limite para evitar DoS por upload grande
@@ -19,3 +21,30 @@ def validar_celula_csv(valor: str, campo: str) -> str:
             "Possível CSV injection."
         )
     return valor
+
+
+def _normalizar_coluna(nome):
+    """Header do Excel chega com BOM, espaços e capitalização variada."""
+    return (nome or "").strip().lstrip("﻿").lower()
+
+
+def criar_leitor_csv(decoded, colunas_obrigatorias):
+    """DictReader tolerante ao que o Excel produz: BOM, ';' do locale pt-BR e
+    header com espaço/maiúscula.
+
+    Levanta ValueError se faltar alguma coluna obrigatória — sem isso o import
+    processaria zero linhas em silêncio, sem erro visível para o admin.
+    """
+    primeira_linha = decoded.split("\n", 1)[0]
+    delimitador = ";" if primeira_linha.count(";") > primeira_linha.count(",") else ","
+
+    leitor = csv.DictReader(io.StringIO(decoded), delimiter=delimitador)
+    leitor.fieldnames = [_normalizar_coluna(f) for f in (leitor.fieldnames or [])]
+
+    faltando = [c for c in colunas_obrigatorias if c not in leitor.fieldnames]
+    if faltando:
+        raise ValueError(
+            "CSV sem a(s) coluna(s) obrigatória(s): " + ", ".join(faltando) +
+            ". Colunas encontradas: " + (", ".join(leitor.fieldnames) or "nenhuma") + "."
+        )
+    return leitor
