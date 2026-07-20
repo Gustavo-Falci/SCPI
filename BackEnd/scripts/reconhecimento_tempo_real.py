@@ -366,6 +366,22 @@ class SistemaReconhecimento:
 
 
 if __name__ == "__main__":
+    
+    import faulthandler, signal, datetime, traceback
+    faulthandler.enable()
+
+    def _log_sinal(signum, frame):
+        with open("sigint_debug.log", "a", encoding="utf-8") as f:
+            f.write(f"\n=== sinal {signum} @ {datetime.datetime.now()} ===\n")
+            traceback.print_stack(frame, file=f)
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGINT, _log_sinal)
+    try:
+        signal.signal(signal.SIGBREAK, _log_sinal)  # Ctrl+Break do Windows
+    except (AttributeError, ValueError):
+        pass
+
     app = SistemaReconhecimento()
     try:
         app.iniciar()
