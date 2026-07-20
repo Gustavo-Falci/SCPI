@@ -185,12 +185,77 @@ async function handleCreate(form, container) {
   finally { btn.disabled = false; btn.querySelector('span').textContent = 'Criar Aluno'; }
 }
 
+function baixarModeloCsv() {
+  const conteudo = 'nome,email,ra,turno,turma\nMaria Santos,maria@escola.com,2024001,Matutino,MAT-101\n';
+  const url = URL.createObjectURL(new Blob([conteudo], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'modelo-alunos.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function showImportResultModal(res) {
+  window.closeModal = closeModal;
+  const card = (valor, rotulo) => `
+    <div class="flex-1 bg-[#0C0C12] rounded-2xl p-3 border border-white/5 text-center">
+      <p class="font-black text-white text-xl">${valor ?? 0}</p>
+      <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-0.5">${rotulo}</p>
+    </div>`;
+  openModal(`
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div><h3 class="font-black text-lg">Importação concluída</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${res.erros.length} linha(s) com erro</p></div>
+        <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+      </div>
+      <div class="flex gap-2 mb-3">
+        ${card(res.importados, 'Criados')}
+        ${card(res.duplicados, 'Duplicados')}
+        ${card(res.matriculados, 'Matriculados')}
+      </div>
+      <p class="text-gray-500 text-xs font-bold mb-4">${res.emails_enviados ?? 0} e-mail(s) de senha temporária enviado(s).</p>
+      <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+        ${res.erros.map(e => `<p class="text-red-400 text-xs font-bold bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">${escapeHtml(e)}</p>`).join('')}
+      </div>
+      <button onclick="closeModal()" class="w-full mt-4 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Fechar</button>
+    </div>`);
+}
+
+async function handleImportCsv(file, container) {
+  const fd = new FormData();
+  fd.append('file', file);
+  toast.info('Importando CSV…');
+  try {
+    const res = await api.postMultipart('/admin/importar-alunos', fd);
+    invalidate('alunos', 'turmas');
+    await load(); page = 1;
+    if (container) renderList(container);
+    if (res.erros && res.erros.length) {
+      showImportResultModal(res);
+    } else {
+      const mat = res.matriculados ? ` ${res.matriculados} matriculado(s).` : '';
+      const dup = res.duplicados ? ` ${res.duplicados} duplicado(s).` : '';
+      toast.success(`${res.mensagem || 'Importação concluída.'}${mat}${dup} ${res.emails_enviados || 0} e-mail(s) enviado(s).`);
+    }
+  } catch (err) { toast.error(extractError(err)); }
+}
+
 export async function mount(container) {
   container.innerHTML = `
     <div class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden tab-anim">
       <div class="hidden lg:block lg:w-72 xl:w-80 flex-shrink-0 bg-[#151718] rounded-3xl p-6 border border-white/5 overflow-y-auto">
         <h3 class="font-black text-base mb-5 flex items-center gap-2">${icon('plus', 16)}<span>Novo Aluno</span></h3>
         ${formHTML()}
+        <div class="mt-6 pt-6 border-t border-white/5">
+          <h4 class="font-black text-xs uppercase tracking-widest text-gray-500 mb-3">Importar em massa</h4>
+          <label for="aluno-csv-input" class="cursor-pointer w-full py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-black text-sm transition-all flex items-center justify-center gap-2 border border-white/10">
+            ${icon('upload', 16)}<span>Importar CSV</span>
+          </label>
+          <input id="aluno-csv-input" type="file" accept=".csv" class="hidden">
+          <p class="text-[10px] text-gray-600 font-bold mt-2 text-center">Colunas: nome, email, ra, turno, turma</p>
+          <p class="text-[10px] text-gray-700 font-bold text-center">turno e turma são opcionais · turma = código da turma</p>
+          <button id="aluno-csv-modelo" class="w-full mt-2 text-[10px] font-black text-accent hover:underline">Baixar modelo</button>
+        </div>
       </div>
       <div class="flex-1 flex flex-col overflow-hidden gap-3 min-h-0">
         <div class="relative flex-shrink-0">
@@ -204,6 +269,14 @@ export async function mount(container) {
 
   container.querySelector('#aluno-form').addEventListener('submit', e => { e.preventDefault(); handleCreate(e.target, container); });
   container.querySelector('#alunos-search').addEventListener('input', debounce(e => { search = e.target.value; page = 1; renderList(container); }, 200));
+
+  const csvInput = container.querySelector('#aluno-csv-input');
+  csvInput.addEventListener('change', async () => {
+    if (!csvInput.files[0]) return;
+    await handleImportCsv(csvInput.files[0], container);
+    csvInput.value = '';  // permite reenviar o mesmo arquivo depois de corrigir
+  });
+  container.querySelector('#aluno-csv-modelo').addEventListener('click', baixarModeloCsv);
 
   setCreate(() => {
     window.closeModal = closeModal;
