@@ -31,7 +31,7 @@ const BOTTOM_NAV_TABS = ['turmas', 'alunos', 'professores', 'relatorios'];
 function buildSidebar() {
   const nav = document.getElementById('sidebar-nav');
   nav.innerHTML = TABS.map(t => `
-    <button data-tab="${t.id}" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm transition-all text-left text-gray-500 hover:text-white hover:bg-white/5">
+    <button data-tab="${t.id}" data-label="${t.label}" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm transition-all text-left text-gray-500 hover:text-white hover:bg-white/5">
       ${icon(t.iconName, 18)}<span>${t.label}</span>
     </button>
   `).join('');
@@ -103,6 +103,41 @@ function openSidebar() {
 function closeSidebar() {
   document.getElementById('sidebar').classList.add('-translate-x-full');
   document.getElementById('sidebar-overlay').classList.add('hidden');
+}
+
+// Colapso desktop. A classe mora no <html>, não no <aside>: o script anti-flash
+// do index.html roda no <head>, quando o <aside> ainda não existe no DOM.
+function isSidebarCollapsed() {
+  return document.documentElement.classList.contains('sidebar-collapsed');
+}
+
+function applyCollapsed(collapsed) {
+  document.documentElement.classList.toggle('sidebar-collapsed', collapsed);
+  const btn = document.getElementById('sidebar-toggle');
+  if (!btn) return;
+  btn.setAttribute('aria-expanded', String(!collapsed));
+  btn.setAttribute('aria-label', collapsed ? 'Expandir menu' : 'Recolher menu');
+}
+
+const SIDEBAR_KEY = 'scpi.sidebar.collapsed';
+
+function saveCollapsed(collapsed) {
+  try {
+    if (collapsed) localStorage.setItem(SIDEBAR_KEY, '1');
+    else localStorage.removeItem(SIDEBAR_KEY);
+  } catch (e) { /* cookies bloqueados: o estado vale só para esta página */ }
+}
+
+function initSidebarToggle() {
+  const btn = document.getElementById('sidebar-toggle');
+  btn.innerHTML = icon('chevron-left', 18);
+  // A classe já veio do script do <head>; aqui só sincronizamos o ARIA.
+  applyCollapsed(isSidebarCollapsed());
+  btn.addEventListener('click', () => {
+    const next = !isSidebarCollapsed();
+    applyCollapsed(next);
+    saveCollapsed(next);
+  });
 }
 
 function initKeyboard() {
@@ -246,11 +281,14 @@ async function init() {
 
   document.querySelectorAll('.logo-icon').forEach(el => { el.innerHTML = icon('shield', 20); });
   document.getElementById('hamburger').addEventListener('click', openSidebar);
+  initSidebarToggle();
   document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
   document.getElementById('modal-overlay').addEventListener('click', e => {
     if (e.target === document.getElementById('modal-overlay')) closeModal();
   });
-  document.getElementById('logout-btn').innerHTML = `${icon('log-out', 18)}<span>Sair</span>`;
+  const logoutBtn = document.getElementById('logout-btn');
+  logoutBtn.dataset.label = 'Sair';
+  logoutBtn.innerHTML = `${icon('log-out', 18)}<span>Sair</span>`;
   document.getElementById('logout-btn').addEventListener('click', () => {
     // Cookie scpi_refresh viaja sozinho; body vazio sinaliza fluxo portal.
     api.post('/auth/logout', {}).catch(() => {});
