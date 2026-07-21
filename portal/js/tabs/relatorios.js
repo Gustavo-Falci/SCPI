@@ -4,7 +4,7 @@ import { icon } from '../icons.js';
 import { escapeHtml } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState } from '../state.js';
-import { openModal, closeModal } from '../main.js';
+import { openModal, closeModal } from '../modal.js';
 
 const PER_PAGE = 8;
 let page = 1;
