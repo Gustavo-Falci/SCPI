@@ -62,8 +62,83 @@ select.scpi-input option { background: #151718; color: #fff; }
 /* Login bg gradient */
 #view-login { background: radial-gradient(ellipse at top, rgba(75,57,239,0.15) 0%, #0C0C12 60%); }
 
-/* Sidebar transition */
+/* ── Sidebar: transição mobile (translate) + colapso desktop (width) ── */
 #sidebar { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Todo o colapso vive aqui dentro. Abaixo de lg a sidebar é um drawer sobre
+   overlay e recolher não faz sentido — as regras nem existem nesse range. */
+@media (min-width: 1024px) {
+  #sidebar {
+    width: 16rem; /* mesmo valor do w-64; declarado aqui para poder animar */
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .sidebar-collapsed #sidebar { width: 4.5rem; }
+
+  /* px-5 (20px) de cada lado + logo de 40px estoura os 72px do rail. */
+  .sidebar-collapsed #sidebar-head { padding-left: 0.75rem; padding-right: 0.75rem; }
+  .sidebar-collapsed #sidebar-head-inner { flex-direction: column; gap: 0.5rem; }
+  .sidebar-collapsed #sidebar-brand { display: none; }
+  .sidebar-collapsed #sidebar-toggle { margin-left: 0; }
+
+  /* Uma seta só, girando: recolher e expandir são o mesmo ícone em 0° e 180°. */
+  #sidebar-toggle svg { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  .sidebar-collapsed #sidebar-toggle svg { transform: rotate(180deg); }
+
+  /* Itens viram só ícone, centralizado. Os labels encolhem em vez de sumirem
+     com display:none — assim continuam no accessibility tree e a transição
+     não pisca. */
+  .sidebar-collapsed #sidebar .nav-item,
+  .sidebar-collapsed #logout-btn {
+    justify-content: center;
+    gap: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .sidebar-collapsed #sidebar .nav-item > span,
+  .sidebar-collapsed #logout-btn > span {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  #sidebar .nav-item > span,
+  #logout-btn > span { transition: opacity 0.2s, width 0.2s; }
+
+  /* Nome do admin não cabe nos 72px; some inteiro e sobra só o Sair. */
+  .sidebar-collapsed #sidebar-userbox { display: none; }
+
+  /* overflow-y:auto do <nav> implica overflow-x:auto, o que recortaria o
+     tooltip. No rail são 6 itens fixos, nunca há scroll — liberar é seguro. */
+  .sidebar-collapsed #sidebar-nav { overflow: visible; }
+
+  /* Tooltip: o label some da tela, então precisa reaparecer no hover/foco. */
+  #logout-btn { position: relative; }
+  .sidebar-collapsed #sidebar .nav-item::after,
+  .sidebar-collapsed #logout-btn::after {
+    content: attr(data-label);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: #1A1C1E;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 60;
+  }
+  .sidebar-collapsed #sidebar .nav-item:hover::after,
+  .sidebar-collapsed #sidebar .nav-item:focus-visible::after,
+  .sidebar-collapsed #logout-btn:hover::after,
+  .sidebar-collapsed #logout-btn:focus-visible::after { opacity: 1; }
+}
 
 /* Responsive table for relatorios detail */
 @media (max-width: 640px) {
