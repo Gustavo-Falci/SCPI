@@ -5,7 +5,7 @@ import { icon } from '../icons.js';
 import { avatar, baixarModeloCsv, debounce, escapeHtml } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState, invalidate } from '../state.js';
-import { openModal, closeModal, animateRemove } from '../main.js';
+import { openModal, closeModal, animateRemove } from '../modal.js';
 import { setCreate } from '../registry.js';
 
 const PER_PAGE = 10;

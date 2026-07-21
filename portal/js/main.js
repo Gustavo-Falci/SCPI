@@ -4,6 +4,7 @@ import { getState, setState } from './state.js';
 import { readSession, saveSession, clearSession } from './auth.js';
 import { api, setOnExpired, extractError, validateSession } from './api.js';
 import { icon } from './icons.js';
+import { closeModal } from './modal.js';
 import { skeletons } from './skeleton.js';
 import { runCreate, clearCreate } from './registry.js';
 import { mount as mountTurmas } from './tabs/turmas.js';
@@ -307,24 +308,6 @@ async function init() {
   // montar o dashboard. Cookie expirado/ausente cai direto no login.
   if (await validateSession()) showDashboard(session.user);
   else showLogin();
-}
-
-export function openModal(html, size = 'max-w-lg') {
-  const box = document.getElementById('modal-box');
-  box.className = `w-full ${size} bg-[#151718] rounded-3xl border border-white/10 shadow-2xl shadow-black/60 overflow-hidden max-h-[90vh] flex flex-col`;
-  box.innerHTML = html;
-  document.getElementById('modal-overlay').classList.remove('hidden');
-}
-
-export function closeModal() {
-  document.getElementById('modal-overlay').classList.add('hidden');
-  document.getElementById('modal-box').innerHTML = '';
-}
-
-export async function animateRemove(el) {
-  if (!el) return;
-  el.classList.add('removing');
-  await new Promise(r => setTimeout(r, 200));
 }
 
 // Qualquer falha no init cai no login — nunca deixa o splash de boot preso.

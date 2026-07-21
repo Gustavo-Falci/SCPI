@@ -3,7 +3,7 @@ import { toast } from '../toast.js';
 import { confirm } from '../confirm.js';
 import { icon } from '../icons.js';
 import { getState, invalidate } from '../state.js';
-import { openModal, closeModal } from '../main.js';
+import { openModal, closeModal } from '../modal.js';
 import { DIAS_SEMANA, SLOTS_MATUTINO, SLOTS_NOTURNO } from '../config.js';
 
 async function loadGrade() {

@@ -5,7 +5,7 @@ import { icon } from '../icons.js';
 import { debounce, escapeHtml } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState, invalidate } from '../state.js';
-import { openModal, closeModal, animateRemove } from '../main.js';
+import { openModal, closeModal, animateRemove } from '../modal.js';
 import { setCreate } from '../registry.js';
 import { SEMESTRES, TURNOS, PERIODOS } from '../config.js';
 
