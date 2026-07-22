@@ -7,6 +7,7 @@ import { paginate, renderPagination } from '../pagination.js';
 import { getState, invalidate } from '../state.js';
 import { openModal, closeModal, animateRemove } from '../modal.js';
 import { setCreate } from '../registry.js';
+import { loadTab, saveTab } from '../persist.js';
 
 const PER_PAGE = 10;
 let page = 1;
@@ -62,7 +63,7 @@ function renderList(container) {
     });
     list.querySelectorAll('.del-btn').forEach(btn => btn.addEventListener('click', () => deleteProfessor(btn.dataset.id, container)));
   }
-  renderPagination(pag, { page, total, count, perPage: PER_PAGE }, p => { page = p; renderList(container); });
+  renderPagination(pag, { page, total, count, perPage: PER_PAGE }, p => { page = p; saveTab('professores', { search, page }); renderList(container); });
 }
 
 async function deleteProfessor(id, container) {
@@ -182,6 +183,9 @@ async function handleCreate(form, container) {
 }
 
 export async function mount(container) {
+  const saved = loadTab('professores', { search: '', page: 1 });
+  search = saved.search;
+  page = saved.page;
   container.innerHTML = `
     <div class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden tab-anim">
       <div class="hidden lg:block lg:w-72 xl:w-80 flex-shrink-0 bg-[#151718] rounded-3xl p-6 border border-white/5 overflow-y-auto">
@@ -200,7 +204,7 @@ export async function mount(container) {
       <div class="flex-1 flex flex-col overflow-hidden gap-3 min-h-0">
         <div class="relative flex-shrink-0">
           <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">${icon('search', 16)}</span>
-          <input id="prof-search" type="search" placeholder="Buscar professor..." class="scpi-input pl-10 w-full">
+          <input id="prof-search" type="search" value="${escapeHtml(search)}" placeholder="Buscar professor..." class="scpi-input pl-10 w-full">
         </div>
         <div id="prof-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
         <div id="prof-pagination" class="flex-shrink-0"></div>
@@ -208,7 +212,7 @@ export async function mount(container) {
     </div>`;
 
   container.querySelector('#prof-form').addEventListener('submit', e => { e.preventDefault(); handleCreate(e.target, container); });
-  container.querySelector('#prof-search').addEventListener('input', debounce(e => { search = e.target.value; page = 1; renderList(container); }, 200));
+  container.querySelector('#prof-search').addEventListener('input', debounce(e => { search = e.target.value; page = 1; saveTab('professores', { search, page }); renderList(container); }, 200));
 
   // Registra FAB mobile → abre modal com o formulário
   setCreate(() => {

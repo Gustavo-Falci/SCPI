@@ -5,6 +5,7 @@ import { escapeHtml } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState } from '../state.js';
 import { openModal, closeModal } from '../modal.js';
+import { loadTab, saveTab } from '../persist.js';
 
 const PER_PAGE = 8;
 let page = 1;
@@ -80,7 +81,7 @@ function renderList(container) {
 
     list.querySelectorAll('.rel-item').forEach(btn => btn.addEventListener('click', () => openDetalhe(btn.dataset.id)));
   }
-  renderPagination(pag, { page, total, count, perPage: PER_PAGE }, p => { page = p; renderList(container); });
+  renderPagination(pag, { page, total, count, perPage: PER_PAGE }, p => { page = p; saveTab('relatorios', { page }); renderList(container); });
 }
 
 async function openDetalhe(chamadaId) {
@@ -151,5 +152,6 @@ export async function mount(container) {
       <div id="rel-pagination" class="flex-shrink-0"></div>
     </div>
   `;
+  page = loadTab('relatorios', { page: 1 }).page;
   try { await load(); renderList(container); } catch (err) { toast.error(extractError(err)); }
 }

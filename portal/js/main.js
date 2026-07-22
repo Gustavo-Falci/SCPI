@@ -1,6 +1,7 @@
 import { toast } from './toast.js';
 import { confirm } from './confirm.js';
 import { getState, setState } from './state.js';
+import { clearUI } from './persist.js';
 import { readSession, saveSession, clearSession } from './auth.js';
 import { api, setOnExpired, extractError, validateSession } from './api.js';
 import { icon } from './icons.js';
@@ -78,6 +79,11 @@ function setActiveNav(tabId) {
 function updateHeader(tab) {
   document.getElementById('header-title').textContent = tab.title;
   document.getElementById('header-subtitle').textContent = tab.subtitle;
+}
+
+// Aba salva pode apontar para um id removido em versão futura: valida e cai em turmas.
+function tabValida(id) {
+  return TABS.some(t => t.id === id) ? id : 'turmas';
 }
 
 function switchTab(tabId) {
@@ -170,7 +176,7 @@ function showDashboard(user) {
   document.getElementById('sidebar-username').textContent = user.user_name || user.nome || 'Administrador';
   buildSidebar();
   buildBottomNav();
-  switchTab('turmas');
+  switchTab(tabValida(getState().activeTab));
 }
 
 function showLogin() {
@@ -182,6 +188,7 @@ function showLogin() {
   const nav = document.getElementById('bottom-nav');
   if (nav) nav.innerHTML = '';
   document.getElementById('fab')?.classList.add('hidden');
+  clearUI();
   clearSession();
 }
 

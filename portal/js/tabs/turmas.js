@@ -8,6 +8,7 @@ import { getState, invalidate } from '../state.js';
 import { openModal, closeModal, animateRemove } from '../modal.js';
 import { setCreate } from '../registry.js';
 import { SEMESTRES, TURNOS, PERIODOS } from '../config.js';
+import { loadTab, saveTab } from '../persist.js';
 
 const PER_PAGE = 8;
 let page = 1;
@@ -90,7 +91,7 @@ function renderList(container) {
       });
     });
   }
-  renderPagination(pag, { page, total, count, perPage: PER_PAGE }, p => { page = p; renderList(container); });
+  renderPagination(pag, { page, total, count, perPage: PER_PAGE }, p => { page = p; saveTab('turmas', { search, page }); renderList(container); });
 }
 
 // Detalhe da turma: no celular é a única via para as ações, já que os atalhos
@@ -381,6 +382,9 @@ async function createTurma(e, container) {
 }
 
 export async function mount(container) {
+  const saved = loadTab('turmas', { search: '', page: 1 });
+  search = saved.search;
+  page = saved.page;
   container.innerHTML = `
     <div class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden tab-anim">
       <div class="hidden lg:block lg:w-72 xl:w-80 flex-shrink-0 bg-[#151718] rounded-3xl p-6 border border-white/5 overflow-y-auto">
@@ -424,7 +428,7 @@ export async function mount(container) {
       <div class="flex-1 flex flex-col overflow-hidden gap-3 min-h-0">
         <div class="relative flex-shrink-0">
           <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">${icon('search', 16)}</span>
-          <input id="turmas-search" type="search" placeholder="Buscar turma..." class="scpi-input pl-10 w-full">
+          <input id="turmas-search" type="search" value="${escapeHtml(search)}" placeholder="Buscar turma..." class="scpi-input pl-10 w-full">
         </div>
         <div id="turmas-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
         <div id="turmas-pagination" class="flex-shrink-0"></div>
@@ -432,7 +436,7 @@ export async function mount(container) {
     </div>
   `;
   container.querySelector('#turma-form').addEventListener('submit', e => createTurma(e, container));
-  container.querySelector('#turmas-search').addEventListener('input', debounce(e => { search = e.target.value; page = 1; renderList(container); }, 200));
+  container.querySelector('#turmas-search').addEventListener('input', debounce(e => { search = e.target.value; page = 1; saveTab('turmas', { search, page }); renderList(container); }, 200));
 
   setCreate(() => {
     window.closeModal = closeModal;
