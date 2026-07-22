@@ -129,28 +129,23 @@ function showEditModal(aluno, container) {
   });
 }
 
-function showPasswordModal(email, senha) {
+function showCreatedModal(email) {
   window.closeModal = closeModal;
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
-        <div><h3 class="font-black text-lg">Aluno Criado</h3><p class="text-gray-500 text-xs font-bold mt-0.5">Senha temporária gerada</p></div>
+        <div><h3 class="font-black text-lg">Aluno Criado</h3><p class="text-gray-500 text-xs font-bold mt-0.5">Credenciais enviadas por email</p></div>
         <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
-      <div class="space-y-3">
-        <div class="bg-[#0C0C12] rounded-2xl p-4 border border-white/5"><p class="text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Email</p><p class="font-bold text-white">${email}</p></div>
-        <div class="bg-[#0C0C12] rounded-2xl p-4 border border-white/5">
-          <p class="text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Senha Temporária</p>
-          <div class="flex items-center justify-between gap-3">
-            <p class="font-black text-white text-lg tracking-wider">${senha}</p>
-            <button id="copy-btn" class="px-3 py-1.5 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent font-black text-xs flex items-center gap-1.5">${icon('copy', 14)} Copiar</button>
-          </div>
-        </div>
+      <div class="bg-[#0C0C12] rounded-2xl p-4 border border-white/5 mb-3">
+        <p class="text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Email</p>
+        <p class="font-bold text-white">${escapeHtml(email)}</p>
       </div>
-      <p class="text-yellow-400 text-xs font-bold mt-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">Compartilhe com o aluno.</p>
+      <p class="text-blue-300 text-xs font-bold bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
+        Senha temporária enviada para o email acima. O aluno definirá uma nova senha no primeiro acesso.
+      </p>
       <button onclick="closeModal()" class="w-full mt-4 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Fechar</button>
     </div>`);
-  document.getElementById('copy-btn').addEventListener('click', () => navigator.clipboard.writeText(senha).then(() => toast.success('Senha copiada!')));
 }
 
 function formHTML() {
@@ -170,7 +165,7 @@ async function handleCreate(form, container) {
   btn.disabled = true; btn.querySelector('span').textContent = 'Criando…';
   try {
     const email = form.querySelector('[name=email]').value.trim();
-    const res = await api.post('/admin/usuarios/aluno', {
+    await api.post('/admin/usuarios/aluno', {
       nome: form.querySelector('[name=nome]').value.trim(),
       email,
       ra: form.querySelector('[name=ra]').value.trim() || null,
@@ -179,9 +174,7 @@ async function handleCreate(form, container) {
     form.reset();
     invalidate('alunos'); await load(); page = 1;
     if (container) renderList(container);
-    const senha = res.senha_temporaria || res.password;
-    if (senha) showPasswordModal(email, senha);
-    else toast.success('Aluno criado!');
+    showCreatedModal(email);
   } catch (err) { toast.error(extractError(err)); }
   finally { btn.disabled = false; btn.querySelector('span').textContent = 'Criar Aluno'; }
 }
