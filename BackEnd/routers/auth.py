@@ -44,6 +44,7 @@ from repositories.usuarios import (
     buscar_usuario_id_por_email_lower,
     buscar_usuario_login_por_email,
 )
+from repositories.auth_lockout import esta_bloqueado, registrar_falha, limpar_falhas
 from schemas.auth import (
     AlterarSenhaBody,
     EsqueciSenhaBody,
@@ -112,6 +113,19 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
 ):
     email_limpo = form_data.username.strip()
+    email_key = email_limpo.lower()
+
+    # Lockout por conta (B1): pega brute-force distribuído entre IPs, que o
+    # rate-limit por IP não cobre.
+    if esta_bloqueado(email_key):
+        audit_logger.warning(
+            "Login bloqueado (lockout de conta) email=%s ip=%s",
+            mask_email(email_limpo), request.client.host,
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="Muitas tentativas. Tente novamente mais tarde.",
+        )
 
     user = buscar_usuario_login_por_email(email_limpo)
 
@@ -119,6 +133,7 @@ def login(
         # Verifica contra um hash descartável para gastar o mesmo tempo de um
         # login real (mitiga enumeração de usuário por timing).
         verify_password(form_data.password, _DUMMY_PASSWORD_HASH)
+        registrar_falha(email_key)
         audit_logger.warning("Login falhou (usuário inexistente) email=%s ip=%s", mask_email(email_limpo), request.client.host)
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
@@ -128,10 +143,12 @@ def login(
         senha_valida = False
 
     if not senha_valida:
+        registrar_falha(email_key)
         audit_logger.warning("Login falhou (senha incorreta) email=%s ip=%s", mask_email(email_limpo), request.client.host)
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
     audit_logger.info("Login ok email=%s role=%s ip=%s", mask_email(email_limpo), user['tipo_usuario'], request.client.host)
+    limpar_falhas(email_key)
 
     access_token = create_access_token(data={"sub": str(user['usuario_id']), "email": user['email'], "role": user['tipo_usuario']})
     refresh_plain, refresh_hash, refresh_exp = create_refresh_token()
