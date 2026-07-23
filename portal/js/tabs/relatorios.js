@@ -1,7 +1,7 @@
 import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { icon } from '../icons.js';
-import { escapeHtml } from '../utils.js';
+import { escapeHtml, baixarArquivo } from '../utils.js';
 import { paginate, renderPagination } from '../pagination.js';
 import { getState } from '../state.js';
 import { openModal, closeModal } from '../modal.js';
@@ -84,6 +84,57 @@ function renderList(container) {
   renderPagination(pag, { page, total, count, perPage: PER_PAGE }, p => { page = p; saveTab('relatorios', { page }); renderList(container); });
 }
 
+async function exportarPdf(botao, path, nomeFallback) {
+  if (botao.dataset.busy === '1') return;
+  botao.dataset.busy = '1';
+  const conteudoOriginal = botao.innerHTML;
+  botao.innerHTML = `<span class="spin inline-block">${icon('loader', 16)}</span>`;
+  try {
+    const { blob, filename } = await api.getBlob(path);
+    baixarArquivo(blob, filename || nomeFallback);
+  } catch (err) {
+    toast.error(extractError(err));
+  } finally {
+    botao.innerHTML = conteudoOriginal;
+    botao.dataset.busy = '0';
+  }
+}
+
+function abrirModalFrequencia(turmaId, codigoTurma) {
+  openModal(`
+    <div class="p-6">
+      <h3 class="font-black text-lg mb-1">Frequência por aluno</h3>
+      <p class="text-gray-500 text-xs font-bold mb-5">${escapeHtml(codigoTurma)} · deixe as datas em branco para todo o histórico</p>
+      <div class="grid grid-cols-2 gap-3 mb-5">
+        <label class="text-xs font-black text-gray-500 uppercase tracking-widest">De
+          <input id="freq-inicio" type="date" class="mt-1 w-full bg-[#0C0C12] border border-white/10 rounded-xl px-3 py-2 text-sm text-white font-bold">
+        </label>
+        <label class="text-xs font-black text-gray-500 uppercase tracking-widest">Até
+          <input id="freq-fim" type="date" class="mt-1 w-full bg-[#0C0C12] border border-white/10 rounded-xl px-3 py-2 text-sm text-white font-bold">
+        </label>
+      </div>
+      <div class="flex gap-2 justify-end">
+        <button onclick="closeModal()" class="px-4 py-2 rounded-xl border border-white/10 text-sm font-black text-gray-400">Cancelar</button>
+        <button id="freq-gerar" class="px-4 py-2 rounded-xl bg-accent text-sm font-black text-white">Gerar PDF</button>
+      </div>
+    </div>
+  `, 'max-w-md');
+
+  document.getElementById('freq-gerar').addEventListener('click', (ev) => {
+    const inicio = document.getElementById('freq-inicio').value;
+    const fim = document.getElementById('freq-fim').value;
+    if (inicio && fim && inicio > fim) { toast.error('Intervalo de datas inválido.'); return; }
+    const params = new URLSearchParams({ formato: 'pdf' });
+    if (inicio) params.append('data_inicio', inicio);
+    if (fim) params.append('data_fim', fim);
+    exportarPdf(
+      ev.currentTarget,
+      `/admin/relatorios/turmas/${turmaId}/frequencia?${params.toString()}`,
+      `frequencia-${codigoTurma || 'turma'}.pdf`
+    );
+  });
+}
+
 async function openDetalhe(chamadaId) {
   window.closeModal = closeModal;
   openModal(`<div class="p-8 flex items-center justify-center"><div class="spin opacity-50">${icon('loader', 28)}</div></div>`, 'max-w-3xl');
@@ -107,7 +158,11 @@ async function openDetalhe(chamadaId) {
           </div>
           <p class="text-gray-500 text-xs font-bold">Prof. ${d.professor_nome} · ${d.codigo_turma} · ${d.data_chamada} · ${d.horario_inicio} – ${d.horario_fim}</p>
         </div>
-        <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 flex-shrink-0">${icon('x', 16)}</button>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button id="btn-pdf-freq" title="Frequência por aluno da turma" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 hover:text-accent transition-colors">${icon('users', 16)}</button>
+          <button id="btn-pdf-ata" title="Exportar ata em PDF" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 hover:text-accent transition-colors">${icon('download', 16)}</button>
+          <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        </div>
       </div>
       <div class="p-6 overflow-y-auto">
         <!-- Stats -->
@@ -140,6 +195,16 @@ async function openDetalhe(chamadaId) {
         </div>
       </div>
     `;
+    document.getElementById('btn-pdf-ata').addEventListener('click', (ev) =>
+      exportarPdf(
+        ev.currentTarget,
+        `/admin/relatorios/chamadas/${chamadaId}?formato=pdf`,
+        `ata-${d.codigo_turma || 'chamada'}.pdf`
+      )
+    );
+    document.getElementById('btn-pdf-freq').addEventListener('click', () =>
+      abrirModalFrequencia(d.turma_id, d.codigo_turma)
+    );
   } catch (err) {
     document.getElementById('modal-box').innerHTML = `<div class="p-8 text-red-400 font-black text-center">${extractError(err)}<br><button onclick="closeModal()" class="mt-4 px-4 py-2 rounded-xl border border-white/10 text-white text-sm">Fechar</button></div>`;
   }
@@ -148,10 +213,25 @@ async function openDetalhe(chamadaId) {
 export async function mount(container) {
   container.innerHTML = `
     <div class="flex-1 overflow-hidden flex flex-col gap-3 min-h-0 tab-anim">
+      <div class="flex items-center justify-end flex-shrink-0">
+        <button id="btn-pdf-consolidado" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 text-xs font-black text-gray-300 hover:text-white hover:border-accent/30 transition-colors">
+          ${icon('download', 14)} Exportar PDF
+        </button>
+      </div>
       <div id="rel-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
       <div id="rel-pagination" class="flex-shrink-0"></div>
     </div>
   `;
+  container.querySelector('#btn-pdf-consolidado').addEventListener('click', (ev) => {
+    const { turno, semestre } = getState();
+    const params = new URLSearchParams({ formato: 'pdf', turno });
+    if (semestre !== 'Todos') params.append('semestre', String(semestre));
+    exportarPdf(
+      ev.currentTarget,
+      `/admin/relatorios/chamadas?${params.toString()}`,
+      'consolidado-chamadas.pdf'
+    );
+  });
   page = loadTab('relatorios', { page: 1 }).page;
   try { await load(); renderList(container); } catch (err) { toast.error(extractError(err)); }
 }
