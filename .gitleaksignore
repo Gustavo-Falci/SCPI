@@ -1,5 +1,6 @@
-# Findings históricos do gitleaks (scan agendado com --all).
-# Segredos abaixo foram descontinuados/nunca foram reais; arquivos já removidos do tree.
+# Findings do gitleaks aceitos conscientemente (scan agendado com --all).
+# Maioria: segredos descontinuados/nunca reais, arquivos já removidos do tree.
+# Exceção documentada no fim: google-services.json segue no tree de propósito.
 # Formato: <commit>:<arquivo>:<regra>:<linha>
 
 # Falso positivo: title="SCPI API" em FastAPI() — commit anterior ao comentário gitleaks:allow
@@ -18,3 +19,12 @@
 # Falso positivo: SECRET_KEY dummy de CI no workflow de testes (valor fake "ci-dummy-...");
 # commit anterior ao comentário gitleaks:allow na linha
 9516d5339a8233766eece75a86d8d10f3d410c30:.github/workflows/tests.yml:generic-api-key:25
+
+# Chave de API Android do Firebase em app/google-services.json — ATIVA e no tree
+# de propósito: é client key, embarcada no APK por design (app.json aponta pra ela
+# via googleServicesFile) e extraível de qualquer build. Não é credencial de servidor.
+# Mitigada em 2026-07-23 no Google Cloud Console: restrita a app Android
+# (com.gustavofalci.scpi + SHA-1 do keystore EAS) e às APIs de FCM/Installations.
+# GitHub secret scanning alert #2 fechado como wont_fix pelo mesmo motivo.
+# Ao publicar na Play Store, adicionar também o SHA-1 do Play App Signing.
+f65fb4072628d93ec47bbdd232508875223fc2e4:app/google-services.json:gcp-api-key:18

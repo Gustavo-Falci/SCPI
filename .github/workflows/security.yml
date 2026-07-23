@@ -143,3 +143,55 @@ jobs:
       - name: Audit (high+ severity blocks)
         working-directory: app
         run: npm audit --audit-level=high
+
+  # -------------------------------------------------------------------------
+  # Falha em run agendada não bloqueia merge nem aparece em lugar nenhum que a
+  # gente olhe no dia a dia — o gitleaks pegou a chave do Firebase em 20/07 e o
+  # achado ficou 3 dias sem ação. Abre issue pra falha virar trabalho visível.
+  # Reaproveita issue aberta em vez de criar uma por semana.
+  # -------------------------------------------------------------------------
+  notify-failure:
+    name: Abrir issue em falha do scan agendado
+    needs: [bandit, pip-audit, gitleaks, npm-audit-mobile]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const body = [
+              'O **Security Scan** agendado falhou.',
+              '',
+              `Run: ${runUrl}`,
+              '',
+              'Abra a run e veja qual job quebrou:',
+              '- **Gitleaks** — segredo novo no código ou histórico',
+              '- **pip-audit** / **npm audit** — CVE nova em dependência',
+              '- **Bandit** — padrão inseguro severidade HIGH no BackEnd',
+              '',
+              'Se o achado for aceito conscientemente, documente:',
+              '`.gitleaksignore` (segredo) ou `--ignore-vuln` no `security.yml` (CVE).',
+            ].join('\n');
+
+            const { data: abertas } = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', labels: 'ci-failure',
+            });
+
+            if (abertas.length > 0) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: abertas[0].number, body,
+              });
+              core.notice(`Comentário adicionado na issue #${abertas[0].number}`);
+            } else {
+              const { data: nova } = await github.rest.issues.create({
+                owner, repo,
+                title: 'Security Scan agendado falhou',
+                body,
+                labels: ['ci-failure', 'security'],
+              });
+              core.notice(`Issue #${nova.number} aberta`);
+            }
