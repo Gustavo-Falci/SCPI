@@ -276,6 +276,45 @@ def ensure_reset_codes_table():
         logger.error("Falha ao criar tabela PasswordResetCodes: %s", e)
 
 
+def ensure_rate_limit_table():
+    """Tabela do rate-limit compartilhado entre workers (M4). Idempotente."""
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rate_limit_buckets (
+                    key         TEXT        PRIMARY KEY,
+                    count       INTEGER     NOT NULL,
+                    expires_at  TIMESTAMPTZ NOT NULL
+                )
+                """
+            )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS ix_rate_limit_buckets_expires "
+                "ON rate_limit_buckets (expires_at)"
+            )
+    except Exception as e:
+        logger.error("Falha ao criar tabela rate_limit_buckets: %s", e)
+
+
+def ensure_login_attempts_table():
+    """Tabela de lockout de login por conta (B1). Idempotente."""
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS login_attempts (
+                    email         TEXT        PRIMARY KEY,
+                    fails         INTEGER     NOT NULL DEFAULT 0,
+                    first_fail_at TIMESTAMPTZ,
+                    locked_until  TIMESTAMPTZ
+                )
+                """
+            )
+    except Exception as e:
+        logger.error("Falha ao criar tabela login_attempts: %s", e)
+
+
 def ensure_presenca_por_aula():
     """Adiciona total_aulas em chamadas e num_aula em presencas (idempotente)."""
     try:
@@ -364,6 +403,8 @@ def _apply_all():
     ensure_push_tokens_table()
     ensure_primeiro_acesso_column()
     ensure_reset_codes_table()
+    ensure_rate_limit_table()
+    ensure_login_attempts_table()
     ensure_presenca_por_aula()
     ensure_chamada_aberta_unica()
 
