@@ -14,8 +14,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as Sharing from "expo-sharing";
+import * as Haptics from "expo-haptics";
 
-import { apiGet } from "../../services/api";
+import { apiGet, apiDownload } from "../../services/api";
+import { useErrorToast } from "../../hooks/useErrorToast";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 
@@ -94,6 +97,68 @@ export default function Relatorios() {
   const [painelAberto, setPainelAberto] = useState(false);
   const [rascunho, setRascunho] = useState<Filtros>({});
   const [pickerAlvo, setPickerAlvo] = useState<null | "inicio" | "fim">(null);
+
+  const { showError } = useErrorToast();
+  const [exportandoDoc, setExportandoDoc] = useState<null | "consolidado" | "frequencia">(null);
+
+  const compartilharPdf = async (
+    endpoint: string,
+    nomeArquivo: string,
+    titulo: string,
+    doc: "consolidado" | "frequencia"
+  ) => {
+    if (exportandoDoc) return;
+    setExportandoDoc(doc);
+    try {
+      const uri = await apiDownload(endpoint, nomeArquivo);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          UTI: "com.adobe.pdf",
+          dialogTitle: titulo,
+        });
+      } else {
+        showError("Compartilhamento indisponível neste dispositivo.");
+      }
+    } catch (err: any) {
+      showError(err, "Não foi possível gerar o PDF.");
+    } finally {
+      setExportandoDoc(null);
+    }
+  };
+
+  const exportarConsolidado = () => {
+    const query = buildQuery(filtros);
+    return compartilharPdf(
+      `/professor/relatorios/chamadas${query}${query ? "&" : "?"}formato=pdf`,
+      "consolidado-chamadas.pdf",
+      "Consolidado de chamadas",
+      "consolidado"
+    );
+  };
+
+  // Aceita um alvo explícito (usado pelo botão do painel, que passa o rascunho
+  // recém-aplicado) para não depender do estado `filtros` — que ainda não teria
+  // sido atualizado pelo setFiltros(rascunho) no momento em que o setTimeout
+  // dispara, por causa de closures (o setTimeout guarda a função desta
+  // renderização, não a mais recente).
+  const exportarFrequencia = (alvo: Filtros = filtros) => {
+    if (!alvo.turmaId) {
+      showError("Selecione uma turma no filtro para gerar a frequência.");
+      return;
+    }
+    const turma = opcoes.turmas.find((t) => t.turma_id === alvo.turmaId);
+    const p = new URLSearchParams({ formato: "pdf" });
+    if (alvo.dataInicio) p.append("data_inicio", alvo.dataInicio);
+    if (alvo.dataFim) p.append("data_fim", alvo.dataFim);
+    return compartilharPdf(
+      `/professor/relatorios/turmas/${alvo.turmaId}/frequencia?${p.toString()}`,
+      `frequencia-${turma?.codigo_turma || "turma"}.pdf`,
+      "Frequência por aluno",
+      "frequencia"
+    );
+  };
 
   const loadRelatorios = async (f: Filtros) => {
     setLoading(true);
@@ -219,6 +284,21 @@ export default function Relatorios() {
             </View>
           )}
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.filterButton}
+          onPress={exportarConsolidado}
+          disabled={!!exportandoDoc}
+          accessibilityRole="button"
+          accessibilityLabel="Exportar consolidado em PDF"
+        >
+          {exportandoDoc === "consolidado" ? (
+            <ActivityIndicator size="small" color={Colors.brand.text} />
+          ) : (
+            <Ionicons name="document-outline" size={18} color={Colors.brand.text} />
+          )}
+          <Text style={styles.filterButtonText}>PDF</Text>
+        </TouchableOpacity>
       </View>
 
       {ativos > 0 && (
@@ -241,6 +321,13 @@ export default function Relatorios() {
             <ActiveChip label={filtros.semestre} onRemove={() => removerChip("semestre")} />
           ) : null}
         </ScrollView>
+      )}
+
+      {exportandoDoc === "frequencia" && (
+        <View style={styles.exportBanner}>
+          <ActivityIndicator size="small" color={Colors.brand.primary} />
+          <Text style={styles.exportBannerText}>Gerando PDF de frequência…</Text>
+        </View>
       )}
 
       {loading ? (
@@ -480,6 +567,27 @@ export default function Relatorios() {
               <View style={{ height: 16 }} />
             </ScrollView>
 
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                styles.frequenciaButton,
+                !rascunho.turmaId && { opacity: 0.4 },
+              ]}
+              onPress={() => {
+                setPainelAberto(false);
+                setFiltros(rascunho);
+                setTimeout(() => exportarFrequencia(rascunho), 300);
+              }}
+              disabled={!rascunho.turmaId || !!exportandoDoc}
+              accessibilityRole="button"
+              accessibilityLabel="Exportar frequência por aluno em PDF"
+            >
+              <Ionicons name="people-outline" size={18} color={Colors.brand.text} />
+              <Text style={styles.filterButtonText}>
+                {rascunho.turmaId ? "Frequência da turma (PDF)" : "Selecione uma turma"}
+              </Text>
+            </TouchableOpacity>
+
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.clearButton} onPress={limpar}>
                 <Text style={styles.clearButtonText}>Limpar</Text>
@@ -517,7 +625,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: Colors.brand.text, fontSize: 28, fontWeight: "800" },
   headerSubtitle: { color: Colors.brand.textSecondary, fontSize: 14, marginTop: 4 },
 
-  filterBar: { paddingHorizontal: 24, paddingBottom: 8, flexDirection: "row" },
+  filterBar: { paddingHorizontal: 24, paddingBottom: 8, flexDirection: "row", gap: 10 },
   filterButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -529,6 +637,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
   filterButtonText: { color: Colors.brand.text, fontSize: 14, fontWeight: "700", marginLeft: 8 },
+  frequenciaButton: { justifyContent: "center", marginTop: 12 },
   filterBadge: {
     marginLeft: 8,
     backgroundColor: Colors.brand.primary,
@@ -540,6 +649,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   filterBadgeText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+
+  exportBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 24,
+    marginBottom: 10,
+    backgroundColor: Colors.brand.card,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  exportBannerText: { color: Colors.brand.text, fontSize: 13, fontWeight: "700" },
 
   chipsRow: { flexGrow: 0, flexShrink: 0, marginBottom: 4 },
   chipsContent: { paddingHorizontal: 24, gap: 8, alignItems: "center", paddingVertical: 4 },

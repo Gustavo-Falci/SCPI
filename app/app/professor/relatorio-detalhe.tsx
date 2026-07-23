@@ -11,8 +11,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import * as Sharing from "expo-sharing";
+import * as Haptics from "expo-haptics";
 
-import { apiGet } from "../../services/api";
+import { apiGet, apiDownload } from "../../services/api";
+import { useErrorToast } from "../../hooks/useErrorToast";
 import { Colors } from "../../constants/theme";
 
 export default function RelatorioDetalhe() {
@@ -20,6 +23,33 @@ export default function RelatorioDetalhe() {
   const { chamada_id, turma_nome } = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
   const [detalhe, setDetalhe] = useState<any>(null);
+  const { showError } = useErrorToast();
+  const [exportando, setExportando] = useState(false);
+
+  const exportarPdf = async () => {
+    if (exportando) return;
+    setExportando(true);
+    try {
+      const uri = await apiDownload(
+        `/professor/relatorios/chamadas/${chamada_id}?formato=pdf`,
+        `ata-${detalhe?.codigo_turma || "chamada"}.pdf`
+      );
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          UTI: "com.adobe.pdf",
+          dialogTitle: "Ata de presença",
+        });
+      } else {
+        showError("Compartilhamento indisponível neste dispositivo.");
+      }
+    } catch (err: any) {
+      showError(err, "Não foi possível gerar o PDF.");
+    } finally {
+      setExportando(false);
+    }
+  };
 
   useEffect(() => {
     if (!chamada_id) return;
@@ -63,7 +93,24 @@ export default function RelatorioDetalhe() {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {(turma_nome as string) || "Relatório"}
         </Text>
-        <View style={{ width: 44 }} />
+        {detalhe ? (
+          <TouchableOpacity
+            onPress={exportarPdf}
+            style={styles.backBtn}
+            activeOpacity={0.7}
+            disabled={exportando}
+            accessibilityRole="button"
+            accessibilityLabel="Exportar ata em PDF"
+          >
+            {exportando ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="share-outline" size={22} color="#fff" />
+            )}
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 44 }} />
+        )}
       </View>
 
       {loading ? (

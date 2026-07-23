@@ -375,3 +375,71 @@ def listar_opcoes_filtros_relatorios(professor_id):
     turnos = sorted({r["turno"] for r in rows if r["turno"]})
     semestres = sorted({r["semestre"] for r in rows if r["semestre"]}, reverse=True)
     return {"turmas": turmas, "turnos": turnos, "semestres": semestres}
+
+
+def obter_turma_relatorio(turma_id):
+    """Cabeçalho da turma para o relatório de frequência."""
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute(
+            """
+            SELECT t.turma_id, t.nome_disciplina, t.codigo_turma, t.turno, t.semestre,
+                   COALESCE(u.nome, '—') AS professor_nome
+            FROM Turmas t
+            LEFT JOIN Professores pr ON pr.professor_id = t.professor_id
+            LEFT JOIN Usuarios    u  ON u.usuario_id   = pr.usuario_id
+            WHERE t.turma_id = %s
+            """,
+            (turma_id,),
+        )
+        return cur.fetchone()
+
+
+def listar_frequencia_turma(turma_id, data_inicio=None, data_fim=None):
+    """Frequência acumulada de cada aluno da turma nas chamadas fechadas do período.
+
+    LEFT JOIN em Presencas de propósito: aluno com zero presença precisa
+    aparecer na lista — é justamente quem o documento existe para mostrar.
+
+    Sem ORDER BY de propósito: services.relatorios.frequencia_turma reordena
+    por (percentual, nome), então qualquer ordenação aqui seria descartada.
+    """
+    filtro_datas = ""
+    params_datas = []
+    if data_inicio:
+        filtro_datas += " AND c.data_chamada >= %s"
+        params_datas.append(data_inicio)
+    if data_fim:
+        filtro_datas += " AND c.data_chamada <= %s"
+        params_datas.append(data_fim)
+
+    sql = f"""
+        WITH chamadas_periodo AS (
+            SELECT c.chamada_id, c.total_aulas
+            FROM Chamadas c
+            WHERE c.turma_id = %s AND c.status = 'Fechada'{filtro_datas}
+        )
+        SELECT
+            al.aluno_id,
+            u.nome,
+            COALESCE(al.ra, '—') AS ra,
+            COALESCE((SELECT SUM(cp.total_aulas) FROM chamadas_periodo cp), 0) AS aulas_dadas,
+            COALESCE((SELECT COUNT(*) FROM chamadas_periodo cp), 0) AS chamadas_count,
+            COUNT(p.presenca_id) AS aulas_presentes
+        FROM Turma_Alunos ta
+        JOIN Alunos   al ON al.aluno_id  = ta.aluno_id
+        JOIN Usuarios u  ON u.usuario_id = al.usuario_id
+        LEFT JOIN Presencas p
+               ON p.aluno_id = al.aluno_id
+              AND p.chamada_id IN (SELECT chamada_id FROM chamadas_periodo)
+        WHERE ta.turma_id = %s
+        GROUP BY al.aluno_id, u.nome, al.ra
+    """
+    params = tuple([turma_id] + params_datas + [turma_id])
+
+    with get_db_cursor() as cur:
+        if not cur:
+            return []
+        cur.execute(sql, params)
+        return cur.fetchall()

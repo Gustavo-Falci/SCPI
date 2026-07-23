@@ -257,3 +257,79 @@ export async function logoutRequest() {
   }
   await clearSession();
 }
+
+/**
+ * Reduz um nome de arquivo a uma forma segura para compor um caminho local.
+ * Mantém letras, dígitos, `.`, `-` e `_`; qualquer outro caractere (barras,
+ * espaços, acentos etc.) vira `-`. Sequências de `-` são colapsadas em uma só
+ * e hífens nas pontas são removidos. Se nada sobrar, usa "documento.pdf".
+ *
+ * `nomeArquivo` costuma ser montado a partir de colunas de texto livre (ex.:
+ * `codigo_turma`, que pode conter espaço ou "/"), e `downloadAsync` não cria
+ * diretórios intermediários — um "/" no meio do nome quebraria o download
+ * com um erro nativo cru em vez de uma mensagem amigável.
+ */
+function sanitizarNomeArquivo(nomeArquivo) {
+  const sanitizado = String(nomeArquivo || "")
+    .replace(/[^a-zA-Z0-9.\-_]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return sanitizado || "documento.pdf";
+}
+
+/**
+ * Baixa um arquivo autenticado para o cache e devolve a URI local.
+ *
+ * Usa a API legacy de expo-file-system porque é a que aceita headers de
+ * request — sem header não dá para mandar o Bearer token.
+ */
+export async function apiDownload(endpoint, nomeArquivo) {
+  const { cacheDirectory, downloadAsync, readAsStringAsync, deleteAsync } = require("expo-file-system/legacy");
+  const destino = `${cacheDirectory}${sanitizarNomeArquivo(nomeArquivo)}`;
+
+  const baixar = async (token) =>
+    downloadAsync(`${API_URL}${endpoint}`, destino, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+  let token = await storage.getItem("access_token");
+  let res = await baixar(token);
+
+  if (res.status === 401) {
+    const novoToken = await tryRefreshToken();
+    if (!novoToken) {
+      await clearSession();
+      throw makeApiError(HTTP_STATUS_MESSAGES[401], 401, null);
+    }
+    res = await baixar(novoToken);
+  }
+
+  if (res.status < 200 || res.status >= 300) {
+    // downloadAsync não rejeita em erro HTTP: ele grava o corpo da resposta
+    // de erro (geralmente um JSON com `detail`) no arquivo de destino como
+    // se fosse o download em si. Lemos esse arquivo para recuperar a
+    // mensagem real do backend, em vez de descartá-la com um texto genérico.
+    let message = HTTP_STATUS_MESSAGES[res.status] || `Erro HTTP ${res.status}`;
+    let errorCode = null;
+
+    try {
+      const conteudo = await readAsStringAsync(res.uri);
+      const data = JSON.parse(conteudo);
+      ({ message, errorCode } = extractDetailAndCode(data, res.status));
+    } catch {
+      // Corpo ausente, ilegível ou não-JSON: mantém a mensagem genérica.
+    }
+
+    try {
+      // Apaga o arquivo com o corpo de erro para não confundir um download
+      // bem-sucedido futuro para o mesmo destino.
+      await deleteAsync(res.uri, { idempotent: true });
+    } catch {
+      // Falha ao limpar não deve mascarar o erro HTTP original.
+    }
+
+    throw makeApiError(message, res.status, errorCode);
+  }
+
+  return res.uri;
+}

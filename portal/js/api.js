@@ -58,7 +58,7 @@ async function refreshSession() {
   try { return await refreshPromise; } finally { refreshPromise = null; }
 }
 
-async function request(path, opts = {}, retry = true) {
+async function rawRequest(path, opts = {}, retry = true) {
   const isFormData = opts.body instanceof FormData;
   // X-Requested-With: contramedida CSRF exigida pelo backend em mutações
   // autenticadas via cookie. credentials: 'include' envia os cookies em
@@ -79,19 +79,34 @@ async function request(path, opts = {}, retry = true) {
   if (res.status === 401 && retry) {
     const ok = await refreshSession();
     if (!ok) { clearSession(); _onExpired?.(); throw { detail: HTTP_MSGS[401] }; }
-    return request(path, opts, false);
+    return rawRequest(path, opts, false);
   }
 
-  if (res.status === 204) return null;
+  return res;
+}
 
-  let data;
+async function erroDaResposta(res) {
+  let data = null;
   try { data = await res.json(); } catch { data = null; }
+  return data || { detail: HTTP_MSGS[res.status] || `Erro ${res.status}` };
+}
 
-  if (!res.ok) {
-    throw data || { detail: HTTP_MSGS[res.status] || `Erro ${res.status}` };
-  }
+async function request(path, opts = {}, retry = true) {
+  const res = await rawRequest(path, opts, retry);
+  if (res.status === 204) return null;
+  if (!res.ok) throw await erroDaResposta(res);
+  try { return await res.json(); } catch { return null; }
+}
 
-  return data;
+// Content-Disposition só é legível cross-origin porque a API o expõe em
+// expose_headers; sem isso, cai no nome de fallback do chamador.
+const RE_FILENAME = /filename="?([^";]+)"?/i;
+
+async function getBlob(path) {
+  const res = await rawRequest(path, { method: 'GET' });
+  if (!res.ok) throw await erroDaResposta(res);
+  const m = RE_FILENAME.exec(res.headers.get('Content-Disposition') || '');
+  return { blob: await res.blob(), filename: m ? m[1] : null };
 }
 
 // Boot do portal: confirma no servidor que a sessão vale antes de renderizar o
@@ -109,6 +124,7 @@ export async function validateSession() {
 
 export const api = {
   get: (path) => request(path, { method: 'GET' }),
+  getBlob,
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
   postForm: (path, params) => request(path, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params) }),
   postMultipart: (path, formData) => request(path, { method: 'POST', body: formData }),

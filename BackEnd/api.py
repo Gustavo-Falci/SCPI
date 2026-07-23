@@ -117,6 +117,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    # O portal roda em outra origem que a API; sem expor o header, o JS não
+    # consegue ler o nome do arquivo dos downloads de PDF.
+    expose_headers=["Content-Disposition"],
 )
 
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["127.0.0.1"])
