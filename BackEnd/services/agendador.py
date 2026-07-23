@@ -23,17 +23,30 @@ async def _ciclo_agendador() -> None:
         )
 
 
-async def _ciclo_limpeza_tokens() -> None:
+def _executar_limpeza():
+    """Purga tokens, rate-limits e login_attempts expirados. Retorna as contagens."""
     from repositories.tokens import purgar_tokens_expirados
+    from repositories.auth_lockout import purgar_login_attempts
+    from core.limiter_storage import purgar_rate_limit_buckets
 
+    deletados = purgar_tokens_expirados()
+    rl = purgar_rate_limit_buckets()
+    la = purgar_login_attempts()
+    logger.info(
+        "Limpeza diária: tokens=%d rate_limits=%d login_attempts=%d",
+        deletados, rl, la,
+    )
+    return (deletados, rl, la)
+
+
+async def _ciclo_limpeza_tokens() -> None:
     loop = asyncio.get_event_loop()
     while True:
         await asyncio.sleep(86400)
         try:
-            deletados = await loop.run_in_executor(None, purgar_tokens_expirados)
-            logger.info("Limpeza de tokens: %d registro(s) removido(s).", deletados)
+            await loop.run_in_executor(None, _executar_limpeza)
         except Exception as e:
-            logger.error("Erro na limpeza de tokens: %s", e)
+            logger.error("Erro na limpeza diária: %s", e)
 
 
 async def iniciar_agendador() -> None:
