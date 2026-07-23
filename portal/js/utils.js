@@ -26,7 +26,9 @@ export function avatar(nome = '?', size = 36) {
     : words[0].slice(0, 2).toUpperCase();
   const color = PALETTE[(nome.charCodeAt(0) || 0) % PALETTE.length];
   const r = Math.round(size / 3.5);
-  return `<div style="width:${size}px;height:${size}px;background:${color}22;border:1.5px solid ${color}55;border-radius:${r}px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:${Math.round(size / 2.7)}px;font-weight:900;color:${color}">${ini}</div>`;
+  // `ini` sai do nome vindo do banco: 2 caracteres não montam payload, mas
+  // quebram a marcação do próprio avatar. Escapa junto com o resto.
+  return `<div style="width:${size}px;height:${size}px;background:${color}22;border:1.5px solid ${color}55;border-radius:${r}px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:${Math.round(size / 2.7)}px;font-weight:900;color:${color}">${escapeHtml(ini)}</div>`;
 }
 
 export function baixarArquivo(blob, nomeFallback) {

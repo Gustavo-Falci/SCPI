@@ -1,4 +1,5 @@
 import { icon } from './icons.js';
+import { escapeHtml } from './utils.js';
 
 const DURATIONS = { success: 3000, info: 3500, warning: 5000, error: 6000 };
 const COLORS = {
@@ -26,8 +27,8 @@ export const toast = {
     el.innerHTML = `
       <span class="mt-0.5 flex-shrink-0">${icon(iconName, 16)}</span>
       <div class="flex-1 min-w-0">
-        ${title ? `<p class="font-black text-sm">${title}</p>` : ''}
-        <p class="${title ? 'text-xs opacity-80' : 'font-bold text-sm'}">${message}</p>
+        ${title ? `<p class="font-black text-sm">${escapeHtml(title)}</p>` : ''}
+        <p class="${title ? 'text-xs opacity-80' : 'font-bold text-sm'}">${escapeHtml(message)}</p>
         <div class="toast-progress mt-2 h-0.5 rounded-full bg-current opacity-30 origin-left" style="animation: toast-shrink ${duration}ms linear forwards"></div>
       </div>
       <button class="flex-shrink-0 opacity-50 hover:opacity-100 transition-opacity" onclick="document.getElementById('${id}')?.remove()">

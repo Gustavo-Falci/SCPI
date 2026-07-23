@@ -122,7 +122,7 @@ function showCreatedModal(email) {
       </div>
       <div class="bg-[#0C0C12] rounded-2xl p-4 border border-white/5 mb-3">
         <p class="text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Email</p>
-        <p class="font-bold text-white">${email}</p>
+        <p class="font-bold text-white">${escapeHtml(email)}</p>
       </div>
       <p class="text-blue-300 text-xs font-bold bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
         Senha temporária enviada para o email acima. O professor definirá uma nova senha no primeiro acesso.

@@ -49,10 +49,10 @@ function renderList(container) {
             <div class="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg flex-shrink-0 ${colorSem}">${r.semestre}º</div>
             <div class="min-w-0">
               <div class="flex items-center gap-2 mb-0.5 flex-wrap">
-                <h4 class="font-black text-white text-sm">${r.nome_disciplina}</h4>
-                <span class="text-xs font-black px-2 py-0.5 rounded-md uppercase tracking-tighter ${colorBadge}">${r.turno}</span>
+                <h4 class="font-black text-white text-sm">${escapeHtml(r.nome_disciplina)}</h4>
+                <span class="text-xs font-black px-2 py-0.5 rounded-md uppercase tracking-tighter ${colorBadge}">${escapeHtml(r.turno)}</span>
               </div>
-              <p class="text-gray-500 font-bold text-xs truncate">Prof. ${r.professor_nome} · ${r.codigo_turma} · ${r.data_chamada} · ${r.horario_inicio} – ${r.horario_fim}</p>
+              <p class="text-gray-500 font-bold text-xs truncate">Prof. ${escapeHtml(r.professor_nome)} · ${escapeHtml(r.codigo_turma)} · ${escapeHtml(r.data_chamada)} · ${escapeHtml(r.horario_inicio)} – ${escapeHtml(r.horario_fim)}</p>
             </div>
           </div>
           <div class="flex items-center gap-4 xl:gap-6 flex-shrink-0">
@@ -153,10 +153,10 @@ async function openDetalhe(chamadaId) {
       <div class="flex items-center justify-between p-6 border-b border-white/5 flex-shrink-0">
         <div>
           <div class="flex items-center gap-2 mb-0.5">
-            <h3 class="font-black text-lg">${d.nome_disciplina}</h3>
-            <span class="text-xs font-black px-2 py-0.5 rounded-md uppercase ${colorBadge}">${d.turno}</span>
+            <h3 class="font-black text-lg">${escapeHtml(d.nome_disciplina)}</h3>
+            <span class="text-xs font-black px-2 py-0.5 rounded-md uppercase ${colorBadge}">${escapeHtml(d.turno)}</span>
           </div>
-          <p class="text-gray-500 text-xs font-bold">Prof. ${d.professor_nome} · ${d.codigo_turma} · ${d.data_chamada} · ${d.horario_inicio} – ${d.horario_fim}</p>
+          <p class="text-gray-500 text-xs font-bold">Prof. ${escapeHtml(d.professor_nome)} · ${escapeHtml(d.codigo_turma)} · ${escapeHtml(d.data_chamada)} · ${escapeHtml(d.horario_inicio)} – ${escapeHtml(d.horario_fim)}</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <button id="btn-pdf-freq" title="Frequência por aluno da turma" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 hover:text-accent transition-colors">${icon('users', 16)}</button>
@@ -187,7 +187,7 @@ async function openDetalhe(chamadaId) {
               <div class="grid items-center px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors" style="grid-template-columns: 1fr auto auto auto">
                 <div><p class="font-black text-sm text-white">${escapeHtml(a.nome)}</p><p class="text-xs text-gray-600 font-bold">${a.ra !== '—' ? `RA/CPF: ${escapeHtml(a.ra)}` : ''}</p></div>
                 <span class="text-center font-black text-sm text-white">${a.aulas_presentes_count}/${d.total_aulas}</span>
-                <span class="text-center font-bold text-xs text-gray-500 mx-4">${a.tipo_registro !== '—' ? a.tipo_registro : '—'}</span>
+                <span class="text-center font-bold text-xs text-gray-500 mx-4">${a.tipo_registro !== '—' ? escapeHtml(a.tipo_registro) : '—'}</span>
                 <span class="text-xs font-black px-2 py-1 rounded-lg ${status.cls}">${status.label}</span>
               </div>
             `;
@@ -206,7 +206,7 @@ async function openDetalhe(chamadaId) {
       abrirModalFrequencia(d.turma_id, d.codigo_turma)
     );
   } catch (err) {
-    document.getElementById('modal-box').innerHTML = `<div class="p-8 text-red-400 font-black text-center">${extractError(err)}<br><button onclick="closeModal()" class="mt-4 px-4 py-2 rounded-xl border border-white/10 text-white text-sm">Fechar</button></div>`;
+    document.getElementById('modal-box').innerHTML = `<div class="p-8 text-red-400 font-black text-center">${escapeHtml(extractError(err))}<br><button onclick="closeModal()" class="mt-4 px-4 py-2 rounded-xl border border-white/10 text-white text-sm">Fechar</button></div>`;
   }
 }
 

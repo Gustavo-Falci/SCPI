@@ -29,7 +29,7 @@ function filtered() {
 function turnoBadge(turno) {
   if (!turno) return '';
   const cls = turno === 'Matutino' ? 'bg-amber-500/10 text-amber-500' : 'bg-indigo-500/10 text-indigo-500';
-  return `<span class="${cls} text-[10px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tighter">${turno}</span>`;
+  return `<span class="${cls} text-[10px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tighter">${escapeHtml(turno)}</span>`;
 }
 
 function renderList(container) {

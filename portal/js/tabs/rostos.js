@@ -2,6 +2,7 @@ import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { confirm } from '../confirm.js';
 import { icon } from '../icons.js';
+import { escapeHtml } from '../utils.js';
 import { getState } from '../state.js';
 
 let rekData = [];
@@ -70,16 +71,16 @@ function renderPanel(container, panelId) {
 
     return `
       <div class="bg-[#0C0C12] rounded-2xl border border-white/5 overflow-hidden">
-        <div class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white/5 transition-colors group-row" data-group="${g.name}" data-panel="${panelId}">
+        <div class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white/5 transition-colors group-row" data-group="${escapeHtml(g.name)}" data-panel="${panelId}">
           <label class="custom-checkbox flex-shrink-0" onclick="event.stopPropagation()">
-            <input type="checkbox" class="group-check sr-only" data-panel="${panelId}" data-ids='${JSON.stringify(allIds)}' ${selAll ? 'checked' : ''} ${selSome ? 'data-indeterminate="true"' : ''}>
+            <input type="checkbox" class="group-check sr-only" data-panel="${panelId}" data-ids="${escapeHtml(JSON.stringify(allIds))}" ${selAll ? 'checked' : ''} ${selSome ? 'data-indeterminate="true"' : ''}>
             <span class="checkbox-ui ${selSome ? 'indeterminate' : ''}"></span>
           </label>
           <div class="flex-1 min-w-0">
-            <p class="font-black text-sm text-white truncate">${g.name}</p>
+            <p class="font-black text-sm text-white truncate">${escapeHtml(g.name)}</p>
             <p class="text-xs text-gray-600 font-bold">${allIds.length} ${isRek ? 'face(s)' : 'arquivo(s)'}</p>
           </div>
-          <button data-panel="${panelId}" data-ids='${JSON.stringify(allIds)}' class="del-group w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0 group-hover-btn">${icon('trash-2', 13)}</button>
+          <button data-panel="${panelId}" data-ids="${escapeHtml(JSON.stringify(allIds))}" class="del-group w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0 group-hover-btn">${icon('trash-2', 13)}</button>
           <span class="text-gray-600 transition-transform ${isOpen ? 'rotate-90' : ''}">${icon('chevron-right', 14)}</span>
         </div>
         ${isOpen ? `
@@ -89,13 +90,13 @@ function renderPanel(container, panelId) {
               return `
                 <div class="flex items-center gap-3 px-4 py-2.5 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
                   <label class="custom-checkbox flex-shrink-0" onclick="event.stopPropagation()">
-                    <input type="checkbox" class="item-check sr-only" data-panel="${panelId}" data-id="${id}" ${selected.has(id) ? 'checked' : ''}>
+                    <input type="checkbox" class="item-check sr-only" data-panel="${panelId}" data-id="${escapeHtml(id)}" ${selected.has(id) ? 'checked' : ''}>
                     <span class="checkbox-ui"></span>
                   </label>
                   <div class="flex-1 min-w-0">
                     ${isRek
-                      ? `<p class="text-xs font-black text-gray-400 truncate font-mono">${item.face_id}</p><p class="text-xs text-gray-600 font-bold">Conf: ${(item.confidence || 0).toFixed(1)}%</p>`
-                      : `<p class="text-xs font-black text-gray-400 truncate">${item.key}</p><p class="text-xs text-gray-600 font-bold">${item.size ? (item.size / 1024).toFixed(1) + ' KB' : ''}</p>`
+                      ? `<p class="text-xs font-black text-gray-400 truncate font-mono">${escapeHtml(item.face_id)}</p><p class="text-xs text-gray-600 font-bold">Conf: ${(item.confidence || 0).toFixed(1)}%</p>`
+                      : `<p class="text-xs font-black text-gray-400 truncate">${escapeHtml(item.key)}</p><p class="text-xs text-gray-600 font-bold">${item.size ? (item.size / 1024).toFixed(1) + ' KB' : ''}</p>`
                     }
                   </div>
                   <button data-panel="${panelId}" data-id="${id}" class="del-item w-6 h-6 rounded-lg bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0">${icon('trash-2', 11)}</button>

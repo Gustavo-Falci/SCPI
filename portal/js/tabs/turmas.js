@@ -244,7 +244,7 @@ async function showMatriculaModal(turmaId, container) {
 
     document.getElementById('modal-box').innerHTML = `
       <div class="flex items-center justify-between p-6 border-b border-white/5 flex-shrink-0">
-        <div><h3 class="font-black text-lg">Alunos da Turma</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${escapeHtml(turma.nome_disciplina)} · ${turma.turno}</p></div>
+        <div><h3 class="font-black text-lg">Alunos da Turma</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${escapeHtml(turma.nome_disciplina)} · ${escapeHtml(turma.turno)}</p></div>
         <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <div class="p-4 border-b border-white/5 flex-shrink-0 flex gap-2">
@@ -254,7 +254,7 @@ async function showMatriculaModal(turmaId, container) {
       <div class="p-4 border-b border-white/5 flex-shrink-0">
         <div class="relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600">${icon('search', 15)}</span>
-          <input id="mat-search" type="search" value="${st.search}" placeholder="Buscar aluno..." class="scpi-input pl-9 w-full">
+          <input id="mat-search" type="search" value="${escapeHtml(st.search)}" placeholder="Buscar aluno..." class="scpi-input pl-9 w-full">
         </div>
       </div>
       <div class="p-4 border-b border-white/5 flex-shrink-0">

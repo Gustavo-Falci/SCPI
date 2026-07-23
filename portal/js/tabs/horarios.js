@@ -2,6 +2,7 @@ import { api, extractError } from '../api.js';
 import { toast } from '../toast.js';
 import { confirm } from '../confirm.js';
 import { icon } from '../icons.js';
+import { escapeHtml } from '../utils.js';
 import { getState, invalidate } from '../state.js';
 import { openModal, closeModal } from '../modal.js';
 import { DIAS_SEMANA, SLOTS_MATUTINO, SLOTS_NOTURNO } from '../config.js';
@@ -35,12 +36,12 @@ function renderGrid(container) {
         <div class="space-y-3">
           ${aulas.map(h => `
             <div class="group p-3 rounded-2xl border-2 transition-all ${colorCard}">
-              <p class="text-[10px] font-black uppercase mb-1.5 ${colorTime}">${h.inicio || h.horario_inicio} — ${h.fim || h.horario_fim}</p>
-              <p class="text-sm font-black text-white leading-tight mb-1.5">${h.nome_disciplina}</p>
+              <p class="text-[10px] font-black uppercase mb-1.5 ${colorTime}">${escapeHtml(h.inicio || h.horario_inicio)} — ${escapeHtml(h.fim || h.horario_fim)}</p>
+              <p class="text-sm font-black text-white leading-tight mb-1.5">${escapeHtml(h.nome_disciplina)}</p>
               <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-1 opacity-40">
                   ${icon('map-pin', 10)}
-                  <span class="text-[10px] font-black uppercase">${h.sala || '—'}</span>
+                  <span class="text-[10px] font-black uppercase">${escapeHtml(h.sala || '—')}</span>
                 </div>
                 <!-- Mobile: sempre visível. Ver comentário equivalente em alunos.js. -->
                 <button title="Excluir aula" data-id="${h.horario_id}" class="del-horario w-8 h-8 lg:w-6 lg:h-6 rounded-lg bg-red-500/20 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0 lg:opacity-0 lg:group-hover:opacity-100">${icon('trash-2', 11)}</button>
@@ -86,7 +87,7 @@ function showAddModal(diaIdx, container) {
           <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Disciplina *</label>
           <select name="turma_id" class="scpi-input" required>
             <option value="">Selecione...</option>
-            ${turmas.map(t => `<option value="${t.turma_id}">${t.nome_disciplina} — ${t.codigo_turma}</option>`).join('')}
+            ${turmas.map(t => `<option value="${escapeHtml(t.turma_id)}">${escapeHtml(t.nome_disciplina)} — ${escapeHtml(t.codigo_turma)}</option>`).join('')}
           </select>
         </div>
         <div class="grid grid-cols-2 gap-3">

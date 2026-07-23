@@ -5,6 +5,7 @@ import { clearUI } from './persist.js';
 import { readSession, saveSession, clearSession } from './auth.js';
 import { api, setOnExpired, extractError, validateSession } from './api.js';
 import { icon } from './icons.js';
+import { escapeHtml } from './utils.js';
 import { closeModal } from './modal.js';
 import { skeletons } from './skeleton.js';
 import { runCreate, clearCreate } from './registry.js';
@@ -99,7 +100,7 @@ function switchTab(tabId) {
   const content = document.getElementById('tab-content');
   content.innerHTML = tab.skeleton ? tab.skeleton() : `<div class="flex-1 flex items-center justify-center"><div class="spin opacity-50">${icon('loader', 28)}</div></div>`;
   tab.mount(content).catch(err => {
-    content.innerHTML = `<div class="tab-anim flex-1 flex items-center justify-center text-red-400 font-black text-sm">${extractError(err)}</div>`;
+    content.innerHTML = `<div class="tab-anim flex-1 flex items-center justify-center text-red-400 font-black text-sm">${escapeHtml(extractError(err))}</div>`;
   });
 }
 
