@@ -11,7 +11,7 @@ python-multipart==0.0.32
 # Servidor de produção: systemd sobe `gunicorn -w 4 -k uvicorn_worker.UvicornWorker api:app`.
 # Pinado aqui para entrar no pip-audit e no Dependabot — antes ficava só instalado à mão
 # na VM, invisível para o CI. Não é usado em dev (uvicorn direto).
-gunicorn==25.3.0
+gunicorn==26.0.0
 # O módulo `uvicorn.workers` foi descontinuado (DeprecationWarning desde a 0.51.0) e será
 # removido; quando isso acontecer, o restart do scpi-api derruba a API. uvicorn-worker é o
 # sucessor oficial, mesmo mantenedor, código idêntico ao módulo antigo.
