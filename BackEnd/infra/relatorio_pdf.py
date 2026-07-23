@@ -192,7 +192,7 @@ def _kpis(itens):
         ("BOTTOMPADDING", (0, 0), (-1, 0), 1),
         ("BOTTOMPADDING", (0, 1), (-1, 1), 9),
         ("BOX", (0, 0), (-1, -1), 0.5, BORDA),
-        ("INNERGRID", (0, 0), (-1, -1), 0.5, BORDA),
+        ("LINEAFTER", (0, 0), (-2, -1), 0.5, BORDA),
     ]
     for i, (_, _, cor) in enumerate(itens):
         if cor is not None:
