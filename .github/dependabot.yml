@@ -76,6 +76,15 @@ updates:
       - dependency-name: "eslint"
       - dependency-name: "eslint-config-expo"
       - dependency-name: "typescript"
+      # Transitivas do toolchain Metro/Expo — Dependabot não consegue bumpar
+      # isolado (2026-07-23: PRs de security-update falharam em update_files,
+      # uuid 7.0.3→14.0.1 é major fixado pelo pai). Alertas GHSA-w5hq-g745-h8pq
+      # (uuid, buffer bounds) e GHSA-4x5r-pxfx-6jf8 (@babel/core, file read via
+      # sourceMappingURL) atingem só build/dev, não o runtime do app publicado.
+      # O ignore suprime só o PR: os alertas seguem visíveis na aba Security.
+      # Resolvem no upgrade do Expo SDK, junto com o resto da toolchain.
+      - dependency-name: "uuid"
+      - dependency-name: "@babel/core"
 
   # GitHub Actions (versões dos próprios workflows)
   - package-ecosystem: "github-actions"
