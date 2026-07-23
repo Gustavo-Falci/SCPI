@@ -24,6 +24,28 @@ jobs:
       # Valores fake auto-evidentes — nenhum teste usa os valores reais.
       SECRET_KEY: ci-dummy-secret-key-nao-e-segredo-0123456789abcdef # gitleaks:allow — dummy de CI, não é segredo
       SCPI_EXPORT_HMAC_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      # Postgres do service abaixo — usado pelos testes de integração (fixture `pg`).
+      # Opt-in explícito: sem esta flag os testes de integração são pulados sem conectar.
+      SCPI_RUN_DB_TESTS: "1"
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: scpi_test
+      DB_USER: scpi_test
+      DB_PASSWORD: scpi_test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: scpi_test
+          POSTGRES_PASSWORD: scpi_test
+          POSTGRES_DB: scpi_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U scpi_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
 
