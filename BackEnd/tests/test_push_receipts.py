@@ -161,3 +161,42 @@ def test_consultar_receipts_httperror_nao_derruba():
         from infra.notificacoes import consultar_receipts
         out = consultar_receipts(["tk1"])
     assert out == {}
+
+
+PEND = [
+    {"ticket_id": "tk1", "expo_token": "ExponentPushToken[a]"},
+    {"ticket_id": "tk2", "expo_token": "ExponentPushToken[b]"},
+    {"ticket_id": "tk3", "expo_token": "ExponentPushToken[c]"},
+]
+
+
+def test_processar_device_not_registered_poda_e_processa():
+    receipts = {"tk1": {"status": "error", "details": {"error": "DeviceNotRegistered"}}}
+    from scripts.verificar_receipts import processar
+    podar, processados = processar(PEND, receipts)
+    assert podar == ["ExponentPushToken[a]"]
+    assert processados == ["tk1"]
+
+
+def test_processar_ok_nao_poda_mas_processa():
+    receipts = {"tk2": {"status": "ok"}}
+    from scripts.verificar_receipts import processar
+    podar, processados = processar(PEND, receipts)
+    assert podar == []
+    assert processados == ["tk2"]
+
+
+def test_processar_sem_receipt_fica_pendente():
+    receipts = {}  # nenhum receipt ainda
+    from scripts.verificar_receipts import processar
+    podar, processados = processar(PEND, receipts)
+    assert podar == []
+    assert processados == []
+
+
+def test_processar_erro_transitorio_nao_poda_mas_processa():
+    receipts = {"tk3": {"status": "error", "details": {"error": "MessageRateExceeded"}}}
+    from scripts.verificar_receipts import processar
+    podar, processados = processar(PEND, receipts)
+    assert podar == []
+    assert processados == ["tk3"]
