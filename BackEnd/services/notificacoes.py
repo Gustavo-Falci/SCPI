@@ -3,7 +3,7 @@ import logging
 import zoneinfo
 
 from infra.notificacoes import send_expo_push, send_email_resend
-from repositories.notificacoes import obter_push_token_por_usuario
+from repositories.notificacoes import obter_push_token_por_usuario, remover_push_token
 from repositories.turmas import (
     listar_alunos_com_push_token_da_turma,
     obter_turma_id_por_chamada,
@@ -20,11 +20,13 @@ def enviar_notificacoes_presenca(usuario_id: str, aluno_nome: str, aluno_email: 
         try:
             row = obter_push_token_por_usuario(usuario_id)
             if row:
-                send_expo_push(
+                res = send_expo_push(
                     [row["expo_token"]],
                     "Presença Confirmada ✓",
                     f"Sua presença em {turma_nome} foi registrada às {hora}.",
                 )
+                for token in res["dead"]:
+                    remover_push_token(token)
         except Exception as e:
             logger.error("Erro ao enviar push: %s", e)
 
@@ -45,14 +47,16 @@ def notificar_alunos_presentes(chamada_id: str, turma_nome: str) -> None:
         logger.error("Erro ao buscar alunos para notificação de encerramento: %s", e)
         return
 
-    for aluno in alunos:
-        expo_token = aluno.get("expo_token")
-        if expo_token:
-            try:
-                send_expo_push(
-                    [expo_token],
-                    "Chamada Encerrada",
-                    f"A chamada de {turma_nome} foi encerrada às {hora}.",
-                )
-            except Exception as e:
-                logger.error("Erro ao enviar push para %s: %s", aluno["usuario_id"], e)
+    tokens = [a["expo_token"] for a in alunos if a.get("expo_token")]
+    if not tokens:
+        return
+    try:
+        res = send_expo_push(
+            tokens,
+            "Chamada Encerrada",
+            f"A chamada de {turma_nome} foi encerrada às {hora}.",
+        )
+        for token in res["dead"]:
+            remover_push_token(token)
+    except Exception as e:
+        logger.error("Erro ao enviar push de encerramento da chamada %s: %s", chamada_id, e)

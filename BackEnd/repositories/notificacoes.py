@@ -24,3 +24,13 @@ def obter_push_token_por_usuario(usuario_id):
             return None
         cur.execute("SELECT expo_token FROM PushTokens WHERE usuario_id = %s", (usuario_id,))
         return cur.fetchone()
+
+
+def remover_push_token(expo_token):
+    """Apaga um push token morto (DeviceNotRegistered). Por token, não por
+    usuário: evita apagar um re-registro feito entre o envio e a poda."""
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return False
+        cur.execute("DELETE FROM PushTokens WHERE expo_token = %s", (expo_token,))
+        return True

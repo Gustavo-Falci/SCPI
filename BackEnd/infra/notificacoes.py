@@ -17,11 +17,18 @@ def _resend_from() -> str:
     return os.getenv("RESEND_FROM_EMAIL", "SCPI <onboarding@resend.dev>")
 
 
-def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) -> bool:
+def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) -> dict:
+    """Envia push via Expo e lê os tickets da resposta.
+
+    Retorna {"ok": [tokens aceitos], "dead": [tokens DeviceNotRegistered]}.
+    Em falha de transporte ou resposta malformada, retorna listas vazias
+    (não sabemos o estado real — nada é podado).
+    """
+    vazio = {"ok": [], "dead": []}
     valid = [t for t in expo_tokens if t and t.startswith("ExponentPushToken")]
     if not valid:
         logger.debug("Nenhum Expo push token válido para envio.")
-        return False
+        return vazio
 
     messages = [
         {
@@ -48,14 +55,34 @@ def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) 
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read().decode("utf-8"))
-            logger.info("Expo push enviado para %d tokens: %s", len(valid), result)
-            return True
     except urllib.error.HTTPError as e:
         logger.error("Expo Push HTTP %s: %s", e.code, e.read().decode("utf-8", errors="replace"))
-        return False
+        return vazio
     except Exception as e:
         logger.error("Erro ao enviar Expo push: %s", e)
-        return False
+        return vazio
+
+    tickets = result.get("data", [])
+    if len(tickets) != len(valid):
+        logger.error(
+            "Expo push: %d tickets para %d tokens — resposta inesperada, nada podado.",
+            len(tickets), len(valid),
+        )
+        return vazio
+
+    ok, dead = [], []
+    for token, ticket in zip(valid, tickets):
+        if ticket.get("status") == "ok":
+            ok.append(token)
+            continue
+        erro = (ticket.get("details") or {}).get("error")
+        if erro == "DeviceNotRegistered":
+            dead.append(token)
+            logger.info("Expo push: token morto (DeviceNotRegistered), será podado.")
+        else:
+            logger.warning("Expo push: ticket com erro %s (token mantido).", erro)
+    logger.info("Expo push: %d ok, %d mortos de %d tokens.", len(ok), len(dead), len(valid))
+    return {"ok": ok, "dead": dead}
 
 
 def send_email_resend(to_email: str, aluno_nome: str, turma_nome: str, hora: str) -> bool:
