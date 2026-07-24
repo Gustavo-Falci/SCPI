@@ -11,6 +11,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv, find_dotenv
 
+from infra.database import get_db_connection, release_connection
 from infra.notificacoes import consultar_receipts
 from repositories.notificacoes import (
     listar_tickets_pendentes,
@@ -52,6 +53,12 @@ def processar(pendentes, receipts):
 
 
 def main():
+    conn = get_db_connection()
+    if conn is None:
+        logger.error("Receipts: sem conexão com o banco; abortando.")
+        sys.exit(1)
+    release_connection(conn)
+
     idade_min = _env_int("RECEIPTS_IDADE_MIN_S", 900)
     idade_max = _env_int("RECEIPTS_IDADE_MAX_S", 86400)
     limite = _env_int("RECEIPTS_LIMITE", 1000)
@@ -64,7 +71,7 @@ def main():
             remover_push_token(token)
         remover_tickets_pendentes(processados)
         logger.info(
-            "Receipts: %d consultados, %d podados, %d processados.",
+            "Receipts: %d pendentes, %d podados, %d processados.",
             len(pendentes), len(tokens_a_podar), len(processados),
         )
     orfaos = remover_tickets_pendentes_antigos(idade_max)

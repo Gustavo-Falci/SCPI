@@ -4,6 +4,8 @@ import io
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 def _mock_cursor():
     cur = MagicMock()
@@ -214,6 +216,39 @@ def test_presenca_registra_tickets_pendentes():
         from services.notificacoes import enviar_notificacoes_presenca
         enviar_notificacoes_presenca("u1", "Ana", "", "Turma X")
     reg.assert_called_once_with(tickets)
+
+
+def test_main_processa_pendentes_poda_e_limpa():
+    pendentes = [
+        {"ticket_id": "tk1", "expo_token": "ExponentPushToken[a]"},
+        {"ticket_id": "tk2", "expo_token": "ExponentPushToken[b]"},
+    ]
+    receipts = {
+        "tk1": {"status": "error", "details": {"error": "DeviceNotRegistered"}},
+        "tk2": {"status": "ok"},
+    }
+    with patch("scripts.verificar_receipts.get_db_connection", return_value=MagicMock()), \
+         patch("scripts.verificar_receipts.release_connection") as release_conn, \
+         patch("scripts.verificar_receipts.listar_tickets_pendentes", return_value=pendentes), \
+         patch("scripts.verificar_receipts.consultar_receipts", return_value=receipts), \
+         patch("scripts.verificar_receipts.remover_push_token") as remover_token, \
+         patch("scripts.verificar_receipts.remover_tickets_pendentes") as remover_pend, \
+         patch("scripts.verificar_receipts.remover_tickets_pendentes_antigos", return_value=0) as remover_antigos:
+        from scripts.verificar_receipts import main
+        main()
+    remover_token.assert_called_once_with("ExponentPushToken[a]")
+    remover_pend.assert_called_once_with(["tk1", "tk2"])
+    remover_antigos.assert_called_once()
+    release_conn.assert_called_once()
+
+
+def test_main_sem_conexao_aborta():
+    with patch("scripts.verificar_receipts.get_db_connection", return_value=None), \
+         patch("scripts.verificar_receipts.listar_tickets_pendentes") as listar:
+        from scripts.verificar_receipts import main
+        with pytest.raises(SystemExit):
+            main()
+    listar.assert_not_called()
 
 
 def test_notificar_alunos_registra_tickets_pendentes():

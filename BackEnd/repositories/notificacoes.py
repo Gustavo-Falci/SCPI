@@ -29,7 +29,10 @@ def obter_push_token_por_usuario(usuario_id):
 
 def remover_push_token(expo_token):
     """Apaga um push token morto (DeviceNotRegistered). Por token, não por
-    usuário: evita apagar um re-registro feito entre o envio e a poda."""
+    usuário: evita apagar um re-registro feito entre o envio e a poda.
+    Ressalva: se a reinstalação reemitir o MESMO token (string idêntica), a
+    deleção por token ainda remove a linha recém-criada; a janela do receipt
+    (minutos a horas) amplia essa lacuna em relação ao caminho síncrono."""
     with get_db_cursor(commit=True) as cur:
         if not cur:
             return False
