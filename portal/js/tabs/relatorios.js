@@ -8,18 +8,39 @@ import { openModal, closeModal } from '../modal.js';
 import { loadTab, saveTab } from '../persist.js';
 
 const PER_PAGE = 8;
+// Mesmo teto do PDF consolidado no backend (routers/relatorios.py:TETO_CONSOLIDADO).
+// A lista puxa filtrada pelo servidor com este limite para ver exatamente o mesmo
+// conjunto que o PDF — antes a tela filtrava no cliente sobre os 200 mais recentes
+// e podia esconder chamadas que o consolidado incluía.
+const TETO_CONSOLIDADO = 2000;
 let page = 1;
 let data = [];
 
-async function load() {
-  const state = getState();
-  if (!state.cache.relatorios) state.cache.relatorios = await api.get('/admin/relatorios/chamadas');
-  data = state.cache.relatorios;
+// Assinatura dos filtros ativos: turno sempre; semestre só quando não é "Todos"
+// (o backend interpreta ausência de semestre como "todos"). Serve para a URL e
+// para saber quando o cache precisa ser refeito.
+function filtroParams() {
+  const { turno, semestre } = getState();
+  const params = new URLSearchParams({ turno, limit: String(TETO_CONSOLIDADO) });
+  if (semestre !== 'Todos') params.append('semestre', String(semestre));
+  return params;
 }
 
+async function load() {
+  const state = getState();
+  const params = filtroParams();
+  const sig = params.toString();
+  const cached = state.cache.relatorios;
+  if (!cached || cached.sig !== sig) {
+    const rows = await api.get(`/admin/relatorios/chamadas?${params}`);
+    state.cache.relatorios = { sig, rows };
+  }
+  data = state.cache.relatorios.rows;
+}
+
+// Servidor já devolve filtrado por turno/semestre; nada a filtrar no cliente.
 function filtered() {
-  const { turno, semestre } = getState();
-  return data.filter(r => r.turno === turno && (semestre === 'Todos' || String(r.semestre) === String(semestre)));
+  return data;
 }
 
 function statCard(label, value, color) {
@@ -223,9 +244,9 @@ export async function mount(container) {
     </div>
   `;
   container.querySelector('#btn-pdf-consolidado').addEventListener('click', (ev) => {
-    const { turno, semestre } = getState();
-    const params = new URLSearchParams({ formato: 'pdf', turno });
-    if (semestre !== 'Todos') params.append('semestre', String(semestre));
+    // Mesmos filtros da lista (o backend ignora `limit` no caminho PDF e usa o teto).
+    const params = filtroParams();
+    params.set('formato', 'pdf');
     exportarPdf(
       ev.currentTarget,
       `/admin/relatorios/chamadas?${params.toString()}`,

@@ -416,7 +416,7 @@ def listar_frequencia_turma(turma_id, data_inicio=None, data_fim=None):
 
     sql = f"""
         WITH chamadas_periodo AS (
-            SELECT c.chamada_id, c.total_aulas
+            SELECT c.chamada_id, c.total_aulas, c.data_chamada
             FROM Chamadas c
             WHERE c.turma_id = %s AND c.status = 'Fechada'{filtro_datas}
         )
@@ -424,8 +424,16 @@ def listar_frequencia_turma(turma_id, data_inicio=None, data_fim=None):
             al.aluno_id,
             u.nome,
             COALESCE(al.ra, '—') AS ra,
-            COALESCE((SELECT SUM(cp.total_aulas) FROM chamadas_periodo cp), 0) AS aulas_dadas,
-            COALESCE((SELECT COUNT(*) FROM chamadas_periodo cp), 0) AS chamadas_count,
+            -- denominador POR ALUNO: só chamadas a partir da matrícula dele.
+            -- ::date porque data_associacao é timestamp e data_chamada é date —
+            -- comparar sem cast contaria a favor/contra por causa da hora do insert.
+            COALESCE((SELECT SUM(cp.total_aulas) FROM chamadas_periodo cp
+                      WHERE cp.data_chamada >= ta.data_associacao::date), 0) AS aulas_dadas,
+            COALESCE((SELECT COUNT(*) FROM chamadas_periodo cp
+                      WHERE cp.data_chamada >= ta.data_associacao::date), 0) AS chamadas_count,
+            -- turma-level (sem filtro por aluno): cabeçalho do relatório.
+            COALESCE((SELECT SUM(cp.total_aulas) FROM chamadas_periodo cp), 0) AS aulas_dadas_periodo,
+            COALESCE((SELECT COUNT(*) FROM chamadas_periodo cp), 0) AS chamadas_periodo_count,
             COUNT(p.presenca_id) AS aulas_presentes
         FROM Turma_Alunos ta
         JOIN Alunos   al ON al.aluno_id  = ta.aluno_id
@@ -434,7 +442,7 @@ def listar_frequencia_turma(turma_id, data_inicio=None, data_fim=None):
                ON p.aluno_id = al.aluno_id
               AND p.chamada_id IN (SELECT chamada_id FROM chamadas_periodo)
         WHERE ta.turma_id = %s
-        GROUP BY al.aluno_id, u.nome, al.ra
+        GROUP BY al.aluno_id, u.nome, al.ra, ta.data_associacao
     """
     params = tuple([turma_id] + params_datas + [turma_id])
 

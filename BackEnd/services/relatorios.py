@@ -70,13 +70,20 @@ def frequencia_turma(turma_id: str, professor_id: Optional[str] = None,
         dadas = aluno.get("aulas_dadas") or 0
         presentes = aluno.get("aulas_presentes") or 0
         aluno["percentual"] = round(presentes / dadas * 100) if dadas else 0
-        aluno["situacao"] = "Regular" if aluno["percentual"] >= LIMITE_FREQUENCIA else "Risco"
+        if not dadas:
+            # matriculado após a última chamada do período: sem base para julgar
+            # — não é "Risco" (0%), a amostra dele não existe.
+            aluno["situacao"] = "Insuficiente"
+        else:
+            aluno["situacao"] = "Regular" if aluno["percentual"] >= LIMITE_FREQUENCIA else "Risco"
     linhas.sort(key=lambda a: (a["percentual"], a["nome"]))
 
-    aulas_dadas = linhas[0]["aulas_dadas"] if linhas else 0
-    chamadas = linhas[0]["chamadas_count"] if linhas else 0
+    # cabeçalho: aulas/chamadas da turma no período (turma-level, iguais em toda linha).
+    aulas_dadas = linhas[0]["aulas_dadas_periodo"] if linhas else 0
+    chamadas = linhas[0]["chamadas_periodo_count"] if linhas else 0
     presencas = sum(a["aulas_presentes"] for a in linhas)
-    slots = aulas_dadas * len(linhas)
+    # denominador da turma = soma dos denominadores por aluno (matrícula tardia conta menos).
+    slots = sum((a.get("aulas_dadas") or 0) for a in linhas)
     return {
         "turma": dict(turma),
         "periodo": {"data_inicio": data_inicio, "data_fim": data_fim},

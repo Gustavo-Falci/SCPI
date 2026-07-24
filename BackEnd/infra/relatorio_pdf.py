@@ -470,11 +470,12 @@ def gerar_pdf_frequencia(dados: dict) -> bytes:
     )
 
     em_risco = sum(1 for a in alunos if a.get("situacao") == "Risco")
+    regulares = sum(1 for a in alunos if a.get("situacao") == "Regular")
     elementos.append(
         _kpis(
             [
                 ("Alunos", totais.get("total_alunos", len(alunos)), None),
-                ("Regulares", len(alunos) - em_risco, VERDE),
+                ("Regulares", regulares, VERDE),
                 ("Em risco", em_risco, VERMELHO),
                 ("Frequência da turma", f"{percentual_turma}%",
                  VERDE if percentual_turma >= LIMITE_FREQUENCIA else VERMELHO),
