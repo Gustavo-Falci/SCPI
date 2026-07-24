@@ -17,6 +17,26 @@ def obter_path_biometria_por_usuario(usuario_id):
         return cur.fetchone()
 
 
+def obter_rosto_por_angulo(aluno_id, angulo):
+    """Retorna o rosto atual (FaceId + s3_path) de um ângulo, ativo ou não.
+
+    Usado antes de um novo cadastro do mesmo ângulo para localizar o FaceId
+    antigo que precisa ser removido do Rekognition/S3 e evitar acúmulo.
+    """
+    with get_db_cursor() as cur:
+        if not cur:
+            return None
+        cur.execute(
+            """
+            SELECT face_id_rekognition, s3_path_cadastro
+            FROM Colecao_Rostos
+            WHERE aluno_id = %s AND angulo = %s
+            """,
+            (aluno_id, angulo),
+        )
+        return cur.fetchone()
+
+
 def upsert_rosto(aluno_id, external_id, face_id, filename, angulo='frontal'):
     with get_db_cursor(commit=True) as cur:
         if not cur:

@@ -28,6 +28,7 @@ from repositories.rostos import (
     listar_rostos_ativos_por_aluno,
     obter_path_biometria_por_usuario,
     obter_path_foto_perfil_aluno,
+    obter_rosto_por_angulo,
     revogar_rosto_por_aluno,
     upsert_rosto,
 )
@@ -222,7 +223,31 @@ async def cadastrar_aluno_api(
             raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado para este usuário.")
 
         aluno_id = aluno['aluno_id']
+
+        # Captura o rosto anterior deste ângulo ANTES do upsert sobrescrever o
+        # ponteiro. Sem isso o FaceId/objeto S3 antigos ficam órfãos e a
+        # collection do Rekognition acumula (aluno acaba com 8 faces após
+        # re-cadastrar os 4 ângulos).
+        rosto_anterior = obter_rosto_por_angulo(aluno_id, angulo)
+
         upsert_rosto(aluno_id, external_id, face_id, filename, angulo)
+
+        # Remove o rosto antigo só depois do novo estar indexado e persistido —
+        # se o index acima falhasse, a biometria anterior permaneceria intacta.
+        # Best-effort: falha na limpeza não invalida o cadastro bem-sucedido.
+        if rosto_anterior:
+            old_face_id = rosto_anterior.get("face_id_rekognition")
+            old_s3_path = rosto_anterior.get("s3_path_cadastro")
+            if old_face_id and old_face_id != face_id:
+                try:
+                    deletar_rosto(old_face_id)
+                except Exception as e:
+                    logger.warning("Falha ao deletar FaceId antigo %s (angulo=%s): %s", old_face_id, angulo, e)
+            if old_s3_path and old_s3_path != filename:
+                try:
+                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_s3_path)
+                except Exception as e:
+                    logger.warning("Falha ao deletar objeto S3 antigo %s (angulo=%s): %s", old_s3_path, angulo, e)
 
         audit_logger.info(
             "Biometria cadastrada aluno=%s angulo=%s por=%s ip=%s",
