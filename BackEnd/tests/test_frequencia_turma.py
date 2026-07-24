@@ -51,6 +51,22 @@ def test_repo_denominador_por_aluno_usa_data_associacao():
     assert "chamadas_periodo_count" in sql
 
 
+def test_repo_sql_nao_tem_percent_literal_nao_escapado():
+    """psycopg2 varre a query INTEIRA (comentários incluídos) procurando %s.
+
+    Um % literal não escapado (ex.: "100%" num comentário) quebra o cur.execute
+    com IndexError em produção — e o mock cursor dos outros testes não parseia %,
+    então só um guard textual como este pega o problema.
+    """
+    cm, cur = _mock_cursor()
+    with patch("repositories.chamadas.get_db_cursor", return_value=cm):
+        from repositories.chamadas import listar_frequencia_turma
+        listar_frequencia_turma("t1")
+    sql, _ = cur.execute.call_args[0]
+    resto = sql.replace("%s", "").replace("%%", "")
+    assert "%" not in resto, "há um % literal não escapado na SQL (use %% ou reescreva)"
+
+
 def test_repo_numerador_usa_mesma_janela_do_denominador():
     """As presenças contadas (numerador) precisam vir só das chamadas pós-matrícula.
 
