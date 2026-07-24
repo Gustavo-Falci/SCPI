@@ -7,6 +7,7 @@ import urllib.error
 logger = logging.getLogger("scpi.notificacoes")
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts"
 
 
 def _resend_api_key() -> str:
@@ -20,11 +21,12 @@ def _resend_from() -> str:
 def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) -> dict:
     """Envia push via Expo e lê os tickets da resposta.
 
-    Retorna {"ok": [tokens aceitos], "dead": [tokens DeviceNotRegistered]}.
+    Retorna {"ok": [tokens aceitos], "dead": [tokens DeviceNotRegistered],
+    "tickets": [{"id","token"} dos aceitos com id de ticket]}.
     Em falha de transporte ou resposta malformada, retorna listas vazias
     (não sabemos o estado real — nada é podado).
     """
-    vazio = {"ok": [], "dead": []}
+    vazio = {"ok": [], "dead": [], "tickets": []}
     valid = [t for t in expo_tokens if t and t.startswith("ExponentPushToken")]
     if not valid:
         logger.debug("Nenhum Expo push token válido para envio.")
@@ -62,18 +64,21 @@ def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) 
         logger.error("Erro ao enviar Expo push: %s", e)
         return vazio
 
-    tickets = result.get("data", [])
-    if len(tickets) != len(valid):
+    tickets_resp = result.get("data", [])
+    if len(tickets_resp) != len(valid):
         logger.error(
             "Expo push: %d tickets para %d tokens — resposta inesperada, nada podado.",
-            len(tickets), len(valid),
+            len(tickets_resp), len(valid),
         )
         return vazio
 
-    ok, dead = [], []
-    for token, ticket in zip(valid, tickets):
+    ok, dead, tickets = [], [], []
+    for token, ticket in zip(valid, tickets_resp):
         if ticket.get("status") == "ok":
             ok.append(token)
+            tid = ticket.get("id")
+            if tid:
+                tickets.append({"id": tid, "token": token})
             continue
         erro = (ticket.get("details") or {}).get("error")
         if erro == "DeviceNotRegistered":
@@ -82,7 +87,31 @@ def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) 
         else:
             logger.warning("Expo push: ticket com erro %s (token mantido).", erro)
     logger.info("Expo push: %d ok, %d mortos de %d tokens.", len(ok), len(dead), len(valid))
-    return {"ok": ok, "dead": dead}
+    return {"ok": ok, "dead": dead, "tickets": tickets}
+
+
+def consultar_receipts(ticket_ids: list) -> dict:
+    """Consulta os receipts da Expo em lotes de 1000. Retorna {ticket_id: receipt}.
+    Falha de transporte num lote é logada e ignorada (fica para o próximo ciclo)."""
+    out = {}
+    for i in range(0, len(ticket_ids), 1000):
+        lote = ticket_ids[i:i + 1000]
+        payload = json.dumps({"ids": lote}).encode("utf-8")
+        req = urllib.request.Request(
+            EXPO_RECEIPTS_URL,
+            data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8")).get("data", {})
+                out.update(data)
+        except urllib.error.HTTPError as e:
+            logger.error("getReceipts HTTP %s: %s", e.code, e.read().decode("utf-8", errors="replace"))
+        except Exception as e:
+            logger.error("Erro ao consultar receipts: %s", e)
+    return out
 
 
 def send_email_resend(to_email: str, aluno_nome: str, turma_nome: str, hora: str) -> bool:

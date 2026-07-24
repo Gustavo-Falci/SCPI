@@ -235,6 +235,22 @@ def ensure_push_tokens_table():
         logger.error("Falha ao criar tabela PushTokens: %s", e)
 
 
+def ensure_push_receipts_table():
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS PushReceiptsPendentes (
+                    ticket_id  TEXT PRIMARY KEY,
+                    expo_token TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+    except Exception as e:
+        logger.error("Falha ao criar tabela PushReceiptsPendentes: %s", e)
+
+
 def ensure_primeiro_acesso_column():
     try:
         with get_db_cursor(commit=True) as cur:
@@ -401,6 +417,7 @@ def _apply_all():
     ensure_lgpd_columns()
     ensure_multi_angle_faces()
     ensure_push_tokens_table()
+    ensure_push_receipts_table()
     ensure_primeiro_acesso_column()
     ensure_reset_codes_table()
     ensure_rate_limit_table()

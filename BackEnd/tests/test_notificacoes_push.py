@@ -44,7 +44,11 @@ def test_send_todos_ok():
     with patch("infra.notificacoes.urllib.request.urlopen", return_value=cm):
         from infra.notificacoes import send_expo_push
         out = send_expo_push([A, B], "t", "b")
-    assert out == {"ok": [A, B], "dead": []}
+    assert out == {
+        "ok": [A, B],
+        "dead": [],
+        "tickets": [{"id": "1", "token": A}, {"id": "2", "token": B}],
+    }
 
 
 def test_send_device_not_registered_vai_para_dead():
@@ -55,7 +59,7 @@ def test_send_device_not_registered_vai_para_dead():
     with patch("infra.notificacoes.urllib.request.urlopen", return_value=cm):
         from infra.notificacoes import send_expo_push
         out = send_expo_push([A, B], "t", "b")
-    assert out == {"ok": [A], "dead": [B]}
+    assert out == {"ok": [A], "dead": [B], "tickets": [{"id": "1", "token": A}]}
 
 
 def test_send_erro_transitorio_nao_poda():
@@ -65,7 +69,7 @@ def test_send_erro_transitorio_nao_poda():
     with patch("infra.notificacoes.urllib.request.urlopen", return_value=cm):
         from infra.notificacoes import send_expo_push
         out = send_expo_push([A], "t", "b")
-    assert out == {"ok": [], "dead": []}
+    assert out == {"ok": [], "dead": [], "tickets": []}
 
 
 def test_send_httperror_retorno_vazio():
@@ -74,7 +78,7 @@ def test_send_httperror_retorno_vazio():
     with patch("infra.notificacoes.urllib.request.urlopen", side_effect=err):
         from infra.notificacoes import send_expo_push
         out = send_expo_push([A], "t", "b")
-    assert out == {"ok": [], "dead": []}
+    assert out == {"ok": [], "dead": [], "tickets": []}
 
 
 def test_send_contagem_divergente_nao_poda():
@@ -82,14 +86,14 @@ def test_send_contagem_divergente_nao_poda():
     with patch("infra.notificacoes.urllib.request.urlopen", return_value=cm):
         from infra.notificacoes import send_expo_push
         out = send_expo_push([A, B], "t", "b")
-    assert out == {"ok": [], "dead": []}
+    assert out == {"ok": [], "dead": [], "tickets": []}
 
 
 def test_send_sem_token_valido_nao_faz_request():
     with patch("infra.notificacoes.urllib.request.urlopen") as m:
         from infra.notificacoes import send_expo_push
         out = send_expo_push(["lixo", None, ""], "t", "b")
-    assert out == {"ok": [], "dead": []}
+    assert out == {"ok": [], "dead": [], "tickets": []}
     m.assert_not_called()
 
 
