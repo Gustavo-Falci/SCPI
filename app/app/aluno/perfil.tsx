@@ -24,6 +24,7 @@ export default function PerfilAluno() {
   const [email, setEmail] = useState("");
   const [ra, setRa] = useState("");
   const [exportando, setExportando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -83,6 +84,49 @@ export default function PerfilAluno() {
     } finally {
       setExportando(false);
     }
+  };
+
+  const executarExclusao = async () => {
+    const userId = await storage.getItem("user_id");
+    const token = await storage.getItem("access_token");
+    if (!userId || !token) {
+      Alert.alert("Erro", "Usuário não identificado.");
+      return;
+    }
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+    if (!apiUrl) {
+      Alert.alert("Erro", "Configuração da API ausente.");
+      return;
+    }
+    setExcluindo(true);
+    try {
+      const resp = await fetch(`${apiUrl}/aluno/biometria/${userId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (resp.status === 200) {
+        Alert.alert("Pronto", "Sua biometria foi removida do sistema.");
+      } else if (resp.status === 404) {
+        Alert.alert("Nada a excluir", "Você não possui biometria cadastrada.");
+      } else {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+    } catch {
+      Alert.alert("Erro", "Não foi possível excluir sua biometria. Tente novamente.");
+    } finally {
+      setExcluindo(false);
+    }
+  };
+
+  const handleExcluirBiometria = () => {
+    Alert.alert(
+      "Excluir biometria",
+      "Isso apaga suas fotos do sistema e você precisará cadastrá-las novamente para usar o reconhecimento facial. Deseja continuar?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Excluir", style: "destructive", onPress: executarExclusao },
+      ],
+    );
   };
 
   const menuItems: any[] = [
@@ -158,6 +202,14 @@ export default function PerfilAluno() {
             variant="outline"
             style={[styles.logoutBtn, { marginBottom: 12 }]}
             disabled={exportando}
+          />
+          <Button
+            title={excluindo ? "Excluindo..." : "Excluir minha biometria (LGPD)"}
+            onPress={handleExcluirBiometria}
+            variant="outline"
+            style={[styles.logoutBtn, { marginBottom: 12 }]}
+            textStyle={{ color: Colors.brand.error }}
+            disabled={excluindo}
           />
           <Button
             title="Sair da Conta"

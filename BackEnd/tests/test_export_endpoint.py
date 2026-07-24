@@ -54,7 +54,7 @@ def test_endpoint_formato_zip_retorna_streaming_response():
     from routers.alunos import exportar_meus_dados
 
     with patch("routers.alunos.buscar_dados_titular", return_value=_dados_fake()), \
-         patch("routers.alunos.obter_path_foto_perfil_aluno", return_value=None), \
+         patch("routers.alunos.listar_rostos_ativos_por_aluno", return_value=[]), \
          patch("routers.alunos.buscar_aluno_por_usuario_id", return_value={"aluno_id": "a-1"}):
         resultado = exportar_meus_dados(
             usuario_id="user-1", formato="zip", current_user=_user_aluno()
@@ -74,7 +74,7 @@ def test_endpoint_zip_eh_default():
     from routers.alunos import exportar_meus_dados
 
     with patch("routers.alunos.buscar_dados_titular", return_value=_dados_fake()), \
-         patch("routers.alunos.obter_path_foto_perfil_aluno", return_value=None), \
+         patch("routers.alunos.listar_rostos_ativos_por_aluno", return_value=[]), \
          patch("routers.alunos.buscar_aluno_por_usuario_id", return_value={"aluno_id": "a-1"}):
         resultado = exportar_meus_dados(usuario_id="user-1", current_user=_user_aluno())
     assert isinstance(resultado, Response)
@@ -89,14 +89,18 @@ def test_endpoint_404_se_dados_nao_encontrados():
     assert exc.value.status_code == 404
 
 
-def test_endpoint_inclui_foto_quando_existe():
+def test_endpoint_inclui_fotos_por_angulo():
     from routers.alunos import exportar_meus_dados
 
     foto = b"\xff\xd8\xff\xe0fakejpeg"
     s3_mock = MagicMock()
     s3_mock.get_object.return_value = {"Body": MagicMock(read=lambda: foto)}
+    rostos = [
+        {"face_id_rekognition": "f1", "s3_path_cadastro": "alunos/frontal.jpg", "angulo": "frontal"},
+        {"face_id_rekognition": "f2", "s3_path_cadastro": "alunos/esquerda.jpg", "angulo": "esquerda"},
+    ]
     with patch("routers.alunos.buscar_dados_titular", return_value=_dados_fake()), \
-         patch("routers.alunos.obter_path_foto_perfil_aluno", return_value="alunos/x.jpg"), \
+         patch("routers.alunos.listar_rostos_ativos_por_aluno", return_value=rostos), \
          patch("routers.alunos.buscar_aluno_por_usuario_id", return_value={"aluno_id": "a-1"}), \
          patch("routers.alunos.s3_client", s3_mock):
         resultado = exportar_meus_dados(
@@ -104,18 +108,21 @@ def test_endpoint_inclui_foto_quando_existe():
         )
     body = _stream_bytes(resultado)
     z = zipfile.ZipFile(io.BytesIO(body))
-    assert "foto-perfil.jpg" in z.namelist()
-    assert z.read("foto-perfil.jpg") == foto
+    nomes = set(z.namelist())
+    assert "foto-frontal.jpg" in nomes
+    assert "foto-esquerda.jpg" in nomes
+    assert z.read("foto-frontal.jpg") == foto
 
 
 def test_endpoint_zip_falha_foto_continua_export():
-    """Se S3 retornar erro, o ZIP é gerado sem foto e não quebra."""
+    """Se S3 retornar erro, o ZIP é gerado sem a foto e não quebra."""
     from routers.alunos import exportar_meus_dados
 
     s3_mock = MagicMock()
     s3_mock.get_object.side_effect = Exception("s3 unreachable")
+    rostos = [{"face_id_rekognition": "f1", "s3_path_cadastro": "alunos/x.jpg", "angulo": "frontal"}]
     with patch("routers.alunos.buscar_dados_titular", return_value=_dados_fake()), \
-         patch("routers.alunos.obter_path_foto_perfil_aluno", return_value="alunos/x.jpg"), \
+         patch("routers.alunos.listar_rostos_ativos_por_aluno", return_value=rostos), \
          patch("routers.alunos.buscar_aluno_por_usuario_id", return_value={"aluno_id": "a-1"}), \
          patch("routers.alunos.s3_client", s3_mock):
         resultado = exportar_meus_dados(
@@ -123,15 +130,16 @@ def test_endpoint_zip_falha_foto_continua_export():
         )
     body = _stream_bytes(resultado)
     z = zipfile.ZipFile(io.BytesIO(body))
-    assert "foto-perfil.jpg" not in z.namelist()
-    assert "dados.json" in z.namelist()
+    nomes = set(z.namelist())
+    assert not any(n.startswith("foto-") for n in nomes)
+    assert "dados.json" in nomes
 
 
 def test_endpoint_zip_filename_contem_ra_e_timestamp():
     from routers.alunos import exportar_meus_dados
 
     with patch("routers.alunos.buscar_dados_titular", return_value=_dados_fake()), \
-         patch("routers.alunos.obter_path_foto_perfil_aluno", return_value=None), \
+         patch("routers.alunos.listar_rostos_ativos_por_aluno", return_value=[]), \
          patch("routers.alunos.buscar_aluno_por_usuario_id", return_value={"aluno_id": "a-1"}):
         resultado = exportar_meus_dados(
             usuario_id="user-1", formato="zip", current_user=_user_aluno()
@@ -159,7 +167,7 @@ def test_zip_integridade_eh_verificavel():
     from routers.alunos import exportar_meus_dados
 
     with patch("routers.alunos.buscar_dados_titular", return_value=_dados_fake()), \
-         patch("routers.alunos.obter_path_foto_perfil_aluno", return_value=None), \
+         patch("routers.alunos.listar_rostos_ativos_por_aluno", return_value=[]), \
          patch("routers.alunos.buscar_aluno_por_usuario_id", return_value={"aluno_id": "a-1"}):
         resultado = exportar_meus_dados(
             usuario_id="user-1", formato="zip", current_user=_user_aluno()

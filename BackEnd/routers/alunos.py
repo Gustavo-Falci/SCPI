@@ -27,7 +27,6 @@ from repositories.horarios import listar_aulas_hoje_por_aluno
 from repositories.rostos import (
     listar_rostos_ativos_por_aluno,
     obter_path_biometria_por_usuario,
-    obter_path_foto_perfil_aluno,
     obter_rosto_por_angulo,
     revogar_rosto_por_aluno,
     upsert_rosto,
@@ -373,23 +372,26 @@ def exportar_meus_dados(
         pdf_bytes = gerar_pdf_dados(dados)
         manifesto = calcular_integridade(dados, hmac_key=SCPI_EXPORT_HMAC_KEY)
 
-        foto_bytes = None
+        fotos: list[tuple[str, bytes]] = []
         aluno = buscar_aluno_por_usuario_id(usuario_id)
         if aluno:
-            s3_path = obter_path_foto_perfil_aluno(aluno["aluno_id"])
-            if s3_path:
+            rostos = listar_rostos_ativos_por_aluno(aluno["aluno_id"])
+            for rosto in rostos:
+                s3_path = rosto.get("s3_path_cadastro")
+                if not s3_path:
+                    continue
                 try:
                     obj = s3_client.get_object(Bucket=BUCKET_NAME, Key=s3_path)
-                    foto_bytes = obj["Body"].read()
+                    fotos.append((rosto["angulo"], obj["Body"].read()))
                 except Exception as e:
                     logger.warning(
                         "Falha ao baixar foto S3 para export (path=%s): %s", s3_path, e
                     )
 
-        zip_bytes = montar_zip_export(dados, pdf_bytes, manifesto, foto_bytes=foto_bytes)
+        zip_bytes = montar_zip_export(dados, pdf_bytes, manifesto, fotos=fotos)
         logger.info(
-            "Export LGPD gerado para usuario=%s (zip=%d bytes, pdf=%d bytes, foto=%s)",
-            usuario_id, len(zip_bytes), len(pdf_bytes), "sim" if foto_bytes else "nao",
+            "Export LGPD gerado para usuario=%s (zip=%d bytes, pdf=%d bytes, fotos=%d)",
+            usuario_id, len(zip_bytes), len(pdf_bytes), len(fotos),
         )
 
         ra = dados.get("titular", {}).get("ra", "sem-ra")
