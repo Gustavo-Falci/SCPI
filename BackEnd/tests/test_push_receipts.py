@@ -15,6 +15,15 @@ def _mock_cursor():
     return cm, cur
 
 
+def _mock_urlopen_data(data):
+    resp = MagicMock()
+    resp.read.return_value = json.dumps({"data": data}).encode("utf-8")
+    cm = MagicMock()
+    cm.__enter__.return_value = resp
+    cm.__exit__.return_value = False
+    return cm
+
+
 def test_ensure_push_receipts_table_cria_tabela():
     cm, cur = _mock_cursor()
     with patch("infra.migrations.get_db_cursor", return_value=cm):
@@ -92,3 +101,33 @@ def test_remover_tickets_pendentes_antigos_por_idade():
     assert "created_at <=" in sql
     assert params == (86400,)
     assert "%" not in sql.replace("%s", "").replace("%%", "")
+
+
+def test_send_expo_push_expoe_tickets_ok():
+    tokens = ["ExponentPushToken[a]", "ExponentPushToken[b]"]
+    cm = _mock_urlopen_data([{"status": "ok", "id": "tk1"}, {"status": "ok", "id": "tk2"}])
+    with patch("infra.notificacoes.urllib.request.urlopen", return_value=cm):
+        from infra.notificacoes import send_expo_push
+        out = send_expo_push(tokens, "t", "b")
+    assert out["tickets"] == [
+        {"id": "tk1", "token": "ExponentPushToken[a]"},
+        {"id": "tk2", "token": "ExponentPushToken[b]"},
+    ]
+
+
+def test_send_expo_push_ticket_ok_sem_id_nao_entra_em_tickets():
+    cm = _mock_urlopen_data([{"status": "ok"}])  # sem id
+    with patch("infra.notificacoes.urllib.request.urlopen", return_value=cm):
+        from infra.notificacoes import send_expo_push
+        out = send_expo_push(["ExponentPushToken[a]"], "t", "b")
+    assert out["ok"] == ["ExponentPushToken[a]"]
+    assert out["tickets"] == []
+
+
+def test_send_expo_push_falha_transporte_tickets_vazio():
+    import urllib.error
+    err = urllib.error.HTTPError("u", 500, "erro", {}, io.BytesIO(b"x"))
+    with patch("infra.notificacoes.urllib.request.urlopen", side_effect=err):
+        from infra.notificacoes import send_expo_push
+        out = send_expo_push(["ExponentPushToken[a]"], "t", "b")
+    assert out == {"ok": [], "dead": [], "tickets": []}

@@ -20,11 +20,12 @@ def _resend_from() -> str:
 def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) -> dict:
     """Envia push via Expo e lê os tickets da resposta.
 
-    Retorna {"ok": [tokens aceitos], "dead": [tokens DeviceNotRegistered]}.
+    Retorna {"ok": [tokens aceitos], "dead": [tokens DeviceNotRegistered],
+    "tickets": [{"id","token"} dos aceitos com id de ticket]}.
     Em falha de transporte ou resposta malformada, retorna listas vazias
     (não sabemos o estado real — nada é podado).
     """
-    vazio = {"ok": [], "dead": []}
+    vazio = {"ok": [], "dead": [], "tickets": []}
     valid = [t for t in expo_tokens if t and t.startswith("ExponentPushToken")]
     if not valid:
         logger.debug("Nenhum Expo push token válido para envio.")
@@ -62,18 +63,21 @@ def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) 
         logger.error("Erro ao enviar Expo push: %s", e)
         return vazio
 
-    tickets = result.get("data", [])
-    if len(tickets) != len(valid):
+    tickets_resp = result.get("data", [])
+    if len(tickets_resp) != len(valid):
         logger.error(
             "Expo push: %d tickets para %d tokens — resposta inesperada, nada podado.",
-            len(tickets), len(valid),
+            len(tickets_resp), len(valid),
         )
         return vazio
 
-    ok, dead = [], []
-    for token, ticket in zip(valid, tickets):
+    ok, dead, tickets = [], [], []
+    for token, ticket in zip(valid, tickets_resp):
         if ticket.get("status") == "ok":
             ok.append(token)
+            tid = ticket.get("id")
+            if tid:
+                tickets.append({"id": tid, "token": token})
             continue
         erro = (ticket.get("details") or {}).get("error")
         if erro == "DeviceNotRegistered":
@@ -82,7 +86,7 @@ def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) 
         else:
             logger.warning("Expo push: ticket com erro %s (token mantido).", erro)
     logger.info("Expo push: %d ok, %d mortos de %d tokens.", len(ok), len(dead), len(valid))
-    return {"ok": ok, "dead": dead}
+    return {"ok": ok, "dead": dead, "tickets": tickets}
 
 
 def send_email_resend(to_email: str, aluno_nome: str, turma_nome: str, hora: str) -> bool:
