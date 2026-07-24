@@ -15,7 +15,7 @@ Arquivos incluídos:
 -------------------
   - dados.pdf          : Relatório legível em PDF.
   - dados.json         : Dados estruturados em JSON (interoperável).
-  - foto-perfil.jpg    : Foto de cadastro biométrico, se houver.
+  - foto-<angulo>.jpg  : Fotos de cadastro biométrico por ângulo (frontal, esquerda, direita, baixo), se houver.
   - INTEGRIDADE.txt    : Hash SHA-256 e assinatura HMAC do conteúdo.
   - LEIA-ME.txt        : Este documento.
 
@@ -65,9 +65,9 @@ def montar_zip_export(
     dados: dict,
     pdf_bytes: bytes,
     manifesto: dict,
-    foto_bytes: bytes | None = None,
+    fotos: list[tuple[str, bytes]] | None = None,
 ) -> bytes:
-    """Monta ZIP contendo PDF, JSON, foto opcional, manifesto de integridade e LEIA-ME."""
+    """Monta ZIP contendo PDF, JSON, fotos por ângulo, manifesto de integridade e LEIA-ME."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(
@@ -76,6 +76,7 @@ def montar_zip_export(
         z.writestr("dados.pdf", pdf_bytes)
         z.writestr("INTEGRIDADE.txt", _formatar_integridade(manifesto))
         z.writestr("LEIA-ME.txt", _LEIA_ME)
-        if foto_bytes:
-            z.writestr("foto-perfil.jpg", foto_bytes)
+        if fotos:
+            for angulo, foto_bytes in fotos:
+                z.writestr(f"foto-{angulo}.jpg", foto_bytes)
     return buffer.getvalue()
