@@ -7,6 +7,7 @@ import urllib.error
 logger = logging.getLogger("scpi.notificacoes")
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts"
 
 
 def _resend_api_key() -> str:
@@ -87,6 +88,30 @@ def send_expo_push(expo_tokens: list, title: str, body: str, data: dict = None) 
             logger.warning("Expo push: ticket com erro %s (token mantido).", erro)
     logger.info("Expo push: %d ok, %d mortos de %d tokens.", len(ok), len(dead), len(valid))
     return {"ok": ok, "dead": dead, "tickets": tickets}
+
+
+def consultar_receipts(ticket_ids: list) -> dict:
+    """Consulta os receipts da Expo em lotes de 1000. Retorna {ticket_id: receipt}.
+    Falha de transporte num lote é logada e ignorada (fica para o próximo ciclo)."""
+    out = {}
+    for i in range(0, len(ticket_ids), 1000):
+        lote = ticket_ids[i:i + 1000]
+        payload = json.dumps({"ids": lote}).encode("utf-8")
+        req = urllib.request.Request(
+            EXPO_RECEIPTS_URL,
+            data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8")).get("data", {})
+                out.update(data)
+        except urllib.error.HTTPError as e:
+            logger.error("getReceipts HTTP %s: %s", e.code, e.read().decode("utf-8", errors="replace"))
+        except Exception as e:
+            logger.error("Erro ao consultar receipts: %s", e)
+    return out
 
 
 def send_email_resend(to_email: str, aluno_nome: str, turma_nome: str, hora: str) -> bool:
