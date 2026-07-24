@@ -200,3 +200,31 @@ def test_processar_erro_transitorio_nao_poda_mas_processa():
     podar, processados = processar(PEND, receipts)
     assert podar == []
     assert processados == ["tk3"]
+
+
+def test_presenca_registra_tickets_pendentes():
+    tickets = [{"id": "tk1", "token": "ExponentPushToken[a]"}]
+    with patch("services.notificacoes.obter_push_token_por_usuario",
+               return_value={"expo_token": "ExponentPushToken[a]"}), \
+         patch("services.notificacoes.send_expo_push",
+               return_value={"ok": ["ExponentPushToken[a]"], "dead": [], "tickets": tickets}), \
+         patch("services.notificacoes.remover_push_token"), \
+         patch("services.notificacoes.registrar_tickets_pendentes") as reg, \
+         patch("services.notificacoes.send_email_resend"):
+        from services.notificacoes import enviar_notificacoes_presenca
+        enviar_notificacoes_presenca("u1", "Ana", "", "Turma X")
+    reg.assert_called_once_with(tickets)
+
+
+def test_notificar_alunos_registra_tickets_pendentes():
+    tickets = [{"id": "tk1", "token": "ExponentPushToken[a]"}]
+    alunos = [{"usuario_id": "u1", "expo_token": "ExponentPushToken[a]"}]
+    with patch("services.notificacoes.obter_turma_id_por_chamada", return_value="t1"), \
+         patch("services.notificacoes.listar_alunos_com_push_token_da_turma", return_value=alunos), \
+         patch("services.notificacoes.send_expo_push",
+               return_value={"ok": ["ExponentPushToken[a]"], "dead": [], "tickets": tickets}), \
+         patch("services.notificacoes.remover_push_token"), \
+         patch("services.notificacoes.registrar_tickets_pendentes") as reg:
+        from services.notificacoes import notificar_alunos_presentes
+        notificar_alunos_presentes("c1", "Turma X")
+    reg.assert_called_once_with(tickets)

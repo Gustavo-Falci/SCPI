@@ -3,7 +3,11 @@ import logging
 import zoneinfo
 
 from infra.notificacoes import send_expo_push, send_email_resend
-from repositories.notificacoes import obter_push_token_por_usuario, remover_push_token
+from repositories.notificacoes import (
+    obter_push_token_por_usuario,
+    remover_push_token,
+    registrar_tickets_pendentes,
+)
 from repositories.turmas import (
     listar_alunos_com_push_token_da_turma,
     obter_turma_id_por_chamada,
@@ -27,6 +31,8 @@ def enviar_notificacoes_presenca(usuario_id: str, aluno_nome: str, aluno_email: 
                 )
                 for token in res["dead"]:
                     remover_push_token(token)
+                if res.get("tickets"):
+                    registrar_tickets_pendentes(res["tickets"])
         except Exception as e:
             logger.error("Erro ao enviar push: %s", e)
 
@@ -58,5 +64,7 @@ def notificar_alunos_presentes(chamada_id: str, turma_nome: str) -> None:
         )
         for token in res["dead"]:
             remover_push_token(token)
+        if res.get("tickets"):
+            registrar_tickets_pendentes(res["tickets"])
     except Exception as e:
         logger.error("Erro ao enviar push de encerramento da chamada %s: %s", chamada_id, e)
