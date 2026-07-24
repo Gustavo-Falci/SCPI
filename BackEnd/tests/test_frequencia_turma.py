@@ -51,6 +51,25 @@ def test_repo_denominador_por_aluno_usa_data_associacao():
     assert "chamadas_periodo_count" in sql
 
 
+def test_repo_numerador_usa_mesma_janela_do_denominador():
+    """As presenças contadas (numerador) precisam vir só das chamadas pós-matrícula.
+
+    Se o numerador contar presenças de chamadas anteriores à matrícula enquanto o
+    denominador (aulas_dadas) as exclui, a frequência pode passar de 100%.
+    """
+    import re
+    cm, cur = _mock_cursor()
+    with patch("repositories.chamadas.get_db_cursor", return_value=cm):
+        from repositories.chamadas import listar_frequencia_turma
+        listar_frequencia_turma("t1")
+    sql, _ = cur.execute.call_args[0]
+    compact = re.sub(r"\s+", " ", sql)
+    assert (
+        "p.chamada_id IN (SELECT cp.chamada_id FROM chamadas_periodo cp "
+        "WHERE cp.data_chamada >= ta.data_associacao::date)"
+    ) in compact
+
+
 # aulas_dadas/chamadas_count = por-aluno (pós-matrícula); *_periodo = turma-level.
 # Aqui todos entraram no início, então por-aluno == turma-level.
 ALUNOS = [

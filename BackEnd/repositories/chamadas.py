@@ -440,7 +440,11 @@ def listar_frequencia_turma(turma_id, data_inicio=None, data_fim=None):
         JOIN Usuarios u  ON u.usuario_id = al.usuario_id
         LEFT JOIN Presencas p
                ON p.aluno_id = al.aluno_id
-              AND p.chamada_id IN (SELECT chamada_id FROM chamadas_periodo)
+              -- numerador na MESMA janela do denominador (só chamadas pós-matrícula):
+              -- sem isto, presença anterior à matrícula conta no topo mas não na base
+              -- e a frequência estoura 100%.
+              AND p.chamada_id IN (SELECT cp.chamada_id FROM chamadas_periodo cp
+                                   WHERE cp.data_chamada >= ta.data_associacao::date)
         WHERE ta.turma_id = %s
         GROUP BY al.aluno_id, u.nome, al.ra, ta.data_associacao
     """
