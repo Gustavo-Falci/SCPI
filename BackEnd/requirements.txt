@@ -55,6 +55,10 @@ resend==2.34.0
 # Geração de PDF (export LGPD Art. 18)
 reportlab==5.0.0
 
+# Observabilidade — telemetria de erros (Sentry SaaS free tier).
+# DSN vem de SENTRY_DSN; ausente = no-op, dev não precisa.
+sentry-sdk==2.66.1
+
 # Dependências transitivas (pinadas para reproducibilidade)
 annotated-types==0.8.0
 anyio==4.14.2
