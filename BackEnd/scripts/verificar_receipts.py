@@ -11,6 +11,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv, find_dotenv
 
+from core.observabilidade import init_sentry
 from infra.database import get_db_connection, release_connection
 from infra.notificacoes import consultar_receipts
 from repositories.notificacoes import (
@@ -53,6 +54,8 @@ def processar(pendentes, receipts):
 
 
 def main():
+    init_sentry("verificar_receipts")
+
     conn = get_db_connection()
     if conn is None:
         logger.error("Receipts: sem conexão com o banco; abortando.")

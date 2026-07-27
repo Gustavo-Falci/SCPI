@@ -9,6 +9,17 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(), override=True)
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from core.observabilidade import init_sentry
+
+# Logo após o sys.path.append e antes de qualquer outro import de core/infra:
+# RuntimeError de configuração ausente (SECRET_KEY em core/auth_utils.py,
+# SCPI_EXPORT_HMAC_KEY, DB_* em infra/database.py:_build_database_url)
+# acontece na hora do import — antes de existir qualquer FastAPI(...) ou
+# startup event. Sem o Sentry já inicializado aqui, exatamente os erros de
+# deploy mal configurado que esta telemetria deveria capturar morrem
+# silenciosos no journal do systemd.
+init_sentry("api")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded

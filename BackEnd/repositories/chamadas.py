@@ -189,7 +189,15 @@ def listar_historico_chamadas_aluno(aluno_id, turma_id):
 
 
 def fechar_chamadas_expiradas(agora=None):
-    """Fecha chamadas abertas cujo horario_fim do horario_aula já passou."""
+    """Fecha chamadas abertas cujo horario_fim do horario_aula já passou.
+
+    Com -w 4, todos os workers do gunicorn correm este SELECT e disputam o
+    UPDATE das mesmas linhas; o retorno não é "todas as expiradas", é só as
+    que ESTE worker conseguiu marcar como 'Fechada' (rowcount == 1) — as que
+    outro worker já fechou primeiro ficam de fora. O chamador usa o retorno
+    para decidir quais chamadas notificar; devolver uma chamada que outro
+    worker já fechou duplicaria a notificação.
+    """
     if agora is None:
         import zoneinfo
 
@@ -211,6 +219,7 @@ def fechar_chamadas_expiradas(agora=None):
                   AND c.data_chamada = CURRENT_DATE
                   AND h.dia_semana = %s
                   AND h.horario_fim < %s
+                ORDER BY c.chamada_id
                 """,
                 (agora.weekday(), agora.time()),
             )
@@ -227,6 +236,12 @@ def fechar_chamadas_expiradas(agora=None):
                     """,
                     (row["chamada_id"],),
                 )
+                # O UPDATE é o claim: com -w 4 os quatro workers chegam aqui, mas
+                # em READ COMMITTED o perdedor re-avalia o WHERE após o commit do
+                # vencedor, vê 'Fechada' e afeta 0 linhas. Sem esta guarda todos
+                # devolviam a chamada e o aluno recebia 4 pushes.
+                if cur.rowcount != 1:
+                    continue
                 fechadas.append(dict(row))
                 logger.info(
                     "Chamada %s (turma %s — %s) encerrada automaticamente por horário.",
