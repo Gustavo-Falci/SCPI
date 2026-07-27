@@ -17,6 +17,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.csrf import CSRFMiddleware
 from core.errors import rate_limit_handler
 from core.limiter import limiter
+from core.observabilidade import init_sentry
 from core.security_headers import SecurityHeadersMiddleware
 from infra import migrations as _migrations
 from infra.aws_clientes import rekognition_client, s3_client
@@ -63,6 +64,10 @@ _audit_logger.addHandler(_make_rotating_handler("scpi_audit.log"))
 _audit_logger.propagate = False  # audit events must not duplicate into scpi.log
 
 logger = logging.getLogger("scpi.api")
+
+# Antes de instanciar o app para que falhas de startup (migrations, agendador)
+# também cheguem ao Sentry.
+init_sentry("api")
 
 
 def _check_aws_connectivity():
