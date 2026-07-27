@@ -15,6 +15,9 @@ def test_limpar_evento_remove_headers_de_autenticacao():
             "headers": {
                 "Authorization": "Bearer abc.def.ghi",
                 "Cookie": "scpi_access=xyz",
+                # credencial do serviço de câmera (core/security.py:require_service_token,
+                # enviada por scripts/reconhecimento_tempo_real.py)
+                "X-Service-Token": "segredo-camera",
                 "X-Requested-With": "XMLHttpRequest",
                 "Content-Type": "application/json",
             }
@@ -26,6 +29,7 @@ def test_limpar_evento_remove_headers_de_autenticacao():
     headers = limpo["request"]["headers"]
     assert "Authorization" not in headers
     assert "Cookie" not in headers
+    assert "X-Service-Token" not in headers
     # não sensíveis, úteis para diagnóstico
     assert headers["X-Requested-With"] == "XMLHttpRequest"
     assert headers["Content-Type"] == "application/json"

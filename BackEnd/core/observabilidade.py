@@ -16,7 +16,7 @@ import sentry_sdk
 logger = logging.getLogger("scpi.observabilidade")
 
 # Headers que carregam credencial. Comparação em minúsculas.
-_HEADERS_SENSIVEIS = {"authorization", "cookie", "set-cookie", "x-camera-token"}
+_HEADERS_SENSIVEIS = {"authorization", "cookie", "set-cookie", "x-service-token"}
 
 
 def _limpar_evento(event, hint):
