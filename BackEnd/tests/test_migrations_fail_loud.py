@@ -40,3 +40,27 @@ def test_etapas_cobrem_todas_as_funcoes_ensure():
     """A lista de etapas não pode ficar para trás quando alguém adiciona uma migration."""
     definidas = {n for n in dir(m) if n.startswith("ensure_")}
     assert definidas == set(m._ETAPAS)
+
+
+def test_run_all_aplica_schema_completo(pg):
+    """Migrations rodam de ponta a ponta contra Postgres real (CI, opt-in).
+
+    Os demais testes deste arquivo mockam o cursor e só validam a fiação
+    (nome da etapa, propagação de erro); nenhum executa o SQL de verdade.
+    Roda apenas com SCPI_RUN_DB_TESTS=1 (serviço postgres:16 do CI) — local,
+    sem a flag, pula (ver tests/conftest.py:_db_disponivel). Não conecta a
+    banco nenhum sem esse opt-in explícito.
+    """
+    from infra.migrations import run_all
+
+    run_all()
+    run_all()  # idempotência
+
+
+def test_ensure_base_schema_e_a_primeira_etapa():
+    """A comparação por conjunto acima não pega reordenação: mover
+    ensure_base_schema para fora da primeira posição passaria no teste acima e
+    quebraria o boot num banco novo, porque toda outra etapa faz ALTER TABLE em
+    tabelas que só ensure_base_schema cria.
+    """
+    assert m._ETAPAS[0] == "ensure_base_schema"

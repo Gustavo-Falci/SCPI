@@ -9,6 +9,17 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(), override=True)
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from core.observabilidade import init_sentry
+
+# Logo após o sys.path.append e antes de qualquer outro import de core/infra:
+# RuntimeError de configuração ausente (SECRET_KEY em core/auth_utils.py,
+# SCPI_EXPORT_HMAC_KEY, DB_* em infra/database.py:_build_database_url)
+# acontece na hora do import — antes de existir qualquer FastAPI(...) ou
+# startup event. Sem o Sentry já inicializado aqui, exatamente os erros de
+# deploy mal configurado que esta telemetria deveria capturar morrem
+# silenciosos no journal do systemd.
+init_sentry("api")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
@@ -17,7 +28,6 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.csrf import CSRFMiddleware
 from core.errors import rate_limit_handler
 from core.limiter import limiter
-from core.observabilidade import init_sentry
 from core.security_headers import SecurityHeadersMiddleware
 from infra import migrations as _migrations
 from infra.aws_clientes import rekognition_client, s3_client
@@ -64,10 +74,6 @@ _audit_logger.addHandler(_make_rotating_handler("scpi_audit.log"))
 _audit_logger.propagate = False  # audit events must not duplicate into scpi.log
 
 logger = logging.getLogger("scpi.api")
-
-# Antes de instanciar o app para que falhas de startup (migrations, agendador)
-# também cheguem ao Sentry.
-init_sentry("api")
 
 
 def _check_aws_connectivity():
