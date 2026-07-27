@@ -78,13 +78,23 @@ updates:
       - dependency-name: "typescript"
       # Transitivas do toolchain Metro/Expo — Dependabot não consegue bumpar
       # isolado (2026-07-23: PRs de security-update falharam em update_files,
-      # uuid 7.0.3→14.0.1 é major fixado pelo pai). Alertas GHSA-w5hq-g745-h8pq
-      # (uuid, buffer bounds) e GHSA-4x5r-pxfx-6jf8 (@babel/core, file read via
-      # sourceMappingURL) atingem só build/dev, não o runtime do app publicado.
-      # O ignore suprime só o PR: os alertas seguem visíveis na aba Security.
-      # Resolvem no upgrade do Expo SDK, junto com o resto da toolchain.
+      # uuid 7.0.3→14.0.1 é major fixado pelo pai). O alerta GHSA-w5hq-g745-h8pq
+      # (uuid, buffer bounds) atinge só build/dev, não o runtime do app publicado.
+      # O ignore suprime só o PR: o alerta segue visível na aba Security.
+      # Resolve no upgrade do Expo SDK, junto com o resto da toolchain.
       - dependency-name: "uuid"
+      # @babel/core: GHSA-4x5r-pxfx-6jf8 (file read via sourceMappingURL) já foi
+      # resolvido pelo override "^7.29.6" no app/package.json (2026-07-27). O ignore
+      # continua porque PR avulso do Dependabot desalinha da toolchain do SDK —
+      # o bump correto é pelo override ou no upgrade de SDK.
       - dependency-name: "@babel/core"
+      # brace-expansion: GHSA-mh99-v99m-4gvg (DoS por expansão sem limite) tem patch
+      # só em 5.0.8, e minimatch@3 (glob 7 → toolchain Metro/ESLint) exige a API
+      # callable do 1.x, que a 5.x não expõe. Dependabot falha em update_files
+      # (2026-07-27): exigiria bumpar 33 top-level de uma vez. Risco aceito e
+      # documentado na ALLOWLIST de .github/scripts/npm-audit-gate.mjs.
+      # Resolve quando o SDK migrar para glob 10+.
+      - dependency-name: "brace-expansion"
 
   # GitHub Actions (versões dos próprios workflows)
   - package-ecosystem: "github-actions"
