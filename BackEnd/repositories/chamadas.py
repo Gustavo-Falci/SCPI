@@ -227,6 +227,12 @@ def fechar_chamadas_expiradas(agora=None):
                     """,
                     (row["chamada_id"],),
                 )
+                # O UPDATE é o claim: com -w 4 os quatro workers chegam aqui, mas
+                # em READ COMMITTED o perdedor re-avalia o WHERE após o commit do
+                # vencedor, vê 'Fechada' e afeta 0 linhas. Sem esta guarda todos
+                # devolviam a chamada e o aluno recebia 4 pushes.
+                if cur.rowcount != 1:
+                    continue
                 fechadas.append(dict(row))
                 logger.info(
                     "Chamada %s (turma %s — %s) encerrada automaticamente por horário.",
