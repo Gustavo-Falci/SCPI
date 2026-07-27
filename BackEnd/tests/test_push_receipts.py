@@ -1,5 +1,4 @@
 """Testes de receipts assíncronos: migração, repo, infra, job — sem DB/rede real."""
-import inspect
 import io
 import json
 from unittest.mock import MagicMock, patch
@@ -37,7 +36,7 @@ def test_ensure_push_receipts_table_cria_tabela():
 
 def test_apply_all_registra_receipts():
     import infra.migrations as m
-    assert "ensure_push_receipts_table()" in inspect.getsource(m._apply_all)
+    assert "ensure_push_receipts_table" in m._ETAPAS
 
 
 def test_registrar_tickets_pendentes_insere_com_on_conflict():
