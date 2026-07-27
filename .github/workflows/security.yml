@@ -142,7 +142,12 @@ jobs:
 
       - name: Audit (high+ severity blocks)
         working-directory: app
-        run: npm audit --audit-level=high
+        # `npm audit` não tem `--ignore-vuln` como o pip-audit — o gate roda por
+        # script para manter o bloqueio em high+ e abrir exceção documentada só
+        # para advisory sem correção possível. Justificativas ficam no próprio
+        # script. `npm audit` sai com código 1 quando acha algo; sem `pipefail`
+        # o status do pipeline é o do gate, que é quem decide.
+        run: npm audit --json | node ../.github/scripts/npm-audit-gate.mjs
 
   # -------------------------------------------------------------------------
   # Falha em run agendada não bloqueia merge nem aparece em lugar nenhum que a
