@@ -123,7 +123,7 @@ Baixar e decriptar **na máquina local**, nunca na VM:
 oci os object get --namespace <ns> --bucket-name scpi-backups \
   --name secrets/scpi-secrets_<data>.tar.gz.age --file pacote.age
 age -d -i scpi-secrets-key.txt pacote.age > pacote.tar.gz
-mkdir restore && tar -xpf pacote.tar.gz --numeric-owner -C restore
+mkdir restore && tar -xzpf pacote.tar.gz --numeric-owner -C restore
 cat restore/MANIFEST.txt
 sha256sum restore/opt/scpi/.env
 stat -c %a restore/opt/scpi/.env
@@ -168,8 +168,12 @@ sudo install -o root -g root -m 600 restore/etc/scpi-backup.env /etc/scpi-backup
 4. `scp pacote.tar.gz` para a VM nova.
 5. Restaurar os arquivos preservando dono e modo:
    ```bash
-   sudo tar -xpf pacote.tar.gz --numeric-owner -C /
+   sudo tar -xzpf pacote.tar.gz --numeric-owner -C /
    ```
+   O `-z` é explícito de propósito: o `tar` autodetecta compressão ao ler de
+   arquivo, mas **não** ao ler de stdin. Se preferir decriptar direto no pipe,
+   `age -d -i chave.txt pacote.age | sudo tar -xzpf - --numeric-owner -C /`
+   só funciona com o `-z`.
 6. `sudo systemctl daemon-reload` e `sudo systemctl enable --now` em
    `scpi-api.service`, `scpi-backup.timer`, `scpi-receipts.timer` e
    `scpi-secrets-backup.timer`.

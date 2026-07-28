@@ -125,7 +125,8 @@ teste_round_trip_cifrado() {
 
     extraido="$sandbox/restore"
     mkdir -p "$extraido"
-    age -d -i "$sandbox/chave.txt" "$pkg" | tar -xpf - --numeric-owner -C "$extraido"
+    # -z explícito: o tar só autodetecta compressão lendo de arquivo, não de stdin.
+    age -d -i "$sandbox/chave.txt" "$pkg" | tar -xzpf - --numeric-owner -C "$extraido"
 
     if [[ -f "$extraido/MANIFEST.txt" ]]; then ok "MANIFEST.txt presente"; else falha "MANIFEST.txt ausente"; fi
 
