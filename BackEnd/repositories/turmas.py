@@ -9,7 +9,9 @@ def listar_turmas_completas():
             return []
         cur.execute(
             """
+            -- periodo_letivo alimenta o filtro de período da aba Alunos do portal.
             SELECT t.turma_id, t.nome_disciplina, t.codigo_turma, t.turno, t.semestre,
+            t.periodo_letivo,
             COALESCE(u.nome, 'Sem professor') as professor_nome,
             (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = t.turma_id) as total_alunos
             FROM Turmas t

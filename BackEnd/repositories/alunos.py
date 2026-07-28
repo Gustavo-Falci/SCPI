@@ -1,5 +1,18 @@
 from infra.database import get_db_cursor
 
+LIMITE_PAGINA = 100
+SITUACOES_VALIDAS = ("sem_turma", "sem_biometria", "pendentes")
+
+
+def _garantir_sem_percent_literal(sql):
+    """Falha alto se um '%' que não seja placeholder entrar no SQL.
+
+    psycopg2 interpreta qualquer '%' como início de placeholder — um '%' solto,
+    mesmo dentro de comentário, quebra o execute em runtime. Barato conferir aqui.
+    """
+    if sql.replace("%s", "").count("%"):
+        raise ValueError("SQL contém '%' literal — use parâmetro em vez de interpolar.")
+
 
 def buscar_aluno_por_usuario_id(usuario_id):
     with get_db_cursor() as cur:
@@ -51,35 +64,208 @@ def buscar_aluno_id_por_ra(ra):
         return row["aluno_id"] if row else None
 
 
-def listar_alunos_para_admin(turma_id=None):
+def _clamp_paginacao(page, limit):
+    """Normaliza page/limit vindos da query string. Teto protege contra scan da base inteira."""
+    limit = max(1, min(int(limit or 10), LIMITE_PAGINA))
+    page = max(1, int(page or 1))
+    return limit, (page - 1) * limit
+
+
+def _escopo_turma(semestre, periodo_letivo, turma_id):
+    """Monta o EXISTS que liga o aluno a uma turma dentro do escopo pedido.
+
+    Semestre e período letivo são colunas de Turmas, não de Alunos: filtrar por
+    eles significa 'tem matrícula em alguma turma com esse valor'.
+    Retorna (trecho_sql, params) ou (None, []) quando nenhum escopo está ativo.
+    """
+    condicoes, params = [], []
+    if semestre:
+        condicoes.append("t.semestre = %s")
+        params.append(semestre)
+    if periodo_letivo:
+        condicoes.append("t.periodo_letivo = %s")
+        params.append(periodo_letivo)
+    if turma_id:
+        condicoes.append("ta.turma_id = %s")
+        params.append(turma_id)
+    if not condicoes:
+        return None, []
+    sql = (
+        "EXISTS (SELECT 1 FROM Turma_Alunos ta "
+        "JOIN Turmas t ON t.turma_id = ta.turma_id "
+        "WHERE ta.aluno_id = a.aluno_id AND " + " AND ".join(condicoes) + ")"
+    )
+    return sql, params
+
+
+def _predicado_pendentes(turno, semestre, periodo_letivo, turma_id):
+    """Monta o predicado do conjunto 'pendente': cortado só pelo escopo.
+
+    Com filtro de turno, pendente inclui turno indefinido. Com filtro de
+    semestre/período/turma, inclui quem não tem matrícula no escopo. Sem
+    nenhum escopo ativo, pendente = sem turno ou sem turma nenhuma.
+    Retorna (trecho_sql, params).
+    """
+    alternativas, params = [], []
+
+    if turno:
+        alternativas.append("a.turno IS NULL")
+
+    escopo_sql, escopo_params = _escopo_turma(semestre, periodo_letivo, turma_id)
+    if escopo_sql:
+        alternativas.append(f"NOT {escopo_sql}")
+        params.extend(escopo_params)
+
+    if not alternativas:
+        alternativas = [
+            "a.turno IS NULL",
+            "NOT EXISTS (SELECT 1 FROM Turma_Alunos ta WHERE ta.aluno_id = a.aluno_id)",
+        ]
+
+    return "(" + " OR ".join(alternativas) + ")", params
+
+
+def _filtros_alunos(q, turno, semestre, periodo_letivo, turma_id, situacao):
+    """Devolve (lista_de_condicoes, params) do WHERE, sem o WHERE."""
+    condicoes, params = [], []
+
+    if q:
+        # O curinga entra como parâmetro: '%' literal no SQL quebra o psycopg2.
+        alvo = f"%{q}%"
+        condicoes.append("(u.nome ILIKE %s OR u.email ILIKE %s OR a.ra ILIKE %s)")
+        params.extend([alvo, alvo, alvo])
+
+    if situacao == "pendentes":
+        # Escopo invertido: quem foi cortado pelos filtros de turno/turma.
+        pend_sql, pend_params = _predicado_pendentes(turno, semestre, periodo_letivo, turma_id)
+        condicoes.append(pend_sql)
+        params.extend(pend_params)
+        return condicoes, params
+
+    if turno:
+        condicoes.append("a.turno = %s")
+        params.append(turno)
+
+    escopo_sql, escopo_params = _escopo_turma(semestre, periodo_letivo, turma_id)
+    if escopo_sql:
+        condicoes.append(escopo_sql)
+        params.extend(escopo_params)
+
+    if situacao == "sem_turma":
+        condicoes.append(
+            "NOT EXISTS (SELECT 1 FROM Turma_Alunos ta WHERE ta.aluno_id = a.aluno_id)"
+        )
+    elif situacao == "sem_biometria":
+        condicoes.append(
+            "NOT EXISTS (SELECT 1 FROM Colecao_Rostos cr "
+            "WHERE cr.aluno_id = a.aluno_id AND cr.revogado_em IS NULL)"
+        )
+
+    return condicoes, params
+
+
+def listar_alunos_para_admin(
+    q=None,
+    turno=None,
+    semestre=None,
+    periodo_letivo=None,
+    turma_id=None,
+    situacao=None,
+    contexto_turma_id=None,
+    page=1,
+    limit=10,
+):
+    """Lista alunos para o admin, filtrada e paginada no banco.
+
+    Devolve {"items": [...], "total": n}. O total vem por COUNT(*) OVER() na
+    mesma query — com 10k alunos, um segundo round-trip só para contar dobraria
+    o custo da tela.
+    """
     with get_db_cursor() as cur:
         if not cur:
-            return []
-        if turma_id:
-            cur.execute(
-                """
-                SELECT
-                    a.aluno_id, a.ra, u.nome, u.email, a.turno,
-                    EXISTS(
-                        SELECT 1 FROM Turma_Alunos ta
-                        WHERE ta.aluno_id = a.aluno_id AND ta.turma_id = %s
-                    ) as ja_matriculado
-                FROM Alunos a
-                JOIN Usuarios u ON a.usuario_id = u.usuario_id
-                ORDER BY u.nome
-                """,
-                (turma_id,),
+            return {"items": [], "total": 0}
+
+        params = []
+        if contexto_turma_id:
+            matriculado_sql = (
+                "EXISTS (SELECT 1 FROM Turma_Alunos ta2 "
+                "WHERE ta2.aluno_id = a.aluno_id AND ta2.turma_id = %s) as ja_matriculado"
             )
+            params.append(contexto_turma_id)
         else:
-            cur.execute(
-                """
-                SELECT a.aluno_id, a.ra, u.nome, u.email, a.turno, FALSE as ja_matriculado
-                FROM Alunos a
-                JOIN Usuarios u ON a.usuario_id = u.usuario_id
-                ORDER BY u.nome
-                """
-            )
-        return cur.fetchall()
+            matriculado_sql = "FALSE as ja_matriculado"
+
+        condicoes, filtro_params = _filtros_alunos(
+            q, turno, semestre, periodo_letivo, turma_id, situacao
+        )
+        params.extend(filtro_params)
+
+        where = f"WHERE {' AND '.join(condicoes)}" if condicoes else ""
+        limite, offset = _clamp_paginacao(page, limit)
+        params.extend([limite, offset])
+
+        sql = f"""
+            SELECT
+                a.aluno_id, a.ra, u.nome, u.email, a.turno,
+                (SELECT COUNT(*) FROM Turma_Alunos tc WHERE tc.aluno_id = a.aluno_id)
+                    AS turmas_count,
+                EXISTS (SELECT 1 FROM Colecao_Rostos cb
+                        WHERE cb.aluno_id = a.aluno_id AND cb.revogado_em IS NULL)
+                    AS tem_biometria,
+                {matriculado_sql},
+                COUNT(*) OVER () AS total_geral
+            FROM Alunos a
+            JOIN Usuarios u ON a.usuario_id = u.usuario_id
+            {where}
+            ORDER BY u.nome
+            LIMIT %s OFFSET %s
+        """
+        _garantir_sem_percent_literal(sql)
+        cur.execute(sql, params)
+        linhas = cur.fetchall()
+
+    if not linhas:
+        return {"items": [], "total": 0}
+    total = linhas[0]["total_geral"]
+    itens = [{k: v for k, v in linha.items() if k != "total_geral"} for linha in linhas]
+    return {"items": itens, "total": total}
+
+
+def contar_alunos_pendentes(q=None, turno=None, semestre=None,
+                            periodo_letivo=None, turma_id=None):
+    """Quantos alunos a lista escondeu por turno indefinido ou falta de matrícula.
+
+    Zero quando nenhum filtro de escopo está ativo — sem escopo, ninguém foi
+    escondido, e a query nem chega a rodar.
+    """
+    if not (turno or semestre or periodo_letivo or turma_id):
+        return 0
+
+    with get_db_cursor() as cur:
+        if not cur:
+            return 0
+
+        params = []
+        condicoes = []
+        if q:
+            alvo = f"%{q}%"
+            condicoes.append("(u.nome ILIKE %s OR u.email ILIKE %s OR a.ra ILIKE %s)")
+            params.extend([alvo, alvo, alvo])
+
+        pend_sql, pend_params = _predicado_pendentes(turno, semestre, periodo_letivo, turma_id)
+        condicoes.append(pend_sql)
+        params.extend(pend_params)
+
+        sql = f"""
+            SELECT COUNT(*) AS total
+            FROM Alunos a
+            JOIN Usuarios u ON a.usuario_id = u.usuario_id
+            WHERE {' AND '.join(condicoes)}
+        """
+        _garantir_sem_percent_literal(sql)
+        cur.execute(sql, params)
+        linha = cur.fetchone()
+    return linha["total"] if linha else 0
 
 
 def listar_alunos_por_ids(aluno_ids):

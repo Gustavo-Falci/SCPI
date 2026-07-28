@@ -193,7 +193,7 @@ function showLogin() {
   clearSession();
 }
 
-const FILTER_TABS = new Set(['turmas', 'horarios', 'relatorios']);
+const FILTER_TABS = new Set(['turmas', 'horarios', 'relatorios', 'alunos']);
 
 function updateTurnoUI(turno) {
   document.querySelectorAll('.turno-btn').forEach(btn => {

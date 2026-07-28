@@ -367,6 +367,25 @@ def ensure_chamada_aberta_unica():
         )
 
 
+def ensure_indices_filtros_alunos():
+    """Índices que sustentam os filtros da aba Alunos do portal.
+
+    listar_alunos_para_admin bate em Turma_Alunos por aluno_id (EXISTS de escopo
+    e COUNT de turmas) e recorta Turmas por semestre. Sem eles, cada página da
+    lista vira seq scan — o que dói justamente no cliente grande que motivou os
+    filtros.
+    """
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_turma_alunos_aluno "
+            "ON Turma_Alunos (aluno_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_turmas_semestre "
+            "ON Turmas (semestre)"
+        )
+
+
 # Nomes, não referências: os testes de pipeline usam patch.object(m, nome, stub)
 # e uma lista de referências capturaria as funções originais no import, fazendo
 # o patch virar no-op silencioso.
@@ -385,6 +404,7 @@ _ETAPAS = [
     "ensure_login_attempts_table",
     "ensure_presenca_por_aula",
     "ensure_chamada_aberta_unica",
+    "ensure_indices_filtros_alunos",
 ]
 
 

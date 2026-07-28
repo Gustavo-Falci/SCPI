@@ -3,7 +3,7 @@ import { toast } from '../toast.js';
 import { confirm } from '../confirm.js';
 import { icon } from '../icons.js';
 import { avatar, baixarModeloCsv, debounce, escapeHtml } from '../utils.js';
-import { paginate, renderPagination } from '../pagination.js';
+import { renderPagination } from '../pagination.js';
 import { getState, invalidate } from '../state.js';
 import { openModal, closeModal, animateRemove } from '../modal.js';
 import { setCreate } from '../registry.js';
@@ -12,18 +12,144 @@ import { loadTab, saveTab } from '../persist.js';
 const PER_PAGE = 10;
 let page = 1;
 let search = '';
+let filtros = { turma_id: '', periodo_letivo: '', situacao: '' };
 let data = [];
+let total = 0;
+let ocultosPendentes = 0;
+
+// Assinatura da consulta: busca, filtros locais, página e o escopo global de
+// turno/semestre do header. Serve de querystring e de chave de cache.
+function queryParams() {
+  const { turno, semestre } = getState();
+  const params = new URLSearchParams({ turno, page: String(page), limit: String(PER_PAGE) });
+  if (semestre !== 'Todos') params.append('semestre', semestre);
+  if (search) params.append('q', search);
+  if (filtros.turma_id) params.append('turma_id', filtros.turma_id);
+  if (filtros.periodo_letivo) params.append('periodo_letivo', filtros.periodo_letivo);
+  if (filtros.situacao) params.append('situacao', filtros.situacao);
+  return params;
+}
 
 async function load() {
   const state = getState();
-  if (!state.cache.alunos) state.cache.alunos = await api.get('/admin/alunos');
-  data = state.cache.alunos;
+  const sig = queryParams().toString();
+  const cached = state.cache.alunos;
+  if (!cached || cached.sig !== sig) {
+    const res = await api.get(`/admin/alunos?${sig}`);
+    state.cache.alunos = { sig, ...res };
+  }
+  const atual = state.cache.alunos;
+  data = atual.items;
+  total = atual.total;
+  ocultosPendentes = atual.ocultos_pendentes;
 }
 
-function filtered() {
-  if (!search) return data;
-  const q = search.toLowerCase();
-  return data.filter(a => a.nome?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q) || a.ra?.toLowerCase().includes(q));
+// Os selects de turma e período saem das turmas já cacheadas pelo portal.
+// Se o cache estiver frio (F5 direto nesta aba), busca uma vez.
+async function carregarTurmas() {
+  const state = getState();
+  if (!state.cache.turmas) state.cache.turmas = await api.get('/admin/turmas-completas');
+  return state.cache.turmas;
+}
+
+// Toda mudança de filtro passa por aqui: refaz a consulta e redesenha. Erro de
+// rede não pode deixar a lista velha na tela fingindo que o filtro pegou.
+async function recarregar(container) {
+  try {
+    await load();
+    // Excluir o último aluno de uma página deixa `page` além do fim: o servidor
+    // devolve lista vazia com total>0 e a tela fingiria que não há aluno nenhum.
+    const ultimaPagina = Math.max(1, Math.ceil(total / PER_PAGE));
+    if (!data.length && total > 0 && page > ultimaPagina) {
+      page = ultimaPagina;
+      saveTab('alunos', { search, page, ...filtros });
+      await load();
+    }
+    renderList(container);
+  } catch (err) {
+    toast.error(extractError(err));
+  }
+}
+
+function renderFiltros(container, turmas) {
+  const { turno, semestre } = getState();
+  const periodos = [...new Set(turmas.map(t => t.periodo_letivo).filter(Boolean))].sort();
+  const temFiltroLocal = Boolean(filtros.turma_id || filtros.periodo_letivo || filtros.situacao);
+  const escopo = `${turno}${semestre !== 'Todos' ? ` · ${semestre}º sem.` : ''}`;
+
+  const chip = (valor, rotulo) => `
+    <button data-situacao="${valor}" class="chip-situacao px-3 py-1.5 rounded-xl font-black text-[11px] transition-colors whitespace-nowrap ${
+      filtros.situacao === valor ? 'bg-accent text-white' : 'bg-white/5 text-gray-500 hover:bg-white/10'
+    }">${rotulo}</button>`;
+
+  container.querySelector('#alunos-filtros').innerHTML = `
+    <div class="flex flex-wrap items-center gap-2">
+      <select id="filtro-turma" class="scpi-input py-2 text-xs font-black w-auto max-w-[15rem]">
+        <option value="">Todas as turmas</option>
+        ${turmas.map(t => `<option value="${escapeHtml(String(t.turma_id))}" ${filtros.turma_id === String(t.turma_id) ? 'selected' : ''}>${escapeHtml(t.codigo_turma)} · ${escapeHtml(t.nome_disciplina)}</option>`).join('')}
+      </select>
+      <select id="filtro-periodo" class="scpi-input py-2 text-xs font-black w-auto max-w-[11rem]">
+        <option value="">Todos os períodos</option>
+        ${periodos.map(p => `<option value="${escapeHtml(p)}" ${filtros.periodo_letivo === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
+      </select>
+      <div class="flex items-center gap-1.5">
+        ${chip('', 'Todos')}
+        ${chip('sem_turma', 'Sem turma')}
+        ${chip('sem_biometria', 'Sem biometria')}
+        ${chip('pendentes', 'Pendentes')}
+      </div>
+      ${temFiltroLocal ? `<button id="filtro-limpar" class="px-3 py-1.5 rounded-xl font-black text-[11px] text-gray-500 hover:text-white transition-colors">Limpar</button>` : ''}
+      <span class="text-[11px] font-black text-gray-600 ml-auto whitespace-nowrap">Escopo: ${escapeHtml(escopo)}</span>
+    </div>`;
+
+  const aplicar = async () => {
+    page = 1;
+    saveTab('alunos', { search, page, ...filtros });
+    await recarregar(container);
+    renderFiltros(container, turmas);
+  };
+
+  container.querySelector('#filtro-turma').addEventListener('change', e => {
+    filtros.turma_id = e.target.value;
+    aplicar();
+  });
+  container.querySelector('#filtro-periodo').addEventListener('change', e => {
+    filtros.periodo_letivo = e.target.value;
+    aplicar();
+  });
+  container.querySelectorAll('.chip-situacao').forEach(btn => {
+    btn.addEventListener('click', () => {
+      filtros.situacao = btn.dataset.situacao;
+      aplicar();
+    });
+  });
+  container.querySelector('#filtro-limpar')?.addEventListener('click', () => {
+    filtros = { turma_id: '', periodo_letivo: '', situacao: '' };
+    aplicar();
+  });
+}
+
+// Filtro de turno/semestre esconde quem não tem turno definido ou matrícula no
+// escopo. Sem este aviso, o admin acha que o aluno sumiu do sistema.
+function renderBannerOcultos(container) {
+  const el = container.querySelector('#alunos-banner-ocultos');
+  if (!el) return;
+  if (!ocultosPendentes) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div class="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+      <span class="text-amber-400 flex-shrink-0">${icon('user', 14)}</span>
+      <p class="text-amber-300 text-xs font-bold flex-1">
+        ${ocultosPendentes} aluno(s) sem turno ou sem turma ocultos por este filtro.
+      </p>
+      <button id="ver-ocultos" class="px-3 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-black text-[11px] transition-colors">Ver</button>
+    </div>`;
+  container.querySelector('#ver-ocultos').addEventListener('click', async () => {
+    filtros.situacao = 'pendentes';
+    page = 1;
+    saveTab('alunos', { search, page, ...filtros });
+    await recarregar(container);
+    renderFiltros(container, getState().cache.turmas || []);
+  });
 }
 
 function turnoBadge(turno) {
@@ -33,9 +159,14 @@ function turnoBadge(turno) {
 }
 
 function renderList(container) {
-  const f = filtered();
-  const { items, page: pg, total, count } = paginate(f, page, PER_PAGE);
-  page = pg;
+  const items = data;
+  const totalPaginas = Math.max(1, Math.ceil(total / PER_PAGE));
+  // ocultosPendentes entra na conta porque o escopo global de turno/semestre
+  // também esconde gente: sem isso, um turno que zera a lista mostraria
+  // "Nenhum aluno cadastrado" e o CTA de primeiro cadastro, ambos falsos.
+  const temFiltro = Boolean(
+    search || filtros.turma_id || filtros.periodo_letivo || filtros.situacao || ocultosPendentes
+  );
   const list = container.querySelector('#alunos-list');
   const pag = container.querySelector('#alunos-pagination');
 
@@ -43,8 +174,8 @@ function renderList(container) {
     list.innerHTML = `
       <div class="flex flex-col items-center justify-center py-16 text-gray-600 gap-3">
         ${icon('user', 40)}
-        <p class="font-black text-sm">${search ? 'Nenhum aluno encontrado' : 'Nenhum aluno cadastrado'}</p>
-        ${!search ? `<button id="cta-create-aluno" class="mt-1 px-4 py-2 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent font-black text-xs flex items-center gap-1.5 transition-colors">${icon('plus', 14)} Criar primeiro aluno</button>` : ''}
+        <p class="font-black text-sm">${temFiltro ? 'Nenhum aluno para este filtro' : 'Nenhum aluno cadastrado'}</p>
+        ${!temFiltro ? `<button id="cta-create-aluno" class="mt-1 px-4 py-2 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent font-black text-xs flex items-center gap-1.5 transition-colors">${icon('plus', 14)} Criar primeiro aluno</button>` : ''}
       </div>`;
     document.getElementById('cta-create-aluno')?.addEventListener('click', () => document.querySelector('#aluno-form [name=nome]')?.focus());
   } else {
@@ -55,6 +186,7 @@ function renderList(container) {
           <div class="flex items-center gap-2 mb-0.5">
             <p class="font-black text-white text-sm truncate">${escapeHtml(a.nome)}</p>
             ${turnoBadge(a.turno)}
+            ${a.tem_biometria ? '' : `<span class="bg-gray-500/10 text-gray-400 text-[10px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tighter" title="Sem rosto cadastrado">sem biometria</span>`}
           </div>
           <!-- Email e RA numa linha só truncavam os dois no celular; em lg+
                cabem inline, então lá seguem juntos. -->
@@ -75,7 +207,12 @@ function renderList(container) {
     });
     list.querySelectorAll('.del-btn').forEach(btn => btn.addEventListener('click', () => deleteAluno(btn.dataset.id, container)));
   }
-  renderPagination(pag, { page, total, count, perPage: PER_PAGE }, p => { page = p; saveTab('alunos', { search, page }); renderList(container); });
+  renderPagination(pag, { page, total: totalPaginas, count: total, perPage: PER_PAGE }, async p => {
+    page = p;
+    saveTab('alunos', { search, page, ...filtros });
+    await recarregar(container);
+  });
+  renderBannerOcultos(container);
 }
 
 async function deleteAluno(id, container) {
@@ -86,10 +223,14 @@ async function deleteAluno(id, container) {
   try {
     await api.del(`/admin/alunos/${id}`);
     invalidate('alunos');
-    await load();
-    renderList(container);
+    await recarregar(container);
     toast.success('Aluno excluído.');
-  } catch (err) { toast.error(extractError(err)); await load(); renderList(container); }
+  } catch (err) {
+    toast.error(extractError(err));
+    // A linha já saiu da tela pela animação: recarrega para ela voltar.
+    invalidate('alunos');
+    await recarregar(container);
+  }
 }
 
 function showEditModal(aluno, container) {
@@ -123,7 +264,7 @@ function showEditModal(aluno, container) {
         ra: e.target.querySelector('[name=ra]').value.trim() || null,
         turno: e.target.querySelector('[name=turno]').value || null,
       });
-      invalidate('alunos'); await load(); renderList(container);
+      invalidate('alunos'); await recarregar(container);
       closeModal(); toast.success('Aluno atualizado.');
     } catch (err) { toast.error(extractError(err)); btn.disabled = false; btn.textContent = 'Salvar'; }
   });
@@ -172,8 +313,8 @@ async function handleCreate(form, container) {
       turno: form.querySelector('[name=turno]').value || null,
     });
     form.reset();
-    invalidate('alunos'); await load(); page = 1;
-    if (container) renderList(container);
+    invalidate('alunos'); page = 1;
+    if (container) await recarregar(container);
     showCreatedModal(email);
   } catch (err) { toast.error(extractError(err)); }
   finally { btn.disabled = false; btn.querySelector('span').textContent = 'Criar Aluno'; }
@@ -212,8 +353,8 @@ async function handleImportCsv(file, container) {
   try {
     const res = await api.postMultipart('/admin/importar-alunos', fd);
     invalidate('alunos', 'turmas');
-    await load(); page = 1;
-    if (container) renderList(container);
+    page = 1;
+    if (container) await recarregar(container);
     if (res.erros && res.erros.length) {
       showImportResultModal(res);
     } else {
@@ -225,9 +366,10 @@ async function handleImportCsv(file, container) {
 }
 
 export async function mount(container) {
-  const saved = loadTab('alunos', { search: '', page: 1 });
+  const saved = loadTab('alunos', { search: '', page: 1, turma_id: '', periodo_letivo: '', situacao: '' });
   search = saved.search;
   page = saved.page;
+  filtros = { turma_id: saved.turma_id, periodo_letivo: saved.periodo_letivo, situacao: saved.situacao };
   container.innerHTML = `
     <div class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden tab-anim">
       <div class="hidden lg:block lg:w-72 xl:w-80 flex-shrink-0 bg-[#151718] rounded-3xl p-6 border border-white/5 overflow-y-auto">
@@ -249,13 +391,20 @@ export async function mount(container) {
           <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">${icon('search', 16)}</span>
           <input id="alunos-search" type="search" value="${escapeHtml(search)}" placeholder="Buscar aluno..." class="scpi-input pl-10 w-full">
         </div>
+        <div id="alunos-filtros" class="flex-shrink-0"></div>
+        <div id="alunos-banner-ocultos" class="flex-shrink-0"></div>
         <div id="alunos-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
         <div id="alunos-pagination" class="flex-shrink-0"></div>
       </div>
     </div>`;
 
   container.querySelector('#aluno-form').addEventListener('submit', e => { e.preventDefault(); handleCreate(e.target, container); });
-  container.querySelector('#alunos-search').addEventListener('input', debounce(e => { search = e.target.value; page = 1; saveTab('alunos', { search, page }); renderList(container); }, 200));
+  container.querySelector('#alunos-search').addEventListener('input', debounce(async e => {
+    search = e.target.value;
+    page = 1;
+    saveTab('alunos', { search, page, ...filtros });
+    await recarregar(container);
+  }, 250));
 
   const csvInput = container.querySelector('#aluno-csv-input');
   csvInput.addEventListener('change', async () => {
@@ -286,5 +435,10 @@ export async function mount(container) {
     });
   });
 
-  try { await load(); renderList(container); } catch (err) { toast.error(extractError(err)); }
+  try {
+    const turmas = await carregarTurmas();
+    await load();
+    renderFiltros(container, turmas);
+    renderList(container);
+  } catch (err) { toast.error(extractError(err)); }
 }

@@ -77,3 +77,72 @@ def pg():
     with get_db_cursor(commit=True) as cur:
         cur.execute("TRUNCATE rate_limit_buckets")
         cur.execute("TRUNCATE login_attempts")
+
+
+@pytest.fixture
+def pg_academico(pg):
+    """Semeia um cenário acadêmico mínimo e limpa depois.
+
+    Cria 4 alunos cobrindo os casos que os filtros precisam distinguir:
+    matriculado no semestre 3, matriculado no semestre 5, sem turma nenhuma e
+    sem turno definido. Devolve os ids para os testes referenciarem.
+
+    Sufixo aleatório em código de turma, RA e e-mail porque as três colunas são
+    UNIQUE: sem isso a fixture colide com dados que já estejam no banco de teste.
+    """
+    import uuid
+
+    from infra.migrations import ensure_base_schema, ensure_indices_filtros_alunos
+
+    ensure_base_schema()
+    ensure_indices_filtros_alunos()
+
+    marca = uuid.uuid4().hex[:8]
+    ids = {
+        "turma3": str(uuid.uuid4()), "turma5": str(uuid.uuid4()),
+        "mat_s3": str(uuid.uuid4()), "mat_s5": str(uuid.uuid4()),
+        "sem_turma": str(uuid.uuid4()), "sem_turno": str(uuid.uuid4()),
+        "marca": marca,
+    }
+    alunos = ["mat_s3", "mat_s5", "sem_turma", "sem_turno"]
+
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO Turmas (turma_id, codigo_turma, nome_disciplina, "
+            "periodo_letivo, turno, semestre) VALUES "
+            "(%s, %s, 'Cálculo I', '2026/1', 'Matutino', '3'), "
+            "(%s, %s, 'Cálculo II', '2026/2', 'Matutino', '5')",
+            (ids["turma3"], f"MAT-101-{marca}", ids["turma5"], f"MAT-201-{marca}"),
+        )
+        for chave, nome, turno in [
+            ("mat_s3", "Ana Souza", "Matutino"),
+            ("mat_s5", "Bruno Lima", "Matutino"),
+            ("sem_turma", "Carla Dias", "Matutino"),
+            ("sem_turno", "Diego Reis", None),
+        ]:
+            usuario_id = str(uuid.uuid4())
+            cur.execute(
+                "INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario) "
+                "VALUES (%s, %s, %s, 'x', 'Aluno')",
+                (usuario_id, nome, f"{chave}-{marca}@teste.local"),
+            )
+            cur.execute(
+                "INSERT INTO Alunos (aluno_id, usuario_id, ra, turno) VALUES (%s, %s, %s, %s)",
+                (ids[chave], usuario_id, f"RA-{chave}-{marca}", turno),
+            )
+        cur.execute(
+            "INSERT INTO Turma_Alunos (turma_id, aluno_id) VALUES (%s, %s), (%s, %s)",
+            (ids["turma3"], ids["mat_s3"], ids["turma5"], ids["mat_s5"]),
+        )
+
+    yield ids
+
+    # Usuarios é a raiz: Alunos e Turma_Alunos caem por ON DELETE CASCADE.
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            "DELETE FROM Usuarios WHERE usuario_id IN "
+            "(SELECT usuario_id FROM Alunos WHERE aluno_id = ANY(%s))",
+            ([ids[chave] for chave in alunos],),
+        )
+        cur.execute("DELETE FROM Turmas WHERE turma_id = ANY(%s)",
+                    ([ids["turma3"], ids["turma5"]],))
