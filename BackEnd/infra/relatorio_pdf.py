@@ -290,7 +290,7 @@ def gerar_pdf_ata_chamada(detalhe: dict) -> bytes:
         estilos_extra.append(("ALIGN", (2, 0), (2, -1), "CENTER"))
         elementos.append(
             _tabela(
-                ["ALUNO", "RA", "AULAS", "TIPO", "STATUS"],
+                ["ALUNO", "RA/CPF", "AULAS", "TIPO", "STATUS"],
                 linhas,
                 [7.0 * cm, 3.6 * cm, 1.8 * cm, 2.6 * cm, 2.4 * cm],
                 estilos_extra,
