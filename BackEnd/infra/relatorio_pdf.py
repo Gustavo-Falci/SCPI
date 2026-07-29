@@ -338,12 +338,17 @@ def _linha_de_filtros(filtros: dict) -> str:
         periodo = f"até {fim}"
     else:
         periodo = "todo o histórico"
-    return (
-        f"Período: {periodo} · "
-        f"Turno: {_txt(filtros.get('turno'), 'todos')} · "
-        f"Semestre: {_txt(filtros.get('semestre'), 'todos')} · "
-        f"Turma: {_txt(filtros.get('turma'), 'todas')}"
-    )
+    partes = [
+        f"Período: {periodo}",
+        f"Turno: {_txt(filtros.get('turno'), 'todos')}",
+        f"Semestre: {_txt(filtros.get('semestre'), 'todos')}",
+        f"Turma: {_txt(filtros.get('turma'), 'todas')}",
+        f"Professor: {_txt(filtros.get('professor'), 'todos')}",
+    ]
+    # Só aparece quando ativo: "Frequência: todas" ocuparia espaço sem informar.
+    if filtros.get("frequencia_baixa"):
+        partes.append(f"Frequência: abaixo de {LIMITE_FREQUENCIA}%")
+    return " · ".join(partes)
 
 
 def gerar_pdf_consolidado(itens: list, filtros: dict) -> bytes:

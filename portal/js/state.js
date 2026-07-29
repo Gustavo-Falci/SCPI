@@ -14,6 +14,7 @@ const state = {
     alunos: null,
     grade: null,
     relatorios: null,
+    relatorios_opcoes: null,
     rostos_inventario: null,
   },
 };

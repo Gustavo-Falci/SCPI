@@ -15,15 +15,32 @@ const PER_PAGE = 8;
 const TETO_CONSOLIDADO = 2000;
 let page = 1;
 let data = [];
+let filtros = {
+  data_inicio: '', data_fim: '', turma_id: '', professor_id: '', frequencia_baixa: false,
+};
 
 // Assinatura dos filtros ativos: turno sempre; semestre só quando não é "Todos"
 // (o backend interpreta ausência de semestre como "todos"). Serve para a URL e
-// para saber quando o cache precisa ser refeito.
+// para saber quando o cache precisa ser refeito. O botão de exportar PDF usa a
+// mesma função, então o documento herda exatamente o recorte da tela.
 function filtroParams() {
   const { turno, semestre } = getState();
   const params = new URLSearchParams({ turno, limit: String(TETO_CONSOLIDADO) });
   if (semestre !== 'Todos') params.append('semestre', String(semestre));
+  if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio);
+  if (filtros.data_fim) params.append('data_fim', filtros.data_fim);
+  if (filtros.turma_id) params.append('turma_id', filtros.turma_id);
+  if (filtros.professor_id) params.append('professor_id', filtros.professor_id);
+  if (filtros.frequencia_baixa) params.append('frequencia_baixa', 'true');
   return params;
+}
+
+async function carregarOpcoes() {
+  const state = getState();
+  if (!state.cache.relatorios_opcoes) {
+    state.cache.relatorios_opcoes = await api.get('/admin/relatorios/filtros');
+  }
+  return state.cache.relatorios_opcoes;
 }
 
 async function load() {
@@ -43,6 +60,62 @@ function filtered() {
   return data;
 }
 
+function renderFiltros(container, opcoes) {
+  const alvo = container.querySelector('#rel-filtros');
+  const ativo = Boolean(filtros.data_inicio || filtros.data_fim || filtros.turma_id
+    || filtros.professor_id || filtros.frequencia_baixa);
+
+  alvo.innerHTML = `
+    <div class="flex flex-wrap items-center gap-2">
+      <input id="rel-de" type="date" value="${escapeHtml(filtros.data_inicio)}" title="De"
+        class="bg-[#0C0C12] border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-bold">
+      <input id="rel-ate" type="date" value="${escapeHtml(filtros.data_fim)}" title="Até"
+        class="bg-[#0C0C12] border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-bold">
+      <select id="rel-turma" class="scpi-input py-2 text-xs font-black w-auto max-w-[15rem]">
+        <option value="">Todas as turmas</option>
+        ${opcoes.turmas.map(t => `<option value="${escapeHtml(String(t.turma_id))}" ${filtros.turma_id === String(t.turma_id) ? 'selected' : ''}>${escapeHtml(t.codigo_turma)} · ${escapeHtml(t.nome_disciplina)}</option>`).join('')}
+      </select>
+      <select id="rel-professor" class="scpi-input py-2 text-xs font-black w-auto max-w-[13rem]">
+        <option value="">Todos os professores</option>
+        ${(opcoes.professores || []).map(p => `<option value="${escapeHtml(String(p.professor_id))}" ${filtros.professor_id === String(p.professor_id) ? 'selected' : ''}>${escapeHtml(p.nome)}</option>`).join('')}
+      </select>
+      <button id="rel-freq" class="px-3 py-1.5 rounded-xl font-black text-[11px] transition-colors whitespace-nowrap ${
+        filtros.frequencia_baixa ? 'bg-accent text-white' : 'bg-white/5 text-gray-500 hover:bg-white/10'
+      }">Só frequência &lt; 75%</button>
+      ${ativo ? `<button id="rel-limpar" class="px-3 py-1.5 rounded-xl font-black text-[11px] text-gray-500 hover:text-white transition-colors">Limpar</button>` : ''}
+    </div>`;
+
+  const aplicar = async () => {
+    // Validar aqui evita uma ida ao servidor para um erro que a tela enxerga.
+    if (filtros.data_inicio && filtros.data_fim && filtros.data_inicio > filtros.data_fim) {
+      toast.error('Intervalo de datas inválido.');
+      return;
+    }
+    page = 1;
+    saveTab('relatorios', { page, filtros });
+    try {
+      await load();
+      renderList(container);
+    } catch (err) {
+      toast.error(extractError(err));
+    }
+    renderFiltros(container, opcoes);
+  };
+
+  alvo.querySelector('#rel-de').addEventListener('change', e => { filtros.data_inicio = e.target.value; aplicar(); });
+  alvo.querySelector('#rel-ate').addEventListener('change', e => { filtros.data_fim = e.target.value; aplicar(); });
+  alvo.querySelector('#rel-turma').addEventListener('change', e => { filtros.turma_id = e.target.value; aplicar(); });
+  alvo.querySelector('#rel-professor').addEventListener('change', e => { filtros.professor_id = e.target.value; aplicar(); });
+  alvo.querySelector('#rel-freq').addEventListener('click', () => {
+    filtros.frequencia_baixa = !filtros.frequencia_baixa;
+    aplicar();
+  });
+  alvo.querySelector('#rel-limpar')?.addEventListener('click', () => {
+    filtros = { data_inicio: '', data_fim: '', turma_id: '', professor_id: '', frequencia_baixa: false };
+    aplicar();
+  });
+}
+
 function statCard(label, value, color) {
   return `<div class="text-center"><p class="text-sm font-black ${color}">${value}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-0.5">${label}</p></div>`;
 }
@@ -55,7 +128,12 @@ function renderList(container) {
   const pag = container.querySelector('#rel-pagination');
 
   if (!items.length) {
-    list.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-gray-600 gap-2">${icon('file-text', 40)}<p class="font-black text-sm">Nenhuma chamada para este filtro</p><p class="text-xs text-gray-700">Tente mudar o turno ou semestre</p></div>`;
+    const temFiltroLocal = Boolean(filtros.data_inicio || filtros.data_fim || filtros.turma_id
+      || filtros.professor_id || filtros.frequencia_baixa);
+    const dica = temFiltroLocal
+      ? 'Tente ampliar o período ou limpar os filtros'
+      : 'Tente mudar o turno ou semestre';
+    list.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-gray-600 gap-2">${icon('file-text', 40)}<p class="font-black text-sm">Nenhuma chamada para este filtro</p><p class="text-xs text-gray-700">${dica}</p></div>`;
   } else {
     const isNight = getState().turno === 'Noturno';
     const colorBadge = isNight ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-500';
@@ -234,8 +312,9 @@ async function openDetalhe(chamadaId) {
 export async function mount(container) {
   container.innerHTML = `
     <div class="flex-1 overflow-hidden flex flex-col gap-3 min-h-0 tab-anim">
-      <div class="flex items-center justify-end flex-shrink-0">
-        <button id="btn-pdf-consolidado" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 text-xs font-black text-gray-300 hover:text-white hover:border-accent/30 transition-colors">
+      <div class="flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+        <div id="rel-filtros" class="flex-1 min-w-0"></div>
+        <button id="btn-pdf-consolidado" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 text-xs font-black text-gray-300 hover:text-white hover:border-accent/30 transition-colors flex-shrink-0">
           ${icon('download', 14)} Exportar PDF
         </button>
       </div>
@@ -253,6 +332,13 @@ export async function mount(container) {
       'consolidado-chamadas.pdf'
     );
   });
-  page = loadTab('relatorios', { page: 1 }).page;
-  try { await load(); renderList(container); } catch (err) { toast.error(extractError(err)); }
+  const salvo = loadTab('relatorios', { page: 1, filtros: null });
+  page = salvo.page;
+  if (salvo.filtros) filtros = salvo.filtros;
+  try {
+    const opcoes = await carregarOpcoes();
+    await load();
+    renderFiltros(container, opcoes);
+    renderList(container);
+  } catch (err) { toast.error(extractError(err)); }
 }

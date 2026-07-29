@@ -24,15 +24,31 @@ def resumo_presenca(total_alunos: int, total_aulas: int, presentes: int) -> dict
 
 def listar_relatorios(professor_id: Optional[str] = None, turma_id: Optional[str] = None,
                       limit: int = 200, offset: int = 0,
-                      data_inicio=None, data_fim=None, turno=None, semestre=None):
+                      data_inicio=None, data_fim=None, turno=None, semestre=None,
+                      frequencia_baixa: bool = False):
+    """Chamadas fechadas com o resumo de presença de cada uma.
+
+    `frequencia_baixa` mantém só as abaixo de LIMITE_FREQUENCIA. O recorte
+    acontece aqui, e não em SQL, para existir uma única fórmula de percentual
+    no sistema — repeti-la na query criaria uma segunda definição de "presença
+    ruim", que divergiria da barra colorida e do rótulo Regular/Risco do PDF.
+
+    Cuidado: o LIMIT do SQL corre ANTES deste filtro. Com limit=50 o retorno é
+    "as de baixa frequência entre as 50 mais recentes", não "as 50 mais
+    recentes de baixa frequência". O portal usa o teto de 2000 e não sente.
+    """
     rows = listar_relatorios_chamadas(
         professor_id=professor_id, turma_id=turma_id, limit=limit, offset=offset,
         data_inicio=data_inicio, data_fim=data_fim, turno=turno, semestre=semestre,
     )
-    return [{**dict(r), **resumo_presenca(r["total_alunos"], r["total_aulas"], r["presentes"])} for r in rows]
+    itens = [{**dict(r), **resumo_presenca(r["total_alunos"], r["total_aulas"], r["presentes"])}
+             for r in rows]
+    if frequencia_baixa:
+        itens = [i for i in itens if i["percentual"] < LIMITE_FREQUENCIA]
+    return itens
 
 
-def opcoes_filtros_relatorios(professor_id: str):
+def opcoes_filtros_relatorios(professor_id: Optional[str] = None):
     return listar_opcoes_filtros_relatorios(professor_id)
 
 

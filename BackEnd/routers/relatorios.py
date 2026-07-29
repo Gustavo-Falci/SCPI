@@ -102,6 +102,20 @@ def _rotulo_turma_pdf(turma_id: Optional[str], itens: list) -> Optional[str]:
     return f"{codigo} ({disciplina})" if disciplina else codigo
 
 
+def _rotulo_professor_pdf(professor_id: Optional[str], itens: list) -> Optional[str]:
+    """Rótulo do professor para o filtro do PDF consolidado.
+
+    Mesma armadilha de _rotulo_turma_pdf: devolver None quando o filtro foi
+    aplicado mas não achou chamada faria _linha_de_filtros escrever "todos"
+    num documento que na verdade estava recortado.
+    """
+    if not professor_id:
+        return None
+    if not itens:
+        return "filtro aplicado (sem chamadas no período)"
+    return itens[0].get("professor_nome") or professor_id
+
+
 @router.get("/professor/relatorios/chamadas")
 def listar_relatorios_professor(
     limit: int = 50,
@@ -164,6 +178,17 @@ def opcoes_filtros_relatorios_professor(
         raise internal_error(e, "opcoes_filtros_relatorios_professor")
 
 
+@router.get("/admin/relatorios/filtros")
+def opcoes_filtros_relatorios_admin(
+    current_user: dict = Depends(require_role("Admin")),
+):
+    """Mesmas opções da tela do professor, sem recorte de professor."""
+    try:
+        return opcoes_filtros_relatorios()
+    except Exception as e:
+        raise internal_error(e, "opcoes_filtros_relatorios_admin")
+
+
 @router.get("/professor/relatorios/chamadas/{chamada_id}")
 def detalhe_relatorio_professor(
     chamada_id: str,
@@ -189,26 +214,39 @@ def listar_relatorios_admin(
     turma_id: Optional[str] = None,
     limit: int = 200,
     offset: int = 0,
+    data_inicio: Optional[date] = None,
+    data_fim: Optional[date] = None,
+    professor_id: Optional[str] = None,
     turno: Optional[str] = None,
     semestre: Optional[str] = None,
+    frequencia_baixa: bool = False,
     formato: Optional[str] = None,
     current_user: dict = Depends(require_role("Admin")),
 ):
+    if data_inicio and data_fim and data_inicio > data_fim:
+        raise HTTPException(status_code=400, detail="Intervalo de datas inválido.")
     pdf = formato == "pdf"
     try:
         itens = listar_relatorios(
             turma_id=turma_id,
             limit=TETO_CONSOLIDADO + 1 if pdf else limit,
             offset=0 if pdf else offset,
+            data_inicio=data_inicio, data_fim=data_fim,
+            professor_id=professor_id,
             turno=turno, semestre=semestre,
+            frequencia_baixa=frequencia_baixa,
         )
         if pdf:
             return _pdf_do_consolidado(
                 itens,
                 {
+                    "data_inicio": _fmt_data(data_inicio),
+                    "data_fim": _fmt_data(data_fim),
                     "turno": turno,
                     "semestre": semestre,
                     "turma": _rotulo_turma_pdf(turma_id, itens),
+                    "professor": _rotulo_professor_pdf(professor_id, itens),
+                    "frequencia_baixa": frequencia_baixa,
                 },
             )
         return itens

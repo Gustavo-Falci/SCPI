@@ -49,11 +49,15 @@ def test_listar_relatorios_chamadas_sem_filtros_nao_adiciona_clausulas():
 
 
 def test_listar_opcoes_filtros_relatorios_deriva_distintos():
+    # professor_id/professor_nome entraram no SELECT junto com o filtro de
+    # professor do admin; a query real devolve as duas colunas.
     rows = [
         {"turma_id": "T1", "nome_disciplina": "Calculo", "codigo_turma": "C1",
-         "turno": "Matutino", "semestre": "2026.1"},
+         "turno": "Matutino", "semestre": "2026.1",
+         "professor_id": "p1", "professor_nome": "Ana"},
         {"turma_id": "T2", "nome_disciplina": "Fisica", "codigo_turma": "C2",
-         "turno": "Noturno", "semestre": "2025.2"},
+         "turno": "Noturno", "semestre": "2025.2",
+         "professor_id": "p1", "professor_nome": "Ana"},
     ]
     cm, cur = _mock_cursor(fetchall_return=rows)
     with patch("repositories.chamadas.get_db_cursor", return_value=cm):
@@ -153,3 +157,203 @@ def test_router_endpoint_filtros_retorna_opcoes():
         )
     m.assert_called_once_with("p1")
     assert out == esperado
+
+
+def _linhas_opcoes():
+    return [
+        {"turma_id": "t1", "nome_disciplina": "Cálculo I", "codigo_turma": "MAT-101",
+         "turno": "Matutino", "semestre": "3", "professor_id": "p1", "professor_nome": "Ana"},
+        {"turma_id": "t1", "nome_disciplina": "Cálculo I", "codigo_turma": "MAT-101",
+         "turno": "Matutino", "semestre": "3", "professor_id": "p2", "professor_nome": "Bruno"},
+        {"turma_id": "t2", "nome_disciplina": "Física", "codigo_turma": "FIS-201",
+         "turno": "Noturno", "semestre": "5", "professor_id": "p1", "professor_nome": "Ana"},
+    ]
+
+
+def test_opcoes_sem_professor_id_nao_filtra_por_professor():
+    cm, cur = _mock_cursor(fetchall_return=[])
+    with patch("repositories.chamadas.get_db_cursor", return_value=cm):
+        from repositories.chamadas import listar_opcoes_filtros_relatorios
+        listar_opcoes_filtros_relatorios()
+    sql, params = cur.execute.call_args[0]
+    assert "c.professor_id = %s" not in sql
+    assert params == ()
+
+
+def test_opcoes_com_professor_id_mantem_o_recorte():
+    """Regressão da tela do professor, que depende deste comportamento."""
+    cm, cur = _mock_cursor(fetchall_return=[])
+    with patch("repositories.chamadas.get_db_cursor", return_value=cm):
+        from repositories.chamadas import listar_opcoes_filtros_relatorios
+        listar_opcoes_filtros_relatorios("p1")
+    sql, params = cur.execute.call_args[0]
+    assert "c.professor_id = %s" in sql
+    assert params == ("p1",)
+
+
+def test_opcoes_deduplica_turma_com_dois_professores():
+    """Trazer o professor na query multiplica as linhas por turma."""
+    cm, _cur = _mock_cursor(fetchall_return=_linhas_opcoes())
+    with patch("repositories.chamadas.get_db_cursor", return_value=cm):
+        from repositories.chamadas import listar_opcoes_filtros_relatorios
+        res = listar_opcoes_filtros_relatorios()
+    assert [t["turma_id"] for t in res["turmas"]] == ["t1", "t2"]
+
+
+def test_opcoes_devolve_professores_sem_repeticao_ordenados():
+    cm, _cur = _mock_cursor(fetchall_return=_linhas_opcoes())
+    with patch("repositories.chamadas.get_db_cursor", return_value=cm):
+        from repositories.chamadas import listar_opcoes_filtros_relatorios
+        res = listar_opcoes_filtros_relatorios()
+    assert res["professores"] == [
+        {"professor_id": "p1", "nome": "Ana"},
+        {"professor_id": "p2", "nome": "Bruno"},
+    ]
+
+
+def test_opcoes_mantem_turnos_e_semestres():
+    cm, _cur = _mock_cursor(fetchall_return=_linhas_opcoes())
+    with patch("repositories.chamadas.get_db_cursor", return_value=cm):
+        from repositories.chamadas import listar_opcoes_filtros_relatorios
+        res = listar_opcoes_filtros_relatorios()
+    assert res["turnos"] == ["Matutino", "Noturno"]
+    assert res["semestres"] == ["5", "3"]
+
+
+def test_opcoes_sem_cursor_devolve_estrutura_vazia():
+    cm = MagicMock()
+    cm.__enter__.return_value = None
+    cm.__exit__.return_value = False
+    with patch("repositories.chamadas.get_db_cursor", return_value=cm):
+        from repositories.chamadas import listar_opcoes_filtros_relatorios
+        res = listar_opcoes_filtros_relatorios()
+    assert res == {"turmas": [], "professores": [], "turnos": [], "semestres": []}
+
+
+def test_rota_admin_de_filtros_nao_manda_professor_id():
+    esperado = {"turmas": [], "professores": [], "turnos": [], "semestres": []}
+    from routers.relatorios import opcoes_filtros_relatorios_admin
+    with patch("routers.relatorios.opcoes_filtros_relatorios", return_value=esperado) as m:
+        out = opcoes_filtros_relatorios_admin(current_user={"sub": "adm", "role": "Admin"})
+    m.assert_called_once_with()
+    assert out == esperado
+
+
+def _linha_chamada(chamada_id, total_alunos, total_aulas, presentes):
+    return {"chamada_id": chamada_id, "total_alunos": total_alunos,
+            "total_aulas": total_aulas, "presentes": presentes}
+
+
+def test_frequencia_baixa_mantem_apenas_abaixo_do_limite():
+    linhas = [
+        _linha_chamada("c1", 10, 1, 5),   # 50% → entra
+        _linha_chamada("c2", 10, 1, 9),   # 90% → fica de fora
+    ]
+    with patch("services.relatorios.listar_relatorios_chamadas", return_value=linhas):
+        from services.relatorios import listar_relatorios
+        itens = listar_relatorios(frequencia_baixa=True)
+    assert [i["chamada_id"] for i in itens] == ["c1"]
+
+
+def test_exatamente_no_limite_e_regular_e_nao_entra():
+    """75% é Regular no resto do sistema; o recorte é estritamente menor."""
+    from core.regras import LIMITE_FREQUENCIA
+
+    assert LIMITE_FREQUENCIA == 75
+    linhas = [_linha_chamada("c1", 4, 1, 3)]  # 75%
+    with patch("services.relatorios.listar_relatorios_chamadas", return_value=linhas):
+        from services.relatorios import listar_relatorios
+        assert listar_relatorios(frequencia_baixa=True) == []
+
+
+def test_sem_o_filtro_a_lista_nao_muda():
+    linhas = [_linha_chamada("c1", 10, 1, 5), _linha_chamada("c2", 10, 1, 9)]
+    with patch("services.relatorios.listar_relatorios_chamadas", return_value=linhas):
+        from services.relatorios import listar_relatorios
+        assert len(listar_relatorios()) == 2
+
+
+def test_filtro_sobre_lista_vazia_nao_quebra():
+    with patch("services.relatorios.listar_relatorios_chamadas", return_value=[]):
+        from services.relatorios import listar_relatorios
+        assert listar_relatorios(frequencia_baixa=True) == []
+
+
+def test_chamada_sem_alunos_conta_como_zero_por_cento():
+    """total_slots=0 vira percentual 0 em resumo_presenca, então é baixa frequência."""
+    linhas = [_linha_chamada("c1", 0, 1, 0)]
+    with patch("services.relatorios.listar_relatorios_chamadas", return_value=linhas):
+        from services.relatorios import listar_relatorios
+        assert [i["chamada_id"] for i in listar_relatorios(frequencia_baixa=True)] == ["c1"]
+
+
+def test_rota_admin_repassa_os_filtros_novos():
+    from routers.relatorios import listar_relatorios_admin
+    with patch("routers.relatorios.listar_relatorios", return_value=[]) as m:
+        listar_relatorios_admin(
+            turma_id="t1",
+            data_inicio=date(2026, 5, 1),
+            data_fim=date(2026, 5, 31),
+            professor_id="p1",
+            frequencia_baixa=True,
+            current_user={"sub": "adm", "role": "Admin"},
+        )
+    kwargs = m.call_args.kwargs
+    assert kwargs["data_inicio"] == date(2026, 5, 1)
+    assert kwargs["data_fim"] == date(2026, 5, 31)
+    assert kwargs["professor_id"] == "p1"
+    assert kwargs["frequencia_baixa"] is True
+    assert kwargs["turma_id"] == "t1"
+
+
+def test_rota_admin_sem_filtros_nao_recorta():
+    from routers.relatorios import listar_relatorios_admin
+    with patch("routers.relatorios.listar_relatorios", return_value=[]) as m:
+        listar_relatorios_admin(current_user={"sub": "adm", "role": "Admin"})
+    kwargs = m.call_args.kwargs
+    assert kwargs["data_inicio"] is None and kwargs["data_fim"] is None
+    assert kwargs["professor_id"] is None
+    assert kwargs["frequencia_baixa"] is False
+
+
+def test_rota_admin_recusa_intervalo_invertido():
+    from routers.relatorios import listar_relatorios_admin
+    with pytest.raises(HTTPException) as exc:
+        listar_relatorios_admin(
+            data_inicio=date(2026, 5, 31),
+            data_fim=date(2026, 5, 1),
+            current_user={"sub": "adm", "role": "Admin"},
+        )
+    assert exc.value.status_code == 400
+    assert "Intervalo de datas inválido" in exc.value.detail
+
+
+def test_rota_admin_aceita_intervalo_de_um_dia_so():
+    """inicio == fim é intervalo válido, não invertido."""
+    from routers.relatorios import listar_relatorios_admin
+    with patch("routers.relatorios.listar_relatorios", return_value=[]):
+        out = listar_relatorios_admin(
+            data_inicio=date(2026, 5, 1),
+            data_fim=date(2026, 5, 1),
+            current_user={"sub": "adm", "role": "Admin"},
+        )
+    assert out == []
+
+
+def test_rotulo_professor_usa_o_nome_da_primeira_linha():
+    from routers.relatorios import _rotulo_professor_pdf
+
+    assert _rotulo_professor_pdf("p1", [{"professor_nome": "Ana Souza"}]) == "Ana Souza"
+
+
+def test_rotulo_professor_sem_filtro_e_none():
+    from routers.relatorios import _rotulo_professor_pdf
+
+    assert _rotulo_professor_pdf(None, [{"professor_nome": "Ana"}]) is None
+
+
+def test_rotulo_professor_com_filtro_e_sem_resultado_nao_diz_todos():
+    """None viraria 'todos' na linha de filtros — mentira num PDF recortado."""
+    from routers.relatorios import _rotulo_professor_pdf
+
+    assert _rotulo_professor_pdf("p1", []) == "filtro aplicado (sem chamadas no período)"
