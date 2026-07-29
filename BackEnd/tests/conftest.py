@@ -92,10 +92,12 @@ def pg_academico(pg):
     """
     import uuid
 
-    from infra.migrations import ensure_base_schema, ensure_indices_filtros_alunos
+    from infra.migrations import _apply_all
 
-    ensure_base_schema()
-    ensure_indices_filtros_alunos()
+    # Pipeline inteiro, não etapas escolhidas a dedo: colunas como
+    # Colecao_Rostos.revogado_em nascem em migrations posteriores ao schema base,
+    # e um schema pela metade quebra as queries que a aplicação realmente usa.
+    _apply_all()
 
     marca = uuid.uuid4().hex[:8]
     ids = {
@@ -138,11 +140,13 @@ def pg_academico(pg):
     yield ids
 
     # Usuarios é a raiz: Alunos e Turma_Alunos caem por ON DELETE CASCADE.
+    # O cast ::uuid[] é obrigatório: psycopg2 manda a lista Python como text[] e
+    # o Postgres não tem operador uuid = text.
     with get_db_cursor(commit=True) as cur:
         cur.execute(
             "DELETE FROM Usuarios WHERE usuario_id IN "
-            "(SELECT usuario_id FROM Alunos WHERE aluno_id = ANY(%s))",
+            "(SELECT usuario_id FROM Alunos WHERE aluno_id = ANY(%s::uuid[]))",
             ([ids[chave] for chave in alunos],),
         )
-        cur.execute("DELETE FROM Turmas WHERE turma_id = ANY(%s)",
+        cur.execute("DELETE FROM Turmas WHERE turma_id = ANY(%s::uuid[])",
                     ([ids["turma3"], ids["turma5"]],))
