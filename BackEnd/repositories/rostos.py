@@ -113,3 +113,26 @@ def obter_path_foto_perfil_aluno(aluno_id):
         )
         row = cur.fetchone()
         return row["s3_path_cadastro"] if row else None
+
+
+def listar_inventario_biometrico():
+    """Todos os registros de Colecao_Rostos com o aluno dono, para auditoria.
+
+    Traz revogados de propósito: o caso mais grave que a aba Biometria procura é
+    o registro revogado cujo dado biométrico continua vivo na AWS.
+    """
+    with get_db_cursor() as cur:
+        if not cur:
+            return []
+        cur.execute(
+            """
+            SELECT
+                cr.face_id_rekognition, cr.s3_path_cadastro, cr.angulo,
+                cr.revogado_em, cr.aluno_id, u.nome, a.ra
+            FROM Colecao_Rostos cr
+            JOIN Alunos a ON a.aluno_id = cr.aluno_id
+            JOIN Usuarios u ON u.usuario_id = a.usuario_id
+            ORDER BY u.nome, cr.angulo
+            """
+        )
+        return cur.fetchall()

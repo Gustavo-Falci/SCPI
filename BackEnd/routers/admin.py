@@ -11,8 +11,10 @@ from core.csv_utils import EMAIL_REGEX, MAX_CSV_BYTES, criar_leitor_csv, validar
 from core.helpers import audit, client_ip, gerar_senha_temporaria, internal_error
 from core.security import require_role
 from infra.aws_clientes import rekognition_client, s3_client
-from infra.rekognition_aws import deletar_rosto
+from infra.rekognition_aws import deletar_rosto, listar_todas_faces
+from infra.s3_aws import listar_todos_objetos_s3
 from infra.notificacoes import send_email_senha_temporaria
+from services.inventario_biometrico import reconciliar_inventario
 from repositories.alunos import (
     LIMITE_PAGINA,
     atualizar_aluno,
@@ -23,7 +25,7 @@ from repositories.alunos import (
     listar_alunos_para_admin,
     listar_alunos_por_ids,
 )
-from repositories.rostos import listar_rostos_ativos_por_aluno
+from repositories.rostos import listar_inventario_biometrico, listar_rostos_ativos_por_aluno
 from repositories.horarios import (
     detectar_conflito_horario,
     excluir_horario,
@@ -605,46 +607,27 @@ class S3KeyPayload(BaseModel):
     key: str
 
 
-@router.get("/rostos/rekognition")
-def admin_listar_rostos_rekognition():
-    if rekognition_client is None:
-        raise HTTPException(status_code=503, detail="Rekognition não disponível")
-    try:
-        response = rekognition_client.list_faces(CollectionId=COLLECTION_ID, MaxResults=4096)
-        faces = response.get("Faces", [])
-        return [
-            {
-                "face_id": f.get("FaceId"),
-                "external_image_id": f.get("ExternalImageId"),
-                "image_id": f.get("ImageId"),
-            }
-            for f in faces
-        ]
-    except Exception as e:
-        raise internal_error(e, "admin_listar_rostos_rekognition")
+@router.get("/rostos/inventario")
+def admin_inventario_biometrico():
+    """Collection, bucket e banco cruzados para auditoria da aba Biometria.
 
-
-@router.get("/rostos/s3")
-def admin_listar_rostos_s3():
-    if s3_client is None:
-        raise HTTPException(status_code=503, detail="S3 não disponível")
+    Degrada por lado em vez de derrubar a tela: se uma das listagens da AWS
+    falhar, o outro lado ainda chega e `indisponivel` diz o que faltou.
+    """
     try:
-        response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix="alunos/")
-        contents = response.get("Contents", [])
-        resultado = []
-        for obj in contents:
-            key = obj.get("Key", "")
-            if not key or key.endswith("/"):
-                continue
-            last_modified = obj.get("LastModified")
-            resultado.append({
-                "key": key,
-                "size": obj.get("Size", 0),
-                "last_modified": last_modified.isoformat() if last_modified else None,
-            })
-        return resultado
+        faces, faces_ok = listar_todas_faces()
+        objetos, objetos_ok = listar_todos_objetos_s3()
+        registros = listar_inventario_biometrico()
+
+        indisponivel = []
+        if not faces_ok:
+            indisponivel.append("rekognition")
+        if not objetos_ok:
+            indisponivel.append("s3")
+
+        return reconciliar_inventario(faces, objetos, registros, indisponivel)
     except Exception as e:
-        raise internal_error(e, "admin_listar_rostos_s3")
+        raise internal_error(e, "admin_inventario_biometrico")
 
 
 @router.delete("/rostos/rekognition/bulk")

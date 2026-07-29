@@ -9,3 +9,8 @@ pintar a linha de verde/vermelho com outro.
 # Frequência mínima (%) para o aluno ser considerado "Regular" — abaixo disso,
 # "Risco". Usado tanto para o rótulo textual quanto para a cor no PDF.
 LIMITE_FREQUENCIA = 75
+
+# Ângulos de captura biométrica esperados por aluno. O cadastro valida contra
+# esta lista e a auditoria da aba Biometria calcula ângulos faltantes por
+# diferença — duas cópias divergiriam sem ninguém perceber.
+ANGULOS_VALIDOS = frozenset({"frontal", "esquerda", "direita", "baixo"})
