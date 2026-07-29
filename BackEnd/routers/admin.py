@@ -1,8 +1,8 @@
 import logging
 import uuid
-from typing import List, Optional
+from typing import List, Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from core.auth_utils import get_password_hash
@@ -14,7 +14,9 @@ from infra.aws_clientes import rekognition_client, s3_client
 from infra.rekognition_aws import deletar_rosto
 from infra.notificacoes import send_email_senha_temporaria
 from repositories.alunos import (
+    LIMITE_PAGINA,
     atualizar_aluno,
+    contar_alunos_pendentes,
     criar_aluno_com_usuario,
     excluir_aluno_em_cascata,
     existe_aluno_por_ra,
@@ -303,11 +305,34 @@ def admin_excluir_horario(horario_id: str, request: Request, current_user: dict 
 
 
 @router.get("/alunos")
-def admin_listar_alunos(turma_id: Optional[str] = None):
+def admin_listar_alunos(
+    q: Optional[str] = None,
+    turno: Optional[Literal["Matutino", "Noturno"]] = None,
+    semestre: Optional[str] = None,
+    periodo_letivo: Optional[str] = None,
+    turma_id: Optional[str] = None,
+    situacao: Optional[Literal["sem_turma", "sem_biometria", "pendentes"]] = None,
+    contexto_turma_id: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    # Sem `le=100` de propósito: pedir demais é reduzido ao teto, não rejeitado.
+    # Um cliente que mandou limit=500 deve receber 100 alunos, não um 422.
+    limit: int = Query(10, ge=1),
+):
     try:
-        return listar_alunos_para_admin(turma_id)
+        limit = min(limit, LIMITE_PAGINA)
+        resultado = listar_alunos_para_admin(
+            q=q, turno=turno, semestre=semestre, periodo_letivo=periodo_letivo,
+            turma_id=turma_id, situacao=situacao, contexto_turma_id=contexto_turma_id,
+            page=page, limit=limit,
+        )
+        # Com situacao=pendentes a lista já É a dos ocultos: contar de novo confundiria.
+        ocultos = 0 if situacao == "pendentes" else contar_alunos_pendentes(
+            q=q, turno=turno, semestre=semestre,
+            periodo_letivo=periodo_letivo, turma_id=turma_id,
+        )
+        return {**resultado, "ocultos_pendentes": ocultos}
     except Exception as e:
-        raise internal_error(e)
+        raise internal_error(e, "admin_listar_alunos")
 
 
 @router.post("/turmas/{turma_id}/matricular-alunos")

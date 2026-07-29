@@ -204,7 +204,19 @@ async function showMatriculaModal(turmaId, container) {
   openModal(`<div class="p-8 flex items-center justify-center"><div class="spin opacity-50">${icon('loader', 28)}</div></div>`, 'max-w-xl');
 
   let allAlunos = [];
-  try { allAlunos = await api.get('/admin/alunos'); } catch (err) { toast.error(extractError(err)); closeModal(); return; }
+  // O modal ainda filtra no navegador, então precisa da base inteira. A rota é
+  // paginada (teto de 100), daí o laço. Com milhares de alunos isso vira gargalo
+  // — dívida registrada na spec dos filtros da aba Alunos.
+  try {
+    const LIMITE = 100;
+    let pagina = 1;
+    for (;;) {
+      const res = await api.get(`/admin/alunos?contexto_turma_id=${encodeURIComponent(turmaId)}&page=${pagina}&limit=${LIMITE}`);
+      allAlunos = allAlunos.concat(res.items);
+      if (allAlunos.length >= res.total || !res.items.length) break;
+      pagina += 1;
+    }
+  } catch (err) { toast.error(extractError(err)); closeModal(); return; }
 
   let matriculados = new Set();
   let matriculadosList = [];
