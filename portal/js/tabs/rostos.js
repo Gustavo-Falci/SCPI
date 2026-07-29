@@ -127,7 +127,7 @@ function renderFiltros(container, panelId) {
     }">${rotulo}</button>`;
 
   alvo.innerHTML = `
-    <div class="px-3 pb-2 flex flex-col gap-2">
+    <div class="px-3 pt-3 pb-2 flex flex-col gap-2">
       <input type="search" class="filtro-busca scpi-input py-2 text-xs" placeholder="Buscar aluno, RA ou chave..." value="${escapeHtml(f.busca)}">
       <div class="flex flex-wrap items-center gap-1.5">
         ${chip('', 'Todos')}
