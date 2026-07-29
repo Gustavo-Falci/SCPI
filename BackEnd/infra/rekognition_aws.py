@@ -90,6 +90,49 @@ def indexar_rosto_da_imagem_s3(
         return None
 
 
+# Teto de páginas: a AWS não deveria paginar indefinidamente, mas uma resposta
+# malformada que sempre devolve NextToken penduraria o request. 50 páginas de
+# 4096 cobrem 200 mil faces — muito acima de qualquer cliente previsto.
+MAX_PAGINAS = 50
+
+
+def listar_todas_faces() -> tuple[list[dict], bool]:
+    """Lista a collection inteira, seguindo NextToken até o fim.
+
+    Devolve (faces, completo). completo=False quando o cliente não existe, a AWS
+    falhou ou o teto de páginas foi atingido — nesse caso a lista está truncada e
+    auditar sobre ela produziria um "está tudo limpo" falso.
+    """
+    if not rekognition_client:
+        logger.error("❌ Cliente Rekognition não inicializado. Listagem cancelada.")
+        return [], False
+
+    faces: list[dict] = []
+    token = None
+    try:
+        for _ in range(MAX_PAGINAS):
+            kwargs = {"CollectionId": COLLECTION_ID, "MaxResults": 4096}
+            if token:
+                kwargs["NextToken"] = token
+            resposta = rekognition_client.list_faces(**kwargs)
+            faces.extend(
+                {
+                    "face_id": f.get("FaceId"),
+                    "external_image_id": f.get("ExternalImageId"),
+                    "image_id": f.get("ImageId"),
+                }
+                for f in resposta.get("Faces", [])
+            )
+            token = resposta.get("NextToken")
+            if not token:
+                return faces, True
+        logger.warning("⚠️ Listagem de faces atingiu o teto de %s páginas.", MAX_PAGINAS)
+        return faces, False
+    except Exception as e:
+        logger.error(f"❌ Falha ao listar faces da coleção: {e}")
+        return [], False
+
+
 def deletar_rosto(face_id: str) -> bool:
     """
     Remove um rosto da coleção do Rekognition pelo FaceId.

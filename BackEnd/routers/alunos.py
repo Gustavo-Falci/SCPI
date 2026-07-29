@@ -11,6 +11,7 @@ from pydantic import EmailStr
 from core.config import BUCKET_NAME
 from core.helpers import client_ip, gerar_url_presigned, internal_error, validate_image_upload
 from core.limiter import limiter
+from core.regras import ANGULOS_VALIDOS
 from core.security import get_current_user, require_self_or_admin
 from core.utils import formatar_nome_para_external_id
 from infra.aws_clientes import s3_client
@@ -178,7 +179,6 @@ async def cadastrar_aluno_api(
             detail="É necessário consentimento explícito para processar dados biométricos (LGPD art. 11).",
         )
 
-    ANGULOS_VALIDOS = {"frontal", "esquerda", "direita", "baixo"}
     if angulo not in ANGULOS_VALIDOS:
         raise HTTPException(status_code=400, detail=f"Ângulo inválido. Use um de: {sorted(ANGULOS_VALIDOS)}")
 
