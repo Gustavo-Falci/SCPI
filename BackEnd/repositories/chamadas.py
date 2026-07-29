@@ -360,36 +360,63 @@ def obter_chamada_por_id(chamada_id):
         return cur.fetchone()
 
 
-def listar_opcoes_filtros_relatorios(professor_id):
-    """Opções de filtro derivadas das chamadas Fechadas do professor.
+def listar_opcoes_filtros_relatorios(professor_id=None):
+    """Opções de filtro derivadas das chamadas Fechadas.
 
     Mantém as opções coerentes com os dados existentes, independente de
-    paginação ou filtros aplicados na listagem.
+    paginação ou filtros aplicados na listagem — sem isso o usuário escolhe
+    uma turma que não tem chamada nenhuma e recebe lista vazia sem entender.
+
+    Sem `professor_id`, cobre todas as chamadas (visão do admin); com ele,
+    apenas as do professor (visão da tela do professor).
+
+    JOIN interno em Professores de propósito: a listagem de relatórios também
+    usa JOIN interno, então chamada órfã de professor não aparece lá. Oferecer
+    aqui uma turma cujas chamadas são todas órfãs devolveria lista vazia.
     """
     with get_db_cursor() as cur:
         if not cur:
-            return {"turmas": [], "turnos": [], "semestres": []}
-        cur.execute(
-            """
+            return {"turmas": [], "professores": [], "turnos": [], "semestres": []}
+        sql = """
             SELECT DISTINCT t.turma_id, t.nome_disciplina, t.codigo_turma,
-                            t.turno, t.semestre
+                            t.turno, t.semestre,
+                            c.professor_id, u.nome AS professor_nome
             FROM Chamadas c
             JOIN Turmas t ON t.turma_id = c.turma_id
-            WHERE c.status = 'Fechada' AND c.professor_id = %s
-            ORDER BY t.nome_disciplina ASC
-            """,
-            (professor_id,),
-        )
+            JOIN Professores pr ON pr.professor_id = c.professor_id
+            JOIN Usuarios u ON u.usuario_id = pr.usuario_id
+            WHERE c.status = 'Fechada'
+        """
+        params = []
+        if professor_id:
+            sql += " AND c.professor_id = %s"
+            params.append(professor_id)
+        sql += " ORDER BY t.nome_disciplina ASC"
+        cur.execute(sql, tuple(params))
         rows = cur.fetchall()
 
-    turmas = [
-        {"turma_id": r["turma_id"], "nome_disciplina": r["nome_disciplina"],
-         "codigo_turma": r["codigo_turma"]}
-        for r in rows
-    ]
+    # Trazer o professor na mesma query multiplica as linhas por turma: uma
+    # turma com dois professores viria duas vezes. Deduplica preservando a ordem.
+    turmas, vistas = [], set()
+    for r in rows:
+        if r["turma_id"] in vistas:
+            continue
+        vistas.add(r["turma_id"])
+        turmas.append({"turma_id": r["turma_id"], "nome_disciplina": r["nome_disciplina"],
+                       "codigo_turma": r["codigo_turma"]})
+
+    ordenados = sorted(
+        ({"professor_id": r["professor_id"], "nome": r["professor_nome"]}
+         for r in rows if r["professor_id"]),
+        key=lambda p: (p["nome"] or "", str(p["professor_id"])),
+    )
+    professores = [p for i, p in enumerate(ordenados)
+                   if i == 0 or p["professor_id"] != ordenados[i - 1]["professor_id"]]
+
     turnos = sorted({r["turno"] for r in rows if r["turno"]})
     semestres = sorted({r["semestre"] for r in rows if r["semestre"]}, reverse=True)
-    return {"turmas": turmas, "turnos": turnos, "semestres": semestres}
+    return {"turmas": turmas, "professores": professores,
+            "turnos": turnos, "semestres": semestres}
 
 
 def obter_turma_relatorio(turma_id):

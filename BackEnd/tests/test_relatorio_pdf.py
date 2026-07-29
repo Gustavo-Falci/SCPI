@@ -287,3 +287,39 @@ def test_frequencia_com_periodo_como_datetime_date():
         },
     })
     assert pdf.startswith(b"%PDF-")
+
+
+def test_linha_de_filtros_mostra_professor():
+    from infra.relatorio_pdf import _linha_de_filtros
+
+    assert "Professor: Ana Souza" in _linha_de_filtros({"professor": "Ana Souza"})
+
+
+def test_linha_de_filtros_sem_professor_diz_todos():
+    from infra.relatorio_pdf import _linha_de_filtros
+
+    assert "Professor: todos" in _linha_de_filtros({})
+
+
+def test_linha_de_filtros_anuncia_recorte_de_frequencia():
+    from core.regras import LIMITE_FREQUENCIA
+    from infra.relatorio_pdf import _linha_de_filtros
+
+    linha = _linha_de_filtros({"frequencia_baixa": True})
+    assert f"Frequência: abaixo de {LIMITE_FREQUENCIA}%" in linha
+
+
+def test_linha_de_filtros_omite_frequencia_quando_inativa():
+    """'Frequência: todas' não informaria nada; melhor não escrever."""
+    from infra.relatorio_pdf import _linha_de_filtros
+
+    assert "Frequência" not in _linha_de_filtros({"frequencia_baixa": False})
+
+
+def test_linha_de_filtros_periodo_nas_quatro_combinacoes():
+    from infra.relatorio_pdf import _linha_de_filtros
+
+    assert "01/05 a 31/05" in _linha_de_filtros({"data_inicio": "01/05", "data_fim": "31/05"})
+    assert "a partir de 01/05" in _linha_de_filtros({"data_inicio": "01/05"})
+    assert "até 31/05" in _linha_de_filtros({"data_fim": "31/05"})
+    assert "todo o histórico" in _linha_de_filtros({})
