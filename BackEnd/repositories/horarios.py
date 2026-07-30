@@ -155,6 +155,7 @@ def listar_aulas_hoje_por_professor(usuario_id, dia_semana):
             JOIN turmas t ON h.turma_id = t.turma_id
             WHERE t.professor_id = (SELECT professor_id FROM Professores WHERE usuario_id = %s)
             AND h.dia_semana = %s
+            ORDER BY h.horario_inicio ASC
             """,
             (usuario_id, dia_semana),
         )

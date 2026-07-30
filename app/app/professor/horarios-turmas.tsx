@@ -31,6 +31,11 @@ function isAulaAoVivo(horario: string): boolean {
   return nowMin >= inicioMin && nowMin <= fimMin;
 }
 
+function minutosDoInicio(horario: string): number {
+  const [h, m] = (horario.split(' - ')[0] ?? '00:00').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
 type Periodo = 'manha' | 'tarde' | 'noite';
 
 function getPeriodo(horario: string): Periodo {
@@ -73,7 +78,10 @@ export default function AulasDoDia() {
         return;
       }
       const resp = await apiGet(`/professor/dashboard/${userId}`);
-      setAulas(resp.aulas_hoje || []);
+      const lista = [...(resp.aulas_hoje || [])];
+      // A timeline agrupa por período comparando vizinhos, então depende da ordem.
+      lista.sort((a, b) => minutosDoInicio(a.horario) - minutosDoInicio(b.horario));
+      setAulas(lista);
     } catch (err) {
       console.error("Erro ao carregar horários professor:", err);
     } finally {
