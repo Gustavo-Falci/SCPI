@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -13,10 +13,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
+import * as WebBrowser from "expo-web-browser";
 import { storage } from "../../services/storage";
+import { apiGet } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 import { Button } from "../../components/ui/button";
+
+type Consentimento = {
+  estado: "ativo" | "revogado" | "nunca";
+  politica_versao: string | null;
+  registrado_em: string | null;
+  angulos_cadastrados: string[];
+  politica_vigente: { versao: string; url: string };
+};
 
 export default function PerfilAluno() {
   const router = useRouter();
@@ -25,6 +35,21 @@ export default function PerfilAluno() {
   const [ra, setRa] = useState("");
   const [exportando, setExportando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
+  const [consent, setConsent] = useState<Consentimento | null>(null);
+
+  const carregarConsentimento = useCallback(async () => {
+    try {
+      const userId = await storage.getItem("user_id");
+      if (!userId) return;
+      setConsent(await apiGet(`/aluno/consentimento/${userId}`));
+    } catch {
+      setConsent(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    carregarConsentimento();
+  }, [carregarConsentimento]);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -106,6 +131,7 @@ export default function PerfilAluno() {
       });
       if (resp.status === 200) {
         Alert.alert("Pronto", "Sua biometria foi removida do sistema.");
+        await carregarConsentimento();
       } else if (resp.status === 404) {
         Alert.alert("Nada a excluir", "Você não possui biometria cadastrada.");
       } else {
@@ -195,6 +221,58 @@ export default function PerfilAluno() {
           </View>
         </View>
 
+        {consent && (
+          <View style={styles.infoSection}>
+            <Text style={styles.sectionTitle}>Privacidade e Biometria</Text>
+
+            <View style={styles.consentStatusRow}>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: consent.estado === "ativo" ? "#1DB954" : Colors.brand.textSecondary },
+                ]}
+              />
+              <Text style={styles.statusText}>
+                {consent.estado === "ativo" ? "Biometria ativa" : null}
+                {consent.estado === "revogado" ? "Biometria revogada" : null}
+                {consent.estado === "nunca" ? "Nenhuma biometria cadastrada" : null}
+              </Text>
+            </View>
+
+            {consent.registrado_em && (
+              <Text style={styles.consentDetail}>
+                {consent.estado === "ativo" ? "Consentimento em " : "Revogada em "}
+                {new Date(consent.registrado_em).toLocaleString("pt-BR")}
+              </Text>
+            )}
+
+            {consent.politica_versao && (
+              <Text style={styles.consentDetail}>
+                {consent.politica_versao === "legado"
+                  ? "Aceite anterior ao versionamento da política"
+                  : `Política versão ${consent.politica_versao}`}
+              </Text>
+            )}
+
+            {consent.angulos_cadastrados.length > 0 && (
+              <Text style={styles.consentDetail}>
+                {consent.angulos_cadastrados.length} ângulo
+                {consent.angulos_cadastrados.length > 1 ? "s" : ""} cadastrado
+                {consent.angulos_cadastrados.length > 1 ? "s" : ""}
+              </Text>
+            )}
+
+            <TouchableOpacity
+              onPress={() => WebBrowser.openBrowserAsync(consent.politica_vigente.url)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Ver política de privacidade"
+            >
+              <Text style={styles.consentLink}>Ver Política de Privacidade →</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.actionsSection}>
           <Button
             title={exportando ? "Exportando..." : "Exportar meus dados (LGPD)"}
@@ -209,7 +287,7 @@ export default function PerfilAluno() {
             variant="outline"
             style={[styles.logoutBtn, { marginBottom: 12 }]}
             textStyle={{ color: Colors.brand.error }}
-            disabled={excluindo}
+            disabled={excluindo || consent?.estado !== "ativo"}
           />
           <Button
             title="Sair da Conta"
@@ -253,6 +331,11 @@ const styles = StyleSheet.create({
   infoTexts: { marginLeft: 16 },
   infoLabel: { color: Colors.brand.textSecondary, fontSize: 12 },
   infoValue: { color: "#fff", fontSize: 15, fontWeight: "600", marginTop: 2 },
+  consentStatusRow: { flexDirection: "row", alignItems: "center", marginBottom: 8, marginLeft: 4 },
+  statusDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  statusText: { color: Colors.brand.text, fontSize: 15, fontWeight: "600" },
+  consentDetail: { color: Colors.brand.textSecondary, fontSize: 13, marginBottom: 4, marginLeft: 4 },
+  consentLink: { color: Colors.brand.primary, fontSize: 14, fontWeight: "600", marginTop: 8, marginLeft: 4 },
   actionsSection: { marginTop: 8 },
   logoutBtn: { borderColor: "rgba(255, 75, 75, 0.3)", backgroundColor: "rgba(255, 75, 75, 0.05)" },
 });

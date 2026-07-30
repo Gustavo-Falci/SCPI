@@ -1,4 +1,5 @@
 from infra.database import get_db_cursor
+from repositories.consentimentos import listar_trilha
 
 LIMITE_PAGINA = 100
 SITUACOES_VALIDAS = ("sem_turma", "sem_biometria", "pendentes")
@@ -569,4 +570,16 @@ def buscar_dados_titular(usuario_id: str) -> dict | None:
             "revogado_em": revogado_em.isoformat() if revogado_em else None,
         },
         "presencas": [dict(p) for p in presencas],
+        # Trilha de consentimento: o titular tem direito ao próprio histórico
+        # de aceite e revogação (Art. 18, II), inclusive o IP que registramos.
+        "consentimentos": [
+            {
+                "evento": c["evento"],
+                "politica_versao": c["politica_versao"],
+                "registrado_em": c["registrado_em"].isoformat() if c["registrado_em"] else None,
+                "ip": c["ip"],
+                "origem": c["origem"],
+            }
+            for c in listar_trilha(aluno_id)
+        ],
     }

@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import * as WebBrowser from 'expo-web-browser';
 import {
   View,
   Text,
@@ -23,6 +22,8 @@ import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Colors } from "../../constants/theme";
 import { useErrorToast } from "../../hooks/useErrorToast";
+import { usePoliticaPrivacidade } from "../../hooks/usePoliticaPrivacidade";
+import { ConsentCard } from "../../components/lgpd/consent-card";
 
 const { height } = Dimensions.get("window");
 
@@ -52,6 +53,7 @@ export default function PrimeiroAcesso() {
   const cameraRef = useRef<CameraView | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [consentimento, setConsentimento] = useState(false);
+  const { politica, loading: politicaLoading, erro: politicaErro, recarregar } = usePoliticaPrivacidade();
   const [etapaAtual, setEtapaAtual] = useState(0);
   const [etapasConcluidas, setEtapasConcluidas] = useState<Set<string>>(new Set());
   const [userData, setUserData] = useState<any>(null);
@@ -156,7 +158,8 @@ export default function PrimeiroAcesso() {
       const type = match ? `image/${match[1]}` : `image/jpeg`;
 
       formData.append("foto", { uri: localUri, name: filename, type } as any);
-      formData.append("consentimento_biometrico", "true");
+      formData.append("consentimento_biometrico", String(consentimento));
+      formData.append("politica_versao", politica?.versao ?? "");
 
       await apiPostFormData("/alunos/cadastrar-face", formData);
 
@@ -301,43 +304,21 @@ export default function PrimeiroAcesso() {
               {etapaAtual === 0 && (
                 <>
                   <Text style={styles.faceSectionLabel}>Privacidade</Text>
-                  <View style={[styles.consentCard, consentimento && styles.consentCardActive]}>
-                    <View style={styles.consentHeader}>
-                      <Ionicons name="shield-checkmark-outline" size={22} color={Colors.brand.primary} />
-                      <Text style={styles.consentTitle}>Consentimento LGPD</Text>
-                    </View>
-                    <Text style={styles.consentBody}>
-                      Autorizo o SCPI a coletar e processar minha imagem facial para{" "}
-                      <Text style={styles.consentBodyStrong}>controle de presença nas aulas</Text>{" "}
-                      (LGPD Art. 11, II, &apos;a&apos;). Dados armazenados em servidores AWS (us-east-1, EUA) sob o DPA da AWS — LGPD Art. 33, II. Posso revogar este consentimento a qualquer momento pelo meu perfil.{" "}
-                      <Text
-                        style={{ color: Colors.brand.primary, textDecorationLine: "underline" }}
-                        onPress={() => WebBrowser.openBrowserAsync(process.env.EXPO_PUBLIC_PRIVACY_URL ?? "")}
-                      >
-                        Ver Política de Privacidade.
-                      </Text>
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.consentRow}
-                      onPress={() => setConsentimento((v) => !v)}
-                      activeOpacity={0.8}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <View style={[styles.checkbox, consentimento && styles.checkboxActive]}>
-                        {consentimento && <Ionicons name="checkmark" size={16} color="#fff" />}
-                      </View>
-                      <Text style={styles.consentCheckLabel}>
-                        Li e concordo com o tratamento dos meus dados biométricos.
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                  <ConsentCard
+                    checked={consentimento}
+                    onToggle={() => setConsentimento((v) => !v)}
+                    politica={politica}
+                    loading={politicaLoading}
+                    erro={politicaErro}
+                    onRecarregar={recarregar}
+                  />
                 </>
               )}
 
               <TouchableOpacity
-                style={[styles.mainButton, etapaAtual === 0 && !consentimento && styles.mainButtonDisabled]}
-                onPress={() => (etapaAtual === 0 ? consentimento : true) && setCameraOpen(true)}
-                disabled={etapaAtual === 0 && !consentimento}
+                style={[styles.mainButton, etapaAtual === 0 && (!consentimento || !politica) && styles.mainButtonDisabled]}
+                onPress={() => (etapaAtual === 0 ? consentimento && !!politica : true) && setCameraOpen(true)}
+                disabled={etapaAtual === 0 && (!consentimento || !politica)}
                 activeOpacity={0.85}
               >
                 <Ionicons name="camera" size={22} color="#fff" />
@@ -637,39 +618,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontStyle: "italic",
   },
-  consentCard: {
-    backgroundColor: Colors.brand.card,
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  consentCardActive: { borderColor: Colors.brand.primary, backgroundColor: "rgba(75, 57, 239, 0.06)" },
-  consentHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
-  consentTitle: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  consentBody: { color: Colors.brand.textSecondary, fontSize: 13, lineHeight: 20, marginBottom: 16 },
-  consentBodyStrong: { color: Colors.brand.text, fontWeight: "700" },
-  consentRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.06)",
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: Colors.brand.textSecondary,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 1,
-  },
-  checkboxActive: { backgroundColor: Colors.brand.primary, borderColor: Colors.brand.primary },
-  consentCheckLabel: { flex: 1, color: Colors.brand.text, fontSize: 13, fontWeight: "500", lineHeight: 18 },
   cameraWrapper: { flex: 1, backgroundColor: "#000" },
   scannerContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   faceFrameContainer: { width: 280, height: 420, justifyContent: "center", alignItems: "center" },

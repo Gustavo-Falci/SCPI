@@ -3,6 +3,11 @@ import logging
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from core.config import (
+    POLITICA_PRIVACIDADE_VERSAO,
+    POLITICA_PRIVACIDADE_VIGENCIA,
+    SCPI_PRIVACY_URL,
+)
 from core.limiter import limiter
 from infra.database import get_db_cursor
 
@@ -14,6 +19,17 @@ router = APIRouter()
 @router.get("/")
 def home():
     return {"mensagem": "API SCPI está rodando!"}
+
+
+@router.get("/politica-privacidade")
+@limiter.limit("30/minute")
+def politica_privacidade(request: Request):
+    """Versão vigente da política — público, o app lê antes de mostrar o aceite."""
+    return {
+        "versao": POLITICA_PRIVACIDADE_VERSAO,
+        "data_vigencia": POLITICA_PRIVACIDADE_VIGENCIA,
+        "url": SCPI_PRIVACY_URL,
+    }
 
 
 @router.api_route("/health", methods=["GET", "HEAD"])

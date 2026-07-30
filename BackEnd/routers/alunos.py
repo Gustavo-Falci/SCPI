@@ -8,7 +8,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import EmailStr
 
-from core.config import BUCKET_NAME
+from core.config import (
+    BUCKET_NAME,
+    POLITICA_PRIVACIDADE_VERSAO,
+    SCPI_PRIVACY_URL,
+)
+from core.errors import ErrorCode, bad_request
 from core.helpers import client_ip, gerar_url_presigned, internal_error, validate_image_upload
 from core.limiter import limiter
 from core.regras import ANGULOS_VALIDOS
@@ -24,6 +29,7 @@ from repositories.alunos import (
     obter_dashboard_aluno,
 )
 from repositories.chamadas import listar_historico_chamadas_aluno
+from repositories.consentimentos import obter_ultimo_evento, registrar_evento
 from repositories.horarios import listar_aulas_hoje_por_aluno
 from repositories.rostos import (
     listar_rostos_ativos_por_aluno,
@@ -159,6 +165,38 @@ def get_historico_chamadas_aluno(
         raise internal_error(e, "get_historico_chamadas_aluno")
 
 
+def validar_consentimento(consentimento_biometrico, politica_versao):
+    """Rejeita cadastro sem aceite ou com versão de política divergente.
+
+    Versão divergente = o aluno leu um texto que não é o vigente. Aceitar aqui
+    reproduziria a lacuna que este campo existe para fechar.
+    """
+    if not consentimento_biometrico:
+        raise bad_request(ErrorCode.CONSENTIMENTO_OBRIGATORIO)
+    if politica_versao != POLITICA_PRIVACIDADE_VERSAO:
+        raise bad_request(ErrorCode.POLITICA_DESATUALIZADA)
+
+
+def registrar_aceite_se_novo(aluno_id, politica_versao, ip, user_agent):
+    """Grava 'aceite' só quando o estado atual não é já um aceite desta versão.
+
+    Um cadastro completo manda 4 ângulos; sem esta guarda a trilha vira 4
+    aceites idênticos e deixa de ser legível. Um aluno vindo do backfill tem
+    aceite 'legado' — a versão diferente força o registro versionado.
+    """
+    ultimo = obter_ultimo_evento(aluno_id)
+    ja_aceito = (
+        ultimo is not None
+        and ultimo.get("evento") == "aceite"
+        and ultimo.get("politica_versao") == politica_versao
+    )
+    if ja_aceito:
+        return False
+    registrar_evento(aluno_id, "aceite", politica_versao,
+                     ip=ip, user_agent=user_agent, origem="app")
+    return True
+
+
 @router.post("/alunos/cadastrar-face")
 @limiter.limit("10/minute")
 async def cadastrar_aluno_api(
@@ -169,15 +207,12 @@ async def cadastrar_aluno_api(
     ra: str = Form(..., pattern=r"^[A-Za-z0-9]{4,20}$"),
     foto: UploadFile = File(...),
     consentimento_biometrico: bool = Form(...),
+    politica_versao: str = Form(...),
     angulo: str = Form("frontal"),
     current_user: dict = Depends(get_current_user),
 ):
     """Recebe dados e foto do App, salva no S3, indexa no Rekognition e salva no Banco."""
-    if not consentimento_biometrico:
-        raise HTTPException(
-            status_code=400,
-            detail="É necessário consentimento explícito para processar dados biométricos (LGPD art. 11).",
-        )
+    validar_consentimento(consentimento_biometrico, politica_versao)
 
     if angulo not in ANGULOS_VALIDOS:
         raise HTTPException(status_code=400, detail=f"Ângulo inválido. Use um de: {sorted(ANGULOS_VALIDOS)}")
@@ -230,6 +265,13 @@ async def cadastrar_aluno_api(
         rosto_anterior = obter_rosto_por_angulo(aluno_id, angulo)
 
         upsert_rosto(aluno_id, external_id, face_id, filename, angulo)
+
+        registrar_aceite_se_novo(
+            aluno_id,
+            politica_versao,
+            ip=client_ip(request),
+            user_agent=request.headers.get("user-agent") if request else None,
+        )
 
         # Remove o rosto antigo só depois do novo estar indexado e persistido —
         # se o index acima falhasse, a biometria anterior permaneceria intacta.
@@ -299,8 +341,48 @@ def status_angulos_face(usuario_id: str, current_user: dict = Depends(get_curren
         raise internal_error(e, "status_angulos_face")
 
 
+@router.get("/aluno/consentimento/{usuario_id}")
+def consentimento_estado(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    """Estado do consentimento para o card do perfil do aluno."""
+    require_self_or_admin(usuario_id, current_user)
+    try:
+        aluno = buscar_aluno_por_usuario_id(usuario_id)
+        if not aluno:
+            raise HTTPException(status_code=404, detail="Aluno não encontrado.")
+
+        ultimo = obter_ultimo_evento(aluno["aluno_id"])
+        rostos = listar_rostos_ativos_por_aluno(aluno["aluno_id"])
+
+        if ultimo is None:
+            estado = "nunca"
+        elif ultimo["evento"] == "aceite":
+            estado = "ativo"
+        else:
+            estado = "revogado"
+
+        registrado_em = ultimo["registrado_em"] if ultimo else None
+        return {
+            "estado": estado,
+            "politica_versao": ultimo["politica_versao"] if ultimo else None,
+            "registrado_em": registrado_em.isoformat() if registrado_em else None,
+            "angulos_cadastrados": [r["angulo"] for r in rostos],
+            "politica_vigente": {
+                "versao": POLITICA_PRIVACIDADE_VERSAO,
+                "url": SCPI_PRIVACY_URL,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "consentimento_estado")
+
+
 @router.delete("/aluno/biometria/{usuario_id}")
-def revogar_biometria(usuario_id: str, current_user: dict = Depends(get_current_user)):
+def revogar_biometria(
+    usuario_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
     """Permite ao aluno (ou Admin) revogar consentimento e apagar biometria."""
     require_self_or_admin(usuario_id, current_user)
     try:
@@ -324,6 +406,14 @@ def revogar_biometria(usuario_id: str, current_user: dict = Depends(get_current_
                 logger.warning("Falha ao deletar objeto no S3 (angulo=%s): %s", rosto.get("angulo"), e)
 
         revogar_rosto_por_aluno(aluno["aluno_id"])
+
+        origem = "app" if current_user.get("sub") == usuario_id else "admin"
+        registrar_evento(
+            aluno["aluno_id"], "revogacao", POLITICA_PRIVACIDADE_VERSAO,
+            ip=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+            origem=origem,
+        )
 
         audit_logger.info("Biometria revogada usuario=%s por=%s", usuario_id, current_user.get("sub"))
         return {"mensagem": "Biometria revogada e removida com sucesso."}
