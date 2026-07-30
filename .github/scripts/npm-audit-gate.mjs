@@ -19,14 +19,16 @@ const ALLOWLIST = {
   "GHSA-mh99-v99m-4gvg": {
     pacote: "brace-expansion",
     motivo:
-      "DoS por expansão sem limite. Patch existe só em 5.0.8; a cadeia " +
-      "minimatch@3 (glob 7 -> eslint / react-native codegen / babel-jest) exige a " +
-      "API callable do 1.x, que 5.x não expõe (exporta { expand } nomeado). " +
-      "Sem backport para 1.x upstream. Só roda em dev/build, com padrões de glob " +
-      "vindos do repo, nunca de input de usuário — o bundle do app não leva minimatch.",
+      "DoS por expansão sem limite (CVE-2026-14257). JÁ CORRIGIDO na árvore: " +
+      "overrides pinam 1.1.18 (backport publicado em 2026-07-30, mantém a API " +
+      "callable que minimatch@3 exige) e 5.0.9 (o 5.0.8 do advisory deixou " +
+      "expandSequence e o acúmulo de `values` sem teto de maxLength). " +
+      "O alerta persiste porque o range da advisory é `<= 5.0.7` em semver puro, " +
+      "que engloba o ramo 1.x inteiro — inclusive o 1.1.18 já corrigido.",
     remover_quando:
-      "expo/react-native/eslint migrarem para glob 10+ (minimatch 9+), eliminando " +
-      "minimatch@3 da árvore.",
+      "o GitHub corrigir o range da advisory para excluir o 1.x corrigido " +
+      "(ou expo/react-native/eslint migrarem para glob 10+, eliminando " +
+      "minimatch@3 da árvore).",
   },
 };
 
