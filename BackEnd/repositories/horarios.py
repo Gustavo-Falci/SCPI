@@ -148,7 +148,7 @@ def listar_aulas_hoje_por_professor(usuario_id, dia_semana):
             return []
         cur.execute(
             """
-            SELECT h.horario_id as id, t.nome_disciplina as nome,
+            SELECT h.horario_id as id, t.turma_id, t.nome_disciplina as nome,
                    to_char(h.horario_inicio, 'HH24:MI') || ' - ' || to_char(h.horario_fim, 'HH24:MI') as horario,
                    h.sala
             FROM horarios_aulas h

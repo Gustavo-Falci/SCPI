@@ -177,7 +177,15 @@ export default function HomeProfessor() {
                 activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel={`Ver turma ${aula.nome}`}
-                onPress={() => router.push("/professor/turmas")}
+                onPress={() =>
+                  router.push({
+                    pathname: "/professor/detalhes-turma",
+                    params: {
+                      turma_id: String(aula.turma_id),
+                      turma_nome: String(aula.nome),
+                    },
+                  })
+                }
               >
                 <View style={styles.classInfo}>
                   <Text style={styles.className}>{aula.nome}</Text>
