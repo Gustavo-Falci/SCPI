@@ -58,6 +58,7 @@ class ErrorCode:
     FACE_NAO_RECONHECIDA = "FACE_NAO_RECONHECIDA"
     FACE_JA_CADASTRADA = "FACE_JA_CADASTRADA"
     CONSENTIMENTO_OBRIGATORIO = "CONSENTIMENTO_OBRIGATORIO"
+    POLITICA_DESATUALIZADA = "POLITICA_DESATUALIZADA"
 
     # Rate limit
     RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
@@ -93,6 +94,7 @@ DEFAULT_MESSAGES: dict[str, str] = {
     ErrorCode.FACE_NAO_RECONHECIDA: "Rosto não reconhecido. Tente novamente.",
     ErrorCode.FACE_JA_CADASTRADA: "Este rosto já está cadastrado para outro usuário.",
     ErrorCode.CONSENTIMENTO_OBRIGATORIO: "É necessário aceitar o consentimento LGPD para o cadastro biométrico.",
+    ErrorCode.POLITICA_DESATUALIZADA: "A política de privacidade foi atualizada. Reabra a tela para ler a versão vigente e aceitar novamente.",
     ErrorCode.RATE_LIMIT_EXCEEDED: "Muitas requisições em pouco tempo. Aguarde alguns segundos e tente novamente.",
     ErrorCode.INTERNAL_ERROR: "Ocorreu um erro interno. Tente novamente em instantes.",
     ErrorCode.SERVICE_UNAVAILABLE: "Serviço temporariamente indisponível.",

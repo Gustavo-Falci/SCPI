@@ -186,6 +186,49 @@ def ensure_lgpd_columns():
         )
 
 
+def ensure_consentimentos_table():
+    """Trilha append-only de consentimento LGPD + backfill da base existente.
+
+    Nunca sofre UPDATE/DELETE: revogar é inserir um evento novo. O backfill
+    marca quem já tem biometria ativa como aceite 'legado' — honesto sobre a
+    origem do dado, sem inventar prova de um aceite versionado que não houve.
+    """
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ConsentimentosLGPD (
+                consentimento_id SERIAL PRIMARY KEY,
+                aluno_id         UUID NOT NULL REFERENCES Alunos(aluno_id),
+                evento           VARCHAR(20) NOT NULL,
+                politica_versao  VARCHAR(20) NOT NULL,
+                registrado_em    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ip               VARCHAR(45),
+                user_agent       TEXT,
+                origem           VARCHAR(20) NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_consent_aluno "
+            "ON ConsentimentosLGPD (aluno_id, registrado_em DESC)"
+        )
+        # NOT EXISTS: os 4 workers gunicorn chamam run_all() no startup.
+        cur.execute(
+            """
+            INSERT INTO ConsentimentosLGPD
+                (aluno_id, evento, politica_versao, registrado_em, origem)
+            SELECT cr.aluno_id, 'aceite', 'legado',
+                   COALESCE(MIN(cr.consentimento_data), CURRENT_TIMESTAMP), 'backfill'
+            FROM Colecao_Rostos cr
+            WHERE cr.revogado_em IS NULL AND cr.consentimento_biometrico = TRUE
+              AND NOT EXISTS (
+                  SELECT 1 FROM ConsentimentosLGPD c WHERE c.aluno_id = cr.aluno_id
+              )
+            GROUP BY cr.aluno_id
+            """
+        )
+
+
 def ensure_refresh_tokens_table():
     with get_db_cursor(commit=True) as cur:
         cur.execute(
@@ -405,6 +448,7 @@ _ETAPAS = [
     "ensure_presenca_por_aula",
     "ensure_chamada_aberta_unica",
     "ensure_indices_filtros_alunos",
+    "ensure_consentimentos_table",
 ]
 
 

@@ -156,6 +156,59 @@ def _secao_presencas(presencas: list, estilos) -> list:
     return elementos
 
 
+def _secao_consentimentos(trilha: list, estilos) -> list:
+    elementos = [
+        Paragraph(
+            f"4. Histórico de Consentimento ({len(trilha)} eventos)",
+            estilos["Secao"],
+        )
+    ]
+    if not trilha:
+        elementos.append(
+            Paragraph("Nenhum evento de consentimento registrado.", estilos["Normal"])
+        )
+        return elementos
+    cabecalho = [["Evento", "Versão da política", "Data", "IP", "Origem"]]
+    linhas = cabecalho + [
+        [
+            "Aceite" if c.get("evento") == "aceite" else "Revogação",
+            c.get("politica_versao", "—"),
+            c.get("registrado_em", "—"),
+            c.get("ip") or "—",
+            c.get("origem", "—"),
+        ]
+        for c in trilha
+    ]
+    t = Table(linhas, colWidths=[3 * cm, 3.5 * cm, 4.5 * cm, 3 * cm, 2 * cm], repeatRows=1)
+    t.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                (
+                    "ROWBACKGROUNDS",
+                    (0, 1),
+                    (-1, -1),
+                    [colors.white, colors.HexColor("#f7fafc")],
+                ),
+            ]
+        )
+    )
+    elementos.append(t)
+    elementos.append(Spacer(1, 6))
+    elementos.append(
+        Paragraph(
+            "<i>Versão \"legado\" indica consentimento anterior ao versionamento "
+            "da política de privacidade.</i>",
+            estilos["Normal"],
+        )
+    )
+    return elementos
+
+
 def gerar_pdf_dados(dados: dict) -> bytes:
     """Gera relatório PDF LGPD Art. 18 a partir dos dados do titular."""
     buffer = io.BytesIO()
@@ -187,6 +240,7 @@ def gerar_pdf_dados(dados: dict) -> bytes:
     elementos += _secao_titular(dados.get("titular", {}), estilos)
     elementos += _secao_biometria(dados.get("biometria", {}), estilos)
     elementos += _secao_presencas(dados.get("presencas", []), estilos)
+    elementos += _secao_consentimentos(dados.get("consentimentos", []), estilos)
     elementos.append(Spacer(1, 24))
     elementos.append(
         Paragraph(

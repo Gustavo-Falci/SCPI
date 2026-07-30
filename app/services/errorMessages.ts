@@ -51,6 +51,7 @@ export const ERROR_CODE_MESSAGES: Record<string, string> = {
   FACE_NAO_RECONHECIDA: "Rosto não reconhecido. Tente novamente.",
   FACE_JA_CADASTRADA: "Este rosto já está cadastrado para outro usuário.",
   CONSENTIMENTO_OBRIGATORIO: "É necessário aceitar o consentimento LGPD para o cadastro biométrico.",
+  POLITICA_DESATUALIZADA: "A política de privacidade foi atualizada. Reabra a tela para ler a versão vigente e aceitar novamente.",
   RATE_LIMIT_EXCEEDED: "Muitas tentativas em pouco tempo. Aguarde alguns segundos.",
   INTERNAL_ERROR: "Ocorreu um erro interno. Tente novamente em instantes.",
   SERVICE_UNAVAILABLE: "Serviço temporariamente indisponível.",

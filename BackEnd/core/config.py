@@ -36,3 +36,13 @@ if not SCPI_EXPORT_HMAC_KEY:
         "SCPI_EXPORT_HMAC_KEY não definida. Gere com: "
         "python -c \"import secrets; print(secrets.token_hex(32))\""
     )
+
+# ---------------------------------------------------------------------------
+# LGPD Consentimento — versão vigente da política de privacidade.
+# Fica em código (não em env) de propósito: o git guarda quem mudou e quando,
+# que é exatamente o que se precisa provar num questionamento sobre consentimento.
+# Bump = editar portal/privacy.html + trocar as duas constantes abaixo.
+# ---------------------------------------------------------------------------
+POLITICA_PRIVACIDADE_VERSAO = "1.0"
+POLITICA_PRIVACIDADE_VIGENCIA = "2026-07-30"
+SCPI_PRIVACY_URL = os.getenv("SCPI_PRIVACY_URL", "")
