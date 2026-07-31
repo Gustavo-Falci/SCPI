@@ -1,3 +1,5 @@
+import uuid
+
 from infra.database import get_db_cursor, logger
 
 
@@ -98,68 +100,40 @@ def obter_professor_id(usuario_id):
         return res["professor_id"] if res else None
 
 
-def registrar_presenca_por_face(external_image_id):
-    """Registra presença se houver chamada aberta.
+# Motivos de recusa. O router mapeia para status/error_code e a câmera loga.
+# Sem eles, "não registrou" chega no campo sem causa — com uma máquina por
+# sala, isso é indepurável.
+MOTIVO_ROSTO_DESCONHECIDO = "rosto_desconhecido"
+MOTIVO_CHAMADA_FECHADA = "chamada_fechada"
+MOTIVO_NAO_MATRICULADO = "nao_matriculado"
+MOTIVO_JA_REGISTRADO = "ja_registrado"
+MOTIVO_ERRO_INTERNO = "erro_interno"
 
-    Retorna dict com dados do aluno/turma quando bem-sucedido, ou None.
+
+def _buscar_dados_notificacao(turma_id, aluno_uuid):
+    """Busca nome/e-mail/turma para a notificação de presença (best-effort).
+
+    Roda em transação PRÓPRIA e SOMENTE DEPOIS que a transação de escrita já
+    confirmou. Antes esta consulta ficava dentro do `with` de escrita, e uma
+    falha dela deixava a transação ABORTADA no Postgres: o `conn.commit()` do
+    encerramento vira um ROLLBACK silencioso (psycopg2 não levanta nesse caso),
+    as presenças recém-inseridas sumiam, mas a função devolvia motivo=None, o
+    router respondia 200 e a câmera marcava o aluno como definitivo — o aluno
+    sumia da chamada inteira sem erro em lugar nenhum.
+
+    Buscar ANTES dos INSERT também isolaria as escritas, mas gastaria uma
+    consulta em todos os caminhos de recusa e, ainda dentro da mesma transação,
+    uma falha dela impediria o registro (viraria erro_interno) em vez de
+    continuar best-effort. Depois do commit, nada que esta leitura faça pode
+    desfazer a presença já gravada.
+
+    Devolve None em qualquer falha: os campos de notificação caem para os
+    defaults do chamador (aluno_nome = "Aluno").
     """
-    with get_db_cursor(commit=True) as cur:
-        if not cur:
-            return None
-
-        cur.execute(
-            "SELECT aluno_id FROM Colecao_Rostos WHERE external_image_id = %s",
-            (external_image_id,),
-        )
-        aluno = cur.fetchone()
-
-        if not aluno:
-            logger.warning(f"Aluno não encontrado para ID: {external_image_id}")
-            return None
-
-        aluno_uuid = aluno["aluno_id"]
-
-        cur.execute(
-            """
-            SELECT chamada_id, turma_id, total_aulas FROM Chamadas
-            WHERE status = 'Aberta' ORDER BY data_criacao DESC LIMIT 1
-            """
-        )
-        chamada = cur.fetchone()
-
-        if not chamada:
-            logger.warning("Nenhuma chamada aberta no momento.")
-            return None
-
-        cur.execute(
-            "SELECT 1 FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = %s",
-            (chamada["turma_id"], aluno_uuid),
-        )
-
-        if not cur.fetchone():
-            logger.warning(f"Aluno {external_image_id} não pertence a esta turma.")
-            return None
-
-        total_aulas = chamada.get("total_aulas", 1) or 1
-
-        rows_inserted = 0
-        for num_aula in range(1, total_aulas + 1):
-            cur.execute(
-                """
-                INSERT INTO Presencas (chamada_id, aluno_id, num_aula, tipo_registro)
-                VALUES (%s, %s, %s, 'Reconhecimento')
-                ON CONFLICT (chamada_id, aluno_id, num_aula) DO NOTHING
-                """,
-                (chamada["chamada_id"], aluno_uuid, num_aula),
-            )
-            rows_inserted += cur.rowcount
-
-        if rows_inserted == 0:
-            return None
-
-        logger.info(f"✅ Presença confirmada: {external_image_id}")
-
-        try:
+    try:
+        with get_db_cursor() as cur:
+            if not cur:
+                return None
             cur.execute(
                 """
                 SELECT u.nome, u.email, u.usuario_id, t.nome_disciplina
@@ -168,16 +142,124 @@ def registrar_presenca_por_face(external_image_id):
                 JOIN Turmas t ON t.turma_id = %s
                 WHERE a.aluno_id = %s
                 """,
+                (turma_id, aluno_uuid),
+            )
+            return cur.fetchone()
+    except Exception as e:
+        logger.warning("Não foi possível buscar dados de notificação: %s", e)
+        return None
+
+
+def registrar_presenca_por_face(external_image_id, chamada_id):
+    """Registra presença do aluno na chamada informada.
+
+    `external_image_id` é o aluno_id (UUID) gravado como ExternalImageId na
+    collection do Rekognition. A chamada vem explícita de quem reconheceu — a
+    câmera sabe qual é a chamada da sala dela. Resolver "a chamada aberta mais
+    recente" globalmente gravava a presença na aula de outra sala sempre que
+    duas turmas estavam em aula ao mesmo tempo.
+
+    Devolve SEMPRE dict e nunca levanta: quem decide status HTTP é o router.
+    Sucesso traz motivo=None mais os dados de notificação; recusa traz só o
+    motivo.
+    """
+    try:
+        aluno_uuid = str(uuid.UUID(str(external_image_id)))
+    except (ValueError, AttributeError, TypeError):
+        # Face legada (ExternalImageId derivado do nome) ou lixo. Recusa
+        # explícita em vez de um WHERE que silenciosamente não casa com nada.
+        logger.warning("ExternalImageId não é UUID: %r", external_image_id)
+        return {"motivo": MOTIVO_ROSTO_DESCONHECIDO}
+
+    # O try envolve o `with` INTEIRO, e não só o corpo dele: o commit roda no
+    # ENCERRAMENTO do context manager (infra/database.py), depois do corpo. Com
+    # o try por dentro, uma falha nesse commit — exatamente o cenário "conexão
+    # derrubada no meio da transação" que este catch existe para cobrir —
+    # nascia fora do alcance dele, o get_db_cursor re-levantava e a exceção
+    # escapava, tornando falso o contrato "sempre dict, nunca levanta".
+    # MOTIVO_ERRO_INTERNO vira 503 no router e a câmera trata como transitório,
+    # tentando de novo no próximo burst; um 500 genérico seria tratado como
+    # definitivo e a presença daquele aluno se perderia na aula inteira.
+    try:
+        with get_db_cursor(commit=True) as cur:
+            if not cur:
+                # Banco fora: transitório. Não é "rosto desconhecido" — a câmera
+                # precisa distinguir para tentar de novo no próximo burst.
+                return {"motivo": MOTIVO_ERRO_INTERNO}
+
+            # Resolve por aluno_id, não por external_image_id: aproveita o
+            # prefixo do unique(aluno_id, angulo) e dispensa índice novo. O
+            # revogado_em cobre o caso de um FaceId sobreviver a uma
+            # revogação LGPD.
+            cur.execute(
+                "SELECT 1 FROM Colecao_Rostos "
+                "WHERE aluno_id = %s AND revogado_em IS NULL LIMIT 1",
+                (aluno_uuid,),
+            )
+            if not cur.fetchone():
+                logger.warning("Rosto sem cadastro ativo: aluno=%s", aluno_uuid)
+                return {"motivo": MOTIVO_ROSTO_DESCONHECIDO}
+
+            cur.execute(
+                "SELECT chamada_id, turma_id, total_aulas FROM Chamadas "
+                "WHERE chamada_id = %s AND status = 'Aberta'",
+                (chamada_id,),
+            )
+            chamada = cur.fetchone()
+            if not chamada:
+                logger.warning("Chamada %s não está aberta.", chamada_id)
+                return {"motivo": MOTIVO_CHAMADA_FECHADA}
+
+            cur.execute(
+                "SELECT 1 FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = %s",
                 (chamada["turma_id"], aluno_uuid),
             )
-            info = cur.fetchone()
-        except Exception as e:
-            logger.warning("Não foi possível buscar dados de notificação: %s", e)
-            info = None
+            if not cur.fetchone():
+                logger.warning(
+                    "Aluno %s não pertence à turma da chamada %s.", aluno_uuid, chamada_id
+                )
+                return {"motivo": MOTIVO_NAO_MATRICULADO}
 
-        return {
-            "usuario_id": info["usuario_id"] if info else None,
-            "aluno_nome": info["nome"] if info else external_image_id,
-            "aluno_email": info["email"] if info else None,
-            "turma_nome": info["nome_disciplina"] if info else "Turma",
-        }
+            total_aulas = chamada.get("total_aulas", 1) or 1
+
+            rows_inserted = 0
+            for num_aula in range(1, total_aulas + 1):
+                cur.execute(
+                    """
+                    INSERT INTO Presencas (chamada_id, aluno_id, num_aula, tipo_registro)
+                    VALUES (%s, %s, %s, 'Reconhecimento')
+                    ON CONFLICT (chamada_id, aluno_id, num_aula) DO NOTHING
+                    """,
+                    (chamada["chamada_id"], aluno_uuid, num_aula),
+                )
+                rows_inserted += cur.rowcount
+
+            if rows_inserted == 0:
+                return {"motivo": MOTIVO_JA_REGISTRADO}
+
+            turma_id = chamada["turma_id"]
+    except Exception as e:
+        # Erro real de banco (deadlock, conexão derrubada, query malformada) —
+        # inclusive a falha do commit no encerramento do `with` acima, que antes
+        # ficava fora do alcance deste catch.
+        logger.error(
+            "Erro ao registrar presença: aluno=%s chamada=%s erro=%s",
+            aluno_uuid, chamada_id, e,
+        )
+        return {"motivo": MOTIVO_ERRO_INTERNO}
+
+    # Só o sucesso chega aqui: as recusas retornam de dentro do `with`. Neste
+    # ponto a transação já foi confirmada — as presenças estão duráveis.
+    logger.info("✅ Presença confirmada: aluno=%s chamada=%s", aluno_uuid, chamada_id)
+
+    info = _buscar_dados_notificacao(turma_id, aluno_uuid)
+
+    return {
+        "motivo": None,
+        "usuario_id": info["usuario_id"] if info else None,
+        # Fallback "Aluno" e não o external_image_id: com UUID, o antigo
+        # fallback colocaria um UUID no corpo do e-mail ao titular.
+        "aluno_nome": info["nome"] if info else "Aluno",
+        "aluno_email": info["email"] if info else None,
+        "turma_nome": info["nome_disciplina"] if info else "Turma",
+    }

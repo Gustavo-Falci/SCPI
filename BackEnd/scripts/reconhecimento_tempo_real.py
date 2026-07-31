@@ -15,6 +15,7 @@ from core.config import COLLECTION_ID, FACE_MATCH_THRESHOLD_SALA
 from infra.aws_clientes import rekognition_client
 from scripts.confirmacao_burst import ConfirmadorBurst, Decisao, ResultadoFrame
 from scripts.anti_spoofing import DetectorTextura
+from scripts.registro_tracker import RegistroPresencaTracker
 
 load_dotenv(find_dotenv())
 _API_URL = os.getenv("SCPI_API_URL", "https://api.scpi.me").rstrip("/")
@@ -59,7 +60,7 @@ class SistemaReconhecimento:
         self.CAM_INDEX = _CAMERA_INDEX
 
         self.chamada_id_atual = None
-        self.presentes_chamada: set = set()
+        self.tracker = RegistroPresencaTracker()
 
         self.lock = threading.Lock()
         self._aws_pool = ThreadPoolExecutor(max_workers=4)
@@ -109,26 +110,57 @@ class SistemaReconhecimento:
 
         with self.lock:
             if chamada_id != self.chamada_id_atual:
-                anteriores = len(self.presentes_chamada)
+                anteriores = len(self.tracker)
                 self.chamada_id_atual = chamada_id
-                self.presentes_chamada.clear()
+                self.tracker.limpar()
                 if chamada_id:
                     logger.info(f"📋 Nova chamada detectada: {chamada_id} — {anteriores} presentes resetados.")
                 else:
                     logger.info(f"📋 Nenhuma chamada aberta em {_CAMERA_SALA} — {anteriores} presentes resetados.")
 
-    def _registrar_presenca(self, external_image_id):
+    # Status em que repetir não muda nada nesta chamada: 200 (gravado ou já
+    # gravado), 403 (aluno de outra turma), 404 (rosto sem cadastro ativo),
+    # 409 (chamada fechada). Insistir só gasta SearchFaces e API.
+    _STATUS_DEFINITIVOS = {200, 403, 404, 409}
+
+    def _registrar_presenca(self, external_image_id, chamada_id):
+        definitivo = False
         try:
             resp = requests.post(
                 f"{_API_URL}/chamadas/registrar_presenca_camera",
-                json={"external_image_id": external_image_id},
+                json={"external_image_id": external_image_id, "chamada_id": chamada_id},
                 headers={"x-service-token": _SERVICE_TOKEN},
                 timeout=10,
             )
+            definitivo = resp.status_code in self._STATUS_DEFINITIVOS
             if resp.status_code != 200:
-                logger.warning(f"API retornou {resp.status_code} para {external_image_id}: {resp.text}")
+                logger.warning(
+                    "API retornou %s para %s (chamada %s): %s",
+                    resp.status_code, external_image_id, chamada_id, resp.text,
+                )
         except Exception as e:
+            # Rede/timeout: transitório. definitivo continua False e o próximo
+            # burst tenta de novo.
             logger.error(f"Erro ao registrar presença via API: {e}")
+        finally:
+            with self.lock:
+                # A resposta pode chegar depois de `_sincronizar_chamada` já
+                # ter trocado de chamada e dado `limpar()` no tracker (POST
+                # atrasado por rede lenta, ou a chamada fechou no meio do
+                # burst). Se concluíssemos incondicionalmente, um 409 tardio
+                # marcaria X como "resolvido" na geração NOVA do tracker — e,
+                # se X também estiver matriculado na chamada B (sala
+                # compartilhada, período seguinte), ele nunca mais seria
+                # reavaliado ali: falta indevida silenciosa, o problema que
+                # esta task inteira existe para eliminar. Só concluímos se a
+                # chamada ainda for a mesma que originou este POST.
+                if self.chamada_id_atual == chamada_id:
+                    self.tracker.concluir(external_image_id, definitivo=definitivo)
+                else:
+                    logger.debug(
+                        "Resposta de %s (chamada %s) descartada: chamada atual já é %s.",
+                        external_image_id, chamada_id, self.chamada_id_atual,
+                    )
 
     def _analisar_crop(self, face_bytes, chamada_id_referencia, textura=None):
         """SearchFaces + (se match novo) DetectFaces p/ pose. Retorna ResultadoFrame|None.
@@ -147,8 +179,9 @@ class SistemaReconhecimento:
             with self.lock:
                 if self.chamada_id_atual != chamada_id_referencia:
                     return None
-                if external_id in self.presentes_chamada:
-                    # Já registrado: não gasta DetectFaces nem entra no burst.
+                if self.tracker.tratado(external_id):
+                    # Já resolvido ou com envio em andamento: não gasta
+                    # DetectFaces nem entra no burst.
                     return None
 
             yaw = pitch = None
@@ -260,9 +293,10 @@ class SistemaReconhecimento:
                         with self.lock:
                             if self.chamada_id_atual != chamada_atual:
                                 continue
-                            if external_id in self.presentes_chamada:
+                            # Reivindica antes de submeter; só vira "resolvido"
+                            # quando o servidor responder.
+                            if not self.tracker.reivindicar(external_id):
                                 continue
-                            self.presentes_chamada.add(external_id)
                         # Loga textura (gate) + magnitude (advisory) p/ calibração.
                         gate = self.confirmador.gate
                         logger.info(
@@ -271,7 +305,9 @@ class SistemaReconhecimento:
                             f"tex_limiar={_TEXTURE_LIVENESS_MIN}, magnitude={av.magnitude}, "
                             f"pose_limiar={_LIVENESS_POSE_STD_MIN}]"
                         )
-                        self._api_pool.submit(self._registrar_presenca, external_id)
+                        self._api_pool.submit(
+                            self._registrar_presenca, external_id, chamada_atual
+                        )
                     elif av.decisao is Decisao.PENDENTE:
                         gate = self.confirmador.gate
                         motivo = "textura baixa — possível foto" if gate == "textura" \
