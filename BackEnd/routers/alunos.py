@@ -18,7 +18,6 @@ from core.helpers import client_ip, gerar_url_presigned, internal_error, validat
 from core.limiter import limiter
 from core.regras import ANGULOS_VALIDOS
 from core.security import get_current_user, require_self_or_admin
-from core.utils import formatar_nome_para_external_id
 from infra.aws_clientes import s3_client
 from infra.rekognition_aws import deletar_rosto, indexar_rosto_da_imagem_s3
 from repositories.alunos import (
@@ -238,8 +237,20 @@ async def cadastrar_aluno_api(
         if current_user.get("role") not in {"Aluno", "Admin"}:
             raise HTTPException(status_code=403, detail="Acesso negado.")
 
-        external_id = formatar_nome_para_external_id(nome)
-        filename = f"alunos/{external_id}_{safe_basename}"
+        # aluno_id resolvido ANTES do upload: além de ser o identificador da
+        # biometria, evita gastar upload no S3 e IndexFaces quando o perfil de
+        # aluno nem existe.
+        aluno = buscar_aluno_por_usuario_id(target_user_id)
+        if not aluno:
+            raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado para este usuário.")
+
+        aluno_id = aluno['aluno_id']
+
+        # ExternalImageId = aluno_id, não o nome: dois alunos homônimos geravam
+        # o mesmo id e a presença caía no aluno errado. De quebra tira o nome
+        # dos metadados da collection e do caminho no S3 (minimização LGPD).
+        external_id = str(aluno_id)
+        filename = f"alunos/{external_id}/{safe_basename}"
 
         # Upload direto da memória — sem arquivo temporário em disco (evita race,
         # escrita em CWD não-gravável e leak por crash entre write e remove).
@@ -251,12 +262,6 @@ async def cadastrar_aluno_api(
             raise HTTPException(status_code=400, detail="Nenhum rosto detectado na imagem.")
 
         face_id = resultado_rekognition["FaceRecords"][0]["Face"]["FaceId"]
-
-        aluno = buscar_aluno_por_usuario_id(target_user_id)
-        if not aluno:
-            raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado para este usuário.")
-
-        aluno_id = aluno['aluno_id']
 
         # Captura o rosto anterior deste ângulo ANTES do upsert sobrescrever o
         # ponteiro. Sem isso o FaceId/objeto S3 antigos ficam órfãos e a

@@ -46,7 +46,6 @@ _UNIQUE_CONSTRAINT_MESSAGES: dict[str, str] = {
     "professores_usuario_id_key": "Este usuário já está cadastrado como professor.",
     "turmas_codigo_turma_key": "Já existe uma turma com este código.",
     "turma_alunos_turma_id_aluno_id_key": "Aluno já matriculado nesta turma.",
-    "colecao_rostos_external_image_id_key": "Rosto já cadastrado para este aluno.",
     "presencas_chamada_id_aluno_id_key": "Presença já registrada para este aluno.",
     "presencas_chamada_aluno_aula_key": "Presença já registrada para esta aula.",
     "uq_chamada_aberta_por_turma": "Já existe uma chamada aberta para esta turma.",
