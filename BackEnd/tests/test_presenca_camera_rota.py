@@ -10,13 +10,15 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 
-def _chamar(payload):
+def _chamar(payload, background_tasks=None):
     from routers.chamadas import registrar_presenca_camera
     from fastapi import BackgroundTasks
 
     return asyncio.run(
         registrar_presenca_camera(
-            payload=payload, background_tasks=BackgroundTasks(), _=None
+            payload=payload,
+            background_tasks=background_tasks or BackgroundTasks(),
+            _=None,
         )
     )
 
@@ -37,9 +39,19 @@ def test_endpoint_selfie_nao_existe_mais():
     assert "/chamadas/registrar_rosto" not in caminhos
 
 
-def test_sucesso_responde_200(monkeypatch):
+def test_sucesso_responde_200_e_agenda_notificacao_com_argumentos_na_ordem(monkeypatch):
+    """Afirma o wiring da notificação, não só o status.
+
+    A assinatura é enviar_notificacoes_presenca(usuario_id, aluno_nome,
+    aluno_email, turma_nome): trocar nome e e-mail de lugar mandaria o e-mail
+    para lugar nenhum e imprimiria o endereço no corpo da mensagem, sem nenhum
+    sinal — o BackgroundTask engole o resultado e o endpoint continua 200.
+    """
+    from fastapi import BackgroundTasks
+
     from routers.chamadas import PresencaCameraPayload
     import routers.chamadas as mod
+    from services.notificacoes import enviar_notificacoes_presenca
 
     monkeypatch.setattr(
         mod,
@@ -49,8 +61,18 @@ def test_sucesso_responde_200(monkeypatch):
             "aluno_email": "ana@x.com", "turma_nome": "Cálculo I",
         },
     )
-    resp = _chamar(PresencaCameraPayload(external_image_id="x", chamada_id=1))
+    background_tasks = BackgroundTasks()
+
+    resp = _chamar(
+        PresencaCameraPayload(external_image_id="x", chamada_id=1),
+        background_tasks=background_tasks,
+    )
+
     assert resp["ja_registrado"] is False
+    assert len(background_tasks.tasks) == 1
+    tarefa = background_tasks.tasks[0]
+    assert tarefa.func is enviar_notificacoes_presenca
+    assert tarefa.args == ("u1", "Ana", "ana@x.com", "Cálculo I")
 
 
 def test_ja_registrado_responde_200_idempotente(monkeypatch):
