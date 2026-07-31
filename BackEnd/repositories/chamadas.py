@@ -106,22 +106,59 @@ def obter_chamada_aberta_por_turma(turma_id):
 
 
 def obter_chamada_aberta_por_sala(sala):
+    """Resolve com qual chamada a câmera daquela sala deve sincronizar.
+
+    Sala NÃO é chave de chamada: uma mesma sala tem várias turmas no mesmo dia
+    (07:00 e 13:00 numa segunda, por exemplo) e a query casa por sala + dia da
+    semana. Enquanto todo mundo fecha a chamada no fim da aula existe só uma
+    candidata; a ambiguidade aparece quando alguém deixa chamada aberta — o que
+    acontece o bastante para o sistema ter fechamento automático.
+
+    Sem ORDER BY, o Postgres devolvia qualquer uma das candidatas. Se saísse a
+    da manhã, a câmera da tarde sincronizava na aula errada e TODOS os alunos
+    presentes levavam 403 `nao_matriculado` — que é definitivo para a câmera. A
+    turma inteira ficava ausente, em silêncio, pela aula toda. Agora vence a
+    chamada mais recente (a mais provável de ser a aula corrente) e a
+    ambiguidade vira um warning, que é o que transforma "a turma toda faltou"
+    em algo depurável.
+
+    Limitação conhecida: não se desempata por horário. Fazer isso exige decisão
+    de produto sobre tolerância de atraso (aluno que chega 20 min depois, aula
+    que vira para o intervalo) e fica para outra alteração.
+    """
     with get_db_cursor() as cur:
         if not cur:
             return None
+        # Sem LIMIT de propósito: são poucas linhas (chamadas abertas de uma
+        # sala num dia) e precisamos enxergar TODAS as candidatas para logar.
+        # NULLS LAST + chamada_id como desempate: data_criacao é DEFAULT, não
+        # NOT NULL, e no DESC o Postgres traria NULL primeiro — uma linha
+        # antiga sem data ganharia da chamada de agora.
         cur.execute(
             """
-            SELECT DISTINCT c.chamada_id
+            SELECT DISTINCT c.chamada_id, c.data_criacao
             FROM Chamadas c
             JOIN horarios_aulas h ON h.turma_id = c.turma_id
             WHERE c.status = 'Aberta'
             AND h.sala = %s
             AND h.dia_semana = (EXTRACT(DOW FROM CURRENT_DATE)::int + 6) %% 7
-            LIMIT 1
+            ORDER BY c.data_criacao DESC NULLS LAST, c.chamada_id DESC
             """,
             (sala,),
         )
-        return cur.fetchone()
+        candidatas = cur.fetchall()
+        if not candidatas:
+            return None
+        if len(candidatas) > 1:
+            logger.warning(
+                "Sala %s com %d chamadas abertas hoje (candidatas=%s); "
+                "usando a mais recente: %s. Provável chamada esquecida aberta.",
+                sala,
+                len(candidatas),
+                [linha["chamada_id"] for linha in candidatas],
+                candidatas[0]["chamada_id"],
+            )
+        return {"chamada_id": candidatas[0]["chamada_id"]}
 
 
 def listar_alunos_da_chamada(chamada_id):
