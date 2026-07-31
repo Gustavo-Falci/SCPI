@@ -14,7 +14,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { storage } from "../../services/storage";
-import { apiPostFormData } from "../../services/api";
+import { apiGet, apiPostFormData } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { useErrorToast } from "../../hooks/useErrorToast";
 import { usePoliticaPrivacidade } from "../../hooks/usePoliticaPrivacidade";
@@ -60,6 +60,7 @@ export default function CadastroFacial() {
   const [userData, setUserData] = useState<any>(null);
   const [consentimento, setConsentimento] = useState(false);
   const { politica, loading: politicaLoading, erro: politicaErro, recarregar } = usePoliticaPrivacidade();
+  const [aceiteVigenteEm, setAceiteVigenteEm] = useState<string | null>(null);
   const [etapaAtual, setEtapaAtual] = useState(0);
   const [etapasConcluidas, setEtapasConcluidas] = useState<Set<string>>(new Set());
 
@@ -73,6 +74,28 @@ export default function CadastroFacial() {
     };
     loadUser();
   }, []);
+
+  // Recadastro de quem já consentiu com ESTA versão da política: não há o que
+  // coletar de novo. Versão diferente (inclusive 'legado') cai fora do if e o
+  // checkbox volta — política nova exige aceite novo.
+  useEffect(() => {
+    if (!politica) return;
+    const verificarConsentimento = async () => {
+      try {
+        const userId = await storage.getItem("user_id");
+        if (!userId) return;
+        const atual = await apiGet(`/aluno/consentimento/${userId}`);
+        if (atual.estado === "ativo" && atual.politica_versao === politica.versao) {
+          setAceiteVigenteEm(atual.registrado_em);
+          setConsentimento(true);
+        }
+      } catch {
+        // Falha ao consultar: mantém o checkbox. Errar para o lado de pedir
+        // consentimento a mais é seguro; assumir que existe, não.
+      }
+    };
+    verificarConsentimento();
+  }, [politica]);
 
   const etapa = ETAPAS[etapaAtual];
 
@@ -275,6 +298,7 @@ export default function CadastroFacial() {
                 loading={politicaLoading}
                 erro={politicaErro}
                 onRecarregar={recarregar}
+                aceiteVigenteEm={aceiteVigenteEm}
               />
             </>
           )}

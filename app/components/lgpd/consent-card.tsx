@@ -12,6 +12,11 @@ type Props = {
   loading: boolean;
   erro: string | null;
   onRecarregar: () => void;
+  /**
+   * Data ISO do aceite vigente, quando o aluno já consentiu com ESTA versão da
+   * política. Presente = card vira informativo, sem checkbox.
+   */
+  aceiteVigenteEm?: string | null;
 };
 
 /**
@@ -20,7 +25,15 @@ type Props = {
  * Compartilhado entre as duas telas de propósito: o texto é peça jurídica e
  * precisa ser idêntico nos dois fluxos.
  */
-export function ConsentCard({ checked, onToggle, politica, loading, erro, onRecarregar }: Props) {
+export function ConsentCard({
+  checked,
+  onToggle,
+  politica,
+  loading,
+  erro,
+  onRecarregar,
+  aceiteVigenteEm,
+}: Props) {
   if (loading) {
     return (
       <View style={styles.consentCard}>
@@ -42,6 +55,32 @@ export function ConsentCard({ checked, onToggle, politica, loading, erro, onReca
         >
           <Text style={styles.retryText}>Tentar novamente</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Consentimento vigente já registrado: nada a coletar, só informar. Exibir um
+  // checkbox aqui seria pedir de novo algo que o aluno já deu — e pré-marcá-lo
+  // valeria como consentimento por omissão, vedado pelo Art. 8º §4º.
+  if (aceiteVigenteEm) {
+    return (
+      <View style={[styles.consentCard, styles.consentCardActive]}>
+        <View style={styles.consentHeader}>
+          <Ionicons name="shield-checkmark" size={22} color="#1DB954" />
+          <Text style={styles.consentTitle}>Consentimento ativo</Text>
+        </View>
+        <Text style={styles.consentBody}>
+          Você autorizou o uso da sua imagem facial para{" "}
+          <Text style={styles.consentBodyStrong}>controle de presença nas aulas</Text> em{" "}
+          {new Date(aceiteVigenteEm).toLocaleString("pt-BR")}, conforme a versão{" "}
+          {politica.versao} da política. Pode revogar a qualquer momento pelo seu perfil.{" "}
+          <Text
+            style={styles.link}
+            onPress={() => WebBrowser.openBrowserAsync(politica.url)}
+          >
+            Ver Política de Privacidade.
+          </Text>
+        </Text>
       </View>
     );
   }
