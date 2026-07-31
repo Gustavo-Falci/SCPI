@@ -247,6 +247,49 @@ def test_erro_de_banco_devolve_motivo_erro_interno_sem_levantar(monkeypatch):
     assert resultado["motivo"] == MOTIVO_ERRO_INTERNO
 
 
+def test_falha_na_busca_de_notificacao_nao_ameaca_a_presenca(monkeypatch):
+    """A busca de dados de notificação é best-effort e não pode derrubar a
+    presença já gravada.
+
+    Enquanto essa consulta rodava dentro do `with` de escrita, uma falha dela
+    deixava a transação ABORTADA no Postgres — e o `conn.commit()` do
+    encerramento virava um ROLLBACK silencioso (psycopg2 não levanta nesse
+    caso). As presenças sumiam, mas a função devolvia motivo=None, o router
+    respondia 200 e a câmera marcava o aluno como definitivo: o aluno
+    desaparecia da chamada inteira sem erro em lugar nenhum.
+
+    A ordem dos eventos é o coração do teste: o commit da escrita tem que
+    acontecer ANTES da leitura de notificação, em transação separada.
+    """
+    import repositories.usuarios as usuarios_mod
+    from repositories.usuarios import registrar_presenca_por_face
+
+    eventos = []
+
+    @contextmanager
+    def _get_db_cursor_leitura_quebrada(commit=False):
+        if commit:
+            yield _CursorOk()
+            eventos.append("commit_da_escrita")
+        else:
+            eventos.append("leitura_de_notificacao")
+            yield _CursorQuebrado()
+
+    monkeypatch.setattr(
+        usuarios_mod, "get_db_cursor", _get_db_cursor_leitura_quebrada
+    )
+
+    resultado = registrar_presenca_por_face(ALUNO_UUID_FALSO, 1)
+
+    assert resultado["motivo"] is None
+    assert eventos == ["commit_da_escrita", "leitura_de_notificacao"]
+    # Defaults: o e-mail simplesmente não sai, mas a presença está gravada.
+    assert resultado["aluno_nome"] == "Aluno"
+    assert resultado["aluno_email"] is None
+    assert resultado["usuario_id"] is None
+    assert resultado["turma_nome"] == "Turma"
+
+
 def test_falha_no_commit_de_encerramento_tambem_vira_erro_interno(monkeypatch):
     """O caminho que o stub antigo não conseguia enxergar: o commit falha.
 

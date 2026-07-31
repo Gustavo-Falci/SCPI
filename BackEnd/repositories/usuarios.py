@@ -110,6 +110,46 @@ MOTIVO_JA_REGISTRADO = "ja_registrado"
 MOTIVO_ERRO_INTERNO = "erro_interno"
 
 
+def _buscar_dados_notificacao(turma_id, aluno_uuid):
+    """Busca nome/e-mail/turma para a notificação de presença (best-effort).
+
+    Roda em transação PRÓPRIA e SOMENTE DEPOIS que a transação de escrita já
+    confirmou. Antes esta consulta ficava dentro do `with` de escrita, e uma
+    falha dela deixava a transação ABORTADA no Postgres: o `conn.commit()` do
+    encerramento vira um ROLLBACK silencioso (psycopg2 não levanta nesse caso),
+    as presenças recém-inseridas sumiam, mas a função devolvia motivo=None, o
+    router respondia 200 e a câmera marcava o aluno como definitivo — o aluno
+    sumia da chamada inteira sem erro em lugar nenhum.
+
+    Buscar ANTES dos INSERT também isolaria as escritas, mas gastaria uma
+    consulta em todos os caminhos de recusa e, ainda dentro da mesma transação,
+    uma falha dela impediria o registro (viraria erro_interno) em vez de
+    continuar best-effort. Depois do commit, nada que esta leitura faça pode
+    desfazer a presença já gravada.
+
+    Devolve None em qualquer falha: os campos de notificação caem para os
+    defaults do chamador (aluno_nome = "Aluno").
+    """
+    try:
+        with get_db_cursor() as cur:
+            if not cur:
+                return None
+            cur.execute(
+                """
+                SELECT u.nome, u.email, u.usuario_id, t.nome_disciplina
+                FROM Alunos a
+                JOIN Usuarios u ON a.usuario_id = u.usuario_id
+                JOIN Turmas t ON t.turma_id = %s
+                WHERE a.aluno_id = %s
+                """,
+                (turma_id, aluno_uuid),
+            )
+            return cur.fetchone()
+    except Exception as e:
+        logger.warning("Não foi possível buscar dados de notificação: %s", e)
+        return None
+
+
 def registrar_presenca_por_face(external_image_id, chamada_id):
     """Registra presença do aluno na chamada informada.
 
@@ -197,35 +237,7 @@ def registrar_presenca_por_face(external_image_id, chamada_id):
             if rows_inserted == 0:
                 return {"motivo": MOTIVO_JA_REGISTRADO}
 
-            logger.info(
-                "✅ Presença confirmada: aluno=%s chamada=%s", aluno_uuid, chamada_id
-            )
-
-            try:
-                cur.execute(
-                    """
-                    SELECT u.nome, u.email, u.usuario_id, t.nome_disciplina
-                    FROM Alunos a
-                    JOIN Usuarios u ON a.usuario_id = u.usuario_id
-                    JOIN Turmas t ON t.turma_id = %s
-                    WHERE a.aluno_id = %s
-                    """,
-                    (chamada["turma_id"], aluno_uuid),
-                )
-                info = cur.fetchone()
-            except Exception as e:
-                logger.warning("Não foi possível buscar dados de notificação: %s", e)
-                info = None
-
-            return {
-                "motivo": None,
-                "usuario_id": info["usuario_id"] if info else None,
-                # Fallback "Aluno" e não o external_image_id: com UUID, o antigo
-                # fallback colocaria um UUID no corpo do e-mail ao titular.
-                "aluno_nome": info["nome"] if info else "Aluno",
-                "aluno_email": info["email"] if info else None,
-                "turma_nome": info["nome_disciplina"] if info else "Turma",
-            }
+            turma_id = chamada["turma_id"]
     except Exception as e:
         # Erro real de banco (deadlock, conexão derrubada, query malformada) —
         # inclusive a falha do commit no encerramento do `with` acima, que antes
@@ -235,3 +247,19 @@ def registrar_presenca_por_face(external_image_id, chamada_id):
             aluno_uuid, chamada_id, e,
         )
         return {"motivo": MOTIVO_ERRO_INTERNO}
+
+    # Só o sucesso chega aqui: as recusas retornam de dentro do `with`. Neste
+    # ponto a transação já foi confirmada — as presenças estão duráveis.
+    logger.info("✅ Presença confirmada: aluno=%s chamada=%s", aluno_uuid, chamada_id)
+
+    info = _buscar_dados_notificacao(turma_id, aluno_uuid)
+
+    return {
+        "motivo": None,
+        "usuario_id": info["usuario_id"] if info else None,
+        # Fallback "Aluno" e não o external_image_id: com UUID, o antigo
+        # fallback colocaria um UUID no corpo do e-mail ao titular.
+        "aluno_nome": info["nome"] if info else "Aluno",
+        "aluno_email": info["email"] if info else None,
+        "turma_nome": info["nome_disciplina"] if info else "Turma",
+    }
