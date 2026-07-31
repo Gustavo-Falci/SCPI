@@ -144,7 +144,23 @@ class SistemaReconhecimento:
             logger.error(f"Erro ao registrar presença via API: {e}")
         finally:
             with self.lock:
-                self.tracker.concluir(external_image_id, definitivo=definitivo)
+                # A resposta pode chegar depois de `_sincronizar_chamada` já
+                # ter trocado de chamada e dado `limpar()` no tracker (POST
+                # atrasado por rede lenta, ou a chamada fechou no meio do
+                # burst). Se concluíssemos incondicionalmente, um 409 tardio
+                # marcaria X como "resolvido" na geração NOVA do tracker — e,
+                # se X também estiver matriculado na chamada B (sala
+                # compartilhada, período seguinte), ele nunca mais seria
+                # reavaliado ali: falta indevida silenciosa, o problema que
+                # esta task inteira existe para eliminar. Só concluímos se a
+                # chamada ainda for a mesma que originou este POST.
+                if self.chamada_id_atual == chamada_id:
+                    self.tracker.concluir(external_image_id, definitivo=definitivo)
+                else:
+                    logger.debug(
+                        "Resposta de %s (chamada %s) descartada: chamada atual já é %s.",
+                        external_image_id, chamada_id, self.chamada_id_atual,
+                    )
 
     def _analisar_crop(self, face_bytes, chamada_id_referencia, textura=None):
         """SearchFaces + (se match novo) DetectFaces p/ pose. Retorna ResultadoFrame|None.

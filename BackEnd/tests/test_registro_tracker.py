@@ -66,3 +66,24 @@ def test_concluir_sem_reivindicar_nao_quebra():
     t.concluir("fantasma", definitivo=False)
 
     assert t.tratado("fantasma") is False
+
+
+def test_concluir_definitivo_sem_reivindicar_marca_resolvido():
+    """Documenta por que o chamador precisa checar a geração da chamada.
+
+    O tracker, sozinho, NÃO sabe que houve uma troca de chamada no meio do
+    caminho: `concluir(..., definitivo=True)` sempre adiciona a
+    `_resolvidos`, mesmo sem `reivindicar` anterior — é exatamente o caso de
+    um POST de uma chamada A que já fechou, cuja resposta (409, definitivo)
+    chega depois que `limpar()` já rodou para a chamada B. Se X também
+    pertencer à chamada B, ele ficaria "resolvido" para sempre ali por engano.
+    Quem protege contra isso não é esta classe: é `SistemaReconhecimento`, que
+    só chama `concluir` se `self.chamada_id_atual` ainda for a chamada que
+    originou aquele POST (ver `_registrar_presenca` em
+    scripts/reconhecimento_tempo_real.py).
+    """
+    t = RegistroPresencaTracker()
+    t.limpar()
+    t.concluir("fantasma", definitivo=True)
+
+    assert t.tratado("fantasma") is True
