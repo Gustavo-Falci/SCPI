@@ -1,13 +1,10 @@
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
-from core.config import COLLECTION_ID, FACE_MATCH_THRESHOLD_SELFIE
-from core.helpers import internal_error, validate_image_upload
-from core.limiter import limiter
+from core.helpers import internal_error
 from core.security import get_current_user, require_role, require_service_token
-from infra.aws_clientes import rekognition_client
 from repositories.chamadas import (
     abrir_chamada_para_turma,
     fechar_chamadas_abertas_por_turma,
@@ -20,7 +17,15 @@ from repositories.chamadas import (
 from repositories.horarios import existe_aula_no_horario_atual_para_turma
 from repositories.presencas import ajustar_presencas_chamada, contar_alunos_da_turma, contar_presentes_por_chamada
 from repositories.turmas import professor_responsavel_pela_turma
-from repositories.usuarios import obter_professor_id, registrar_presenca_por_face
+from repositories.usuarios import (
+    MOTIVO_CHAMADA_FECHADA,
+    MOTIVO_ERRO_INTERNO,
+    MOTIVO_JA_REGISTRADO,
+    MOTIVO_NAO_MATRICULADO,
+    MOTIVO_ROSTO_DESCONHECIDO,
+    obter_professor_id,
+    registrar_presenca_por_face,
+)
 from schemas.chamada import ChamadaAbrir, FinalizarChamadaPayload
 from services.notificacoes import enviar_notificacoes_presenca, notificar_alunos_presentes
 
@@ -209,53 +214,6 @@ def finalizar_chamada(
         raise internal_error(e, "finalizar_chamada")
 
 
-@router.post("/registrar_rosto")
-@limiter.limit("10/minute")
-async def registrar_rosto_aluno(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    foto: UploadFile = File(...),
-    current_user: dict = Depends(require_role("Aluno")),
-):
-    """Recebe foto, valida via Rekognition e registra presença + notificações em background."""
-    image_bytes = await validate_image_upload(foto)
-
-    try:
-        response = rekognition_client.search_faces_by_image(
-            CollectionId=COLLECTION_ID,
-            Image={'Bytes': image_bytes},
-            MaxFaces=1,
-            FaceMatchThreshold=FACE_MATCH_THRESHOLD_SELFIE,
-        )
-
-        if not response.get('FaceMatches'):
-            raise HTTPException(status_code=404, detail="Rosto não reconhecido no sistema.")
-
-        match = response['FaceMatches'][0]
-        external_image_id = match['Face']['ExternalImageId']
-
-        result = registrar_presenca_por_face(external_image_id)
-        if not result:
-            raise HTTPException(status_code=400, detail="Não foi possível registrar a presença. Verifique se há uma chamada aberta para sua turma.")
-
-        audit_logger.info("Presença registrada aluno=%s ip=%s", external_image_id, request.client.host)
-
-        background_tasks.add_task(
-            enviar_notificacoes_presenca,
-            result.get("usuario_id"),
-            result.get("aluno_nome", external_image_id),
-            result.get("aluno_email"),
-            result.get("turma_nome", "sua turma"),
-        )
-
-        return {"mensagem": "Presença confirmada com sucesso!", "aluno": external_image_id}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise internal_error(e, "registrar_rosto_aluno")
-
-
 @router.get("/aberta/sala/{sala}")
 def chamada_aberta_por_sala(
     sala: str,
@@ -271,6 +229,27 @@ def chamada_aberta_por_sala(
 
 class PresencaCameraPayload(BaseModel):
     external_image_id: str
+    # Obrigatório: é o que amarra a presença à aula daquela sala. Sem ele o
+    # backend voltaria a adivinhar a chamada e a gravar na turma errada.
+    chamada_id: int
+
+
+# 200 nos dois casos em que o servidor tem o que o cliente queria; os demais
+# distinguem recusa definitiva (404/409/403 — repetir não muda nada nesta
+# chamada) de transitória (503 — vale tentar no próximo burst).
+_STATUS_POR_MOTIVO = {
+    MOTIVO_ROSTO_DESCONHECIDO: 404,
+    MOTIVO_CHAMADA_FECHADA: 409,
+    MOTIVO_NAO_MATRICULADO: 403,
+    MOTIVO_ERRO_INTERNO: 503,
+}
+
+_DETALHE_POR_MOTIVO = {
+    MOTIVO_ROSTO_DESCONHECIDO: "Rosto sem cadastro biométrico ativo.",
+    MOTIVO_CHAMADA_FECHADA: "A chamada informada não está aberta.",
+    MOTIVO_NAO_MATRICULADO: "Aluno não matriculado na turma desta chamada.",
+    MOTIVO_ERRO_INTERNO: "Falha temporária ao registrar a presença.",
+}
 
 
 @router.post("/registrar_presenca_camera")
@@ -280,21 +259,33 @@ async def registrar_presenca_camera(
     _: str = Depends(require_service_token),
 ):
     """Registra presença a partir do reconhecimento feito pela câmera local."""
-    result = registrar_presenca_por_face(payload.external_image_id)
-    if not result:
+    resultado = registrar_presenca_por_face(
+        payload.external_image_id, payload.chamada_id
+    )
+    motivo = resultado["motivo"]
+
+    if motivo == MOTIVO_JA_REGISTRADO:
+        # Idempotente: o servidor já tem o que a câmera queria gravar. Não é
+        # erro, e devolver 4xx faria a câmera insistir a cada burst.
+        return {"mensagem": "Presença já registrada.", "ja_registrado": True}
+
+    if motivo is not None:
         raise HTTPException(
-            status_code=400,
-            detail="Não foi possível registrar a presença. Verifique se há chamada aberta para a turma.",
+            status_code=_STATUS_POR_MOTIVO[motivo],
+            detail={"detail": _DETALHE_POR_MOTIVO[motivo], "error_code": motivo},
         )
 
-    audit_logger.info("Presença via câmera registrada aluno=%s", payload.external_image_id)
+    audit_logger.info(
+        "Presença via câmera registrada aluno=%s chamada=%s",
+        payload.external_image_id, payload.chamada_id,
+    )
 
     background_tasks.add_task(
         enviar_notificacoes_presenca,
-        result.get("usuario_id"),
-        result.get("aluno_nome", payload.external_image_id),
-        result.get("aluno_email"),
-        result.get("turma_nome", "sua turma"),
+        resultado.get("usuario_id"),
+        resultado.get("aluno_nome"),
+        resultado.get("aluno_email"),
+        resultado.get("turma_nome", "sua turma"),
     )
 
-    return {"mensagem": "Presença confirmada.", "aluno": payload.external_image_id}
+    return {"mensagem": "Presença confirmada.", "ja_registrado": False}
