@@ -131,13 +131,22 @@ def registrar_presenca_por_face(external_image_id, chamada_id):
         logger.warning("ExternalImageId não é UUID: %r", external_image_id)
         return {"motivo": MOTIVO_ROSTO_DESCONHECIDO}
 
-    with get_db_cursor(commit=True) as cur:
-        if not cur:
-            # Banco fora: transitório. Não é "rosto desconhecido" — a câmera
-            # precisa distinguir para tentar de novo no próximo burst.
-            return {"motivo": MOTIVO_ERRO_INTERNO}
+    # O try envolve o `with` INTEIRO, e não só o corpo dele: o commit roda no
+    # ENCERRAMENTO do context manager (infra/database.py), depois do corpo. Com
+    # o try por dentro, uma falha nesse commit — exatamente o cenário "conexão
+    # derrubada no meio da transação" que este catch existe para cobrir —
+    # nascia fora do alcance dele, o get_db_cursor re-levantava e a exceção
+    # escapava, tornando falso o contrato "sempre dict, nunca levanta".
+    # MOTIVO_ERRO_INTERNO vira 503 no router e a câmera trata como transitório,
+    # tentando de novo no próximo burst; um 500 genérico seria tratado como
+    # definitivo e a presença daquele aluno se perderia na aula inteira.
+    try:
+        with get_db_cursor(commit=True) as cur:
+            if not cur:
+                # Banco fora: transitório. Não é "rosto desconhecido" — a câmera
+                # precisa distinguir para tentar de novo no próximo burst.
+                return {"motivo": MOTIVO_ERRO_INTERNO}
 
-        try:
             # Resolve por aluno_id, não por external_image_id: aproveita o
             # prefixo do unique(aluno_id, angulo) e dispensa índice novo. O
             # revogado_em cobre o caso de um FaceId sobreviver a uma
@@ -187,44 +196,42 @@ def registrar_presenca_por_face(external_image_id, chamada_id):
 
             if rows_inserted == 0:
                 return {"motivo": MOTIVO_JA_REGISTRADO}
-        except Exception as e:
-            # Erro real de banco (deadlock, conexão derrubada no meio da
-            # transação, query malformada): sem este catch, get_db_cursor faz
-            # rollback e RE-LEVANTA, quebrando o contrato "sempre dict, nunca
-            # levanta" desta função. MOTIVO_ERRO_INTERNO vira 503 no router
-            # (Task 2) e a câmera trata como transitório, tentando de novo no
-            # próximo burst; um 500 genérico seria tratado como definitivo e a
-            # presença daquele aluno se perderia na aula inteira.
-            logger.error(
-                "Erro ao registrar presença: aluno=%s chamada=%s erro=%s",
-                aluno_uuid, chamada_id, e,
+
+            logger.info(
+                "✅ Presença confirmada: aluno=%s chamada=%s", aluno_uuid, chamada_id
             )
-            return {"motivo": MOTIVO_ERRO_INTERNO}
 
-        logger.info("✅ Presença confirmada: aluno=%s chamada=%s", aluno_uuid, chamada_id)
+            try:
+                cur.execute(
+                    """
+                    SELECT u.nome, u.email, u.usuario_id, t.nome_disciplina
+                    FROM Alunos a
+                    JOIN Usuarios u ON a.usuario_id = u.usuario_id
+                    JOIN Turmas t ON t.turma_id = %s
+                    WHERE a.aluno_id = %s
+                    """,
+                    (chamada["turma_id"], aluno_uuid),
+                )
+                info = cur.fetchone()
+            except Exception as e:
+                logger.warning("Não foi possível buscar dados de notificação: %s", e)
+                info = None
 
-        try:
-            cur.execute(
-                """
-                SELECT u.nome, u.email, u.usuario_id, t.nome_disciplina
-                FROM Alunos a
-                JOIN Usuarios u ON a.usuario_id = u.usuario_id
-                JOIN Turmas t ON t.turma_id = %s
-                WHERE a.aluno_id = %s
-                """,
-                (chamada["turma_id"], aluno_uuid),
-            )
-            info = cur.fetchone()
-        except Exception as e:
-            logger.warning("Não foi possível buscar dados de notificação: %s", e)
-            info = None
-
-        return {
-            "motivo": None,
-            "usuario_id": info["usuario_id"] if info else None,
-            # Fallback "Aluno" e não o external_image_id: com UUID, o antigo
-            # fallback colocaria um UUID no corpo do e-mail ao titular.
-            "aluno_nome": info["nome"] if info else "Aluno",
-            "aluno_email": info["email"] if info else None,
-            "turma_nome": info["nome_disciplina"] if info else "Turma",
-        }
+            return {
+                "motivo": None,
+                "usuario_id": info["usuario_id"] if info else None,
+                # Fallback "Aluno" e não o external_image_id: com UUID, o antigo
+                # fallback colocaria um UUID no corpo do e-mail ao titular.
+                "aluno_nome": info["nome"] if info else "Aluno",
+                "aluno_email": info["email"] if info else None,
+                "turma_nome": info["nome_disciplina"] if info else "Turma",
+            }
+    except Exception as e:
+        # Erro real de banco (deadlock, conexão derrubada, query malformada) —
+        # inclusive a falha do commit no encerramento do `with` acima, que antes
+        # ficava fora do alcance deste catch.
+        logger.error(
+            "Erro ao registrar presença: aluno=%s chamada=%s erro=%s",
+            aluno_uuid, chamada_id, e,
+        )
+        return {"motivo": MOTIVO_ERRO_INTERNO}

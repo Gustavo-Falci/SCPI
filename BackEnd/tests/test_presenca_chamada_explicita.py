@@ -163,6 +163,66 @@ def test_external_image_id_nao_uuid_recusa_sem_tocar_no_banco():
     assert resultado["motivo"] == MOTIVO_ROSTO_DESCONHECIDO
 
 
+ALUNO_UUID_FALSO = "11111111-1111-1111-1111-111111111111"
+
+
+class _CursorQuebrado:
+    """Cursor cuja primeira query já morre (conexão derrubada, deadlock)."""
+
+    rowcount = 0
+
+    def execute(self, *args, **kwargs):
+        raise Exception("conexão derrubada no meio da transação")
+
+
+class _CursorOk:
+    """Cursor falso que responde o bastante para o fluxo chegar ao commit.
+
+    Responde por trecho do SQL em vez de por ordem de chamada: assim o teste
+    não quebra quando as consultas mudam de posição dentro da função.
+    """
+
+    rowcount = 1
+
+    def __init__(self):
+        self._ultimo_sql = ""
+
+    def execute(self, sql, params=None):
+        self._ultimo_sql = sql
+
+    def fetchone(self):
+        if "FROM Chamadas" in self._ultimo_sql:
+            return {"chamada_id": 1, "turma_id": "turma-1", "total_aulas": 1}
+        if "FROM Alunos" in self._ultimo_sql:
+            return {
+                "nome": "Ana Souza", "email": "ana@teste.local",
+                "usuario_id": "usuario-1", "nome_disciplina": "Cálculo I",
+            }
+        # Colecao_Rostos / Turma_Alunos: basta ser verdadeiro.
+        return {"?column?": 1}
+
+
+def _fabricar_get_db_cursor(cursor, ao_commitar=None):
+    """Substituto de `get_db_cursor` com a MESMA estrutura da implementação real.
+
+    `infra/database.py` faz `yield cursor` e SÓ DEPOIS `conn.commit()` — ou
+    seja, o commit roda no ENCERRAMENTO do context manager, fora do corpo do
+    `with`. Um stub que só produz o cursor não consegue reproduzir a falha do
+    commit, e um teste escrito em cima dele passa mesmo com a função deixando a
+    exceção escapar. Quando o corpo do `with` levanta, o commit não é
+    alcançado (a real faz rollback e re-levanta) — este stub reproduz isso
+    naturalmente.
+    """
+
+    @contextmanager
+    def _fake_get_db_cursor(commit=False):
+        yield cursor
+        if commit and ao_commitar is not None:
+            ao_commitar()
+
+    return _fake_get_db_cursor
+
+
 def test_erro_de_banco_devolve_motivo_erro_interno_sem_levantar(monkeypatch):
     """Erro real de banco (deadlock, conexão derrubada, query malformada) não
     pode escapar como exceção não tratada.
@@ -178,18 +238,39 @@ def test_erro_de_banco_devolve_motivo_erro_interno_sem_levantar(monkeypatch):
     import repositories.usuarios as usuarios_mod
     from repositories.usuarios import MOTIVO_ERRO_INTERNO, registrar_presenca_por_face
 
-    class _CursorQuebrado:
-        def execute(self, *args, **kwargs):
-            raise Exception("conexão derrubada no meio da transação")
-
-    @contextmanager
-    def _get_db_cursor_quebrado(commit=False):
-        yield _CursorQuebrado()
-
-    monkeypatch.setattr(usuarios_mod, "get_db_cursor", _get_db_cursor_quebrado)
-
-    resultado = registrar_presenca_por_face(
-        "11111111-1111-1111-1111-111111111111", 1
+    monkeypatch.setattr(
+        usuarios_mod, "get_db_cursor", _fabricar_get_db_cursor(_CursorQuebrado())
     )
+
+    resultado = registrar_presenca_por_face(ALUNO_UUID_FALSO, 1)
+
+    assert resultado["motivo"] == MOTIVO_ERRO_INTERNO
+
+
+def test_falha_no_commit_de_encerramento_tambem_vira_erro_interno(monkeypatch):
+    """O caminho que o stub antigo não conseguia enxergar: o commit falha.
+
+    O commit é executado pelo `get_db_cursor` DEPOIS do corpo do `with`. Com o
+    `try/except` só por dentro do `with`, a exceção do commit nascia fora do
+    alcance do catch, o `get_db_cursor` a re-levantava e ela escapava da
+    função — o contrato "devolve SEMPRE dict e nunca levanta" era falso
+    justamente no cenário que o catch dizia cobrir (conexão derrubada no meio
+    da transação). Para a câmera, essa exceção viraria um 500 genérico
+    (definitivo) em vez de 503 (transitório), e o aluno ficaria ausente na aula
+    inteira sem ninguém perceber.
+    """
+    import repositories.usuarios as usuarios_mod
+    from repositories.usuarios import MOTIVO_ERRO_INTERNO, registrar_presenca_por_face
+
+    def _commit_quebrado():
+        raise Exception("conexão derrubada ao confirmar a transação")
+
+    monkeypatch.setattr(
+        usuarios_mod,
+        "get_db_cursor",
+        _fabricar_get_db_cursor(_CursorOk(), ao_commitar=_commit_quebrado),
+    )
+
+    resultado = registrar_presenca_por_face(ALUNO_UUID_FALSO, 1)
 
     assert resultado["motivo"] == MOTIVO_ERRO_INTERNO
