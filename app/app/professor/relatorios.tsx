@@ -1,16 +1,17 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   StatusBar,
   Modal,
   Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -18,6 +19,7 @@ import * as Sharing from "expo-sharing";
 import * as Haptics from "expo-haptics";
 
 import { apiGet, apiDownload } from "../../services/api";
+import { RelatorioCard } from "../../components/relatorios/relatorio-card";
 import { useErrorToast } from "../../hooks/useErrorToast";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
@@ -46,13 +48,22 @@ function fmtBR(iso?: string): string {
   return `${d}/${m}/${y}`;
 }
 
-function buildQuery(f: Filtros): string {
+const PAGE_SIZE = 20;
+
+// `paginacao` é opcional porque a mesma função monta a query do PDF, que é o
+// documento do recorte inteiro e não pode receber limit/offset.
+function buildQuery(f: Filtros, paginacao?: { offset: number }): string {
   const p = new URLSearchParams();
   if (f.dataInicio) p.append("data_inicio", f.dataInicio);
   if (f.dataFim) p.append("data_fim", f.dataFim);
   if (f.turmaId) p.append("turma_id", f.turmaId);
   if (f.turno) p.append("turno", f.turno);
   if (f.semestre) p.append("semestre", f.semestre);
+  if (paginacao) {
+    p.append("paginado", "1");
+    p.append("limit", String(PAGE_SIZE));
+    p.append("offset", String(paginacao.offset));
+  }
   const qs = p.toString();
   return qs ? `?${qs}` : "";
 }
@@ -100,6 +111,11 @@ export default function Relatorios() {
 
   const { showError } = useErrorToast();
   const [exportandoDoc, setExportandoDoc] = useState<null | "consolidado" | "frequencia">(null);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+  const [temMais, setTemMais] = useState(false);
+  const [total, setTotal] = useState(0);
+  const requisicaoRef = useRef(0);
+  const insets = useSafeAreaInsets();
 
   const compartilharPdf = async (
     endpoint: string,
@@ -160,15 +176,51 @@ export default function Relatorios() {
     );
   };
 
+  // Normaliza as duas formas de resposta: envelope (backend novo) e array puro
+  // (backend antigo ignora `paginado` e devolve a lista como sempre).
+  const extrair = (data: any) =>
+    Array.isArray(data)
+      ? { items: data, total: data.length, has_more: false }
+      : { items: data?.items ?? [], total: data?.total ?? 0, has_more: !!data?.has_more };
+
   const loadRelatorios = async (f: Filtros) => {
+    const token = ++requisicaoRef.current;
     setLoading(true);
     try {
-      const data = await apiGet(`/professor/relatorios/chamadas${buildQuery(f)}`);
-      setChamadas(Array.isArray(data) ? data : []);
+      const data = await apiGet(`/professor/relatorios/chamadas${buildQuery(f, { offset: 0 })}`);
+      if (token !== requisicaoRef.current) return;
+      const { items, total: t, has_more } = extrair(data);
+      setChamadas(items);
+      setTotal(t);
+      setTemMais(has_more);
     } catch (err) {
+      if (token !== requisicaoRef.current) return;
       console.error("Erro ao carregar relatórios:", err);
     } finally {
-      setLoading(false);
+      if (token === requisicaoRef.current) setLoading(false);
+    }
+  };
+
+  const carregarMais = async () => {
+    if (carregandoMais || loading || !temMais) return;
+    const token = requisicaoRef.current;
+    setCarregandoMais(true);
+    try {
+      const data = await apiGet(
+        `/professor/relatorios/chamadas${buildQuery(filtros, { offset: chamadas.length })}`
+      );
+      // Filtro trocado no meio do caminho: descartar, senão a página antiga é
+      // acrescentada em cima de uma lista que já é de outro recorte.
+      if (token !== requisicaoRef.current) return;
+      const { items, has_more } = extrair(data);
+      setChamadas((atuais) => [...atuais, ...items]);
+      setTemMais(has_more);
+    } catch (err) {
+      if (token !== requisicaoRef.current) return;
+      console.error("Erro ao carregar mais relatórios:", err);
+      setTemMais(false);
+    } finally {
+      if (token === requisicaoRef.current) setCarregandoMais(false);
     }
   };
 
@@ -266,7 +318,11 @@ export default function Relatorios() {
 
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Relatórios</Text>
-        <Text style={styles.headerSubtitle}>Histórico imutável de chamadas realizadas</Text>
+        <Text style={styles.headerSubtitle}>
+          {total > 0
+            ? `${total} ${total === 1 ? "chamada realizada" : "chamadas realizadas"}`
+            : "Histórico imutável de chamadas realizadas"}
+        </Text>
       </View>
 
       <View style={styles.filterBar}>
@@ -335,8 +391,25 @@ export default function Relatorios() {
           <ActivityIndicator size="large" color={Colors.brand.primary} />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {chamadas.length === 0 ? (
+        <FlatList
+          data={chamadas}
+          keyExtractor={(c) => String(c.chamada_id)}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          onEndReached={carregarMais}
+          onEndReachedThreshold={0.5}
+          renderItem={({ item }) => (
+            <RelatorioCard
+              chamada={item}
+              onPress={() =>
+                router.push({
+                  pathname: "/professor/relatorio-detalhe",
+                  params: { chamada_id: item.chamada_id, turma_nome: item.nome_disciplina },
+                })
+              }
+            />
+          )}
+          ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="document-text-outline" size={48} color={Colors.brand.textSecondary} />
               <Text style={styles.emptyTitle}>
@@ -353,85 +426,21 @@ export default function Relatorios() {
                 </TouchableOpacity>
               )}
             </View>
-          ) : (
-            chamadas.map((c) => (
-              <TouchableOpacity
-                key={c.chamada_id}
-                style={styles.card}
-                activeOpacity={0.75}
-                accessibilityRole="button"
-                accessibilityLabel={`Ver relatório de ${c.nome_disciplina}`}
-                onPress={() =>
-                  router.push({
-                    pathname: "/professor/relatorio-detalhe",
-                    params: { chamada_id: c.chamada_id, turma_nome: c.nome_disciplina },
-                  })
-                }
-              >
-                <View style={styles.cardTop}>
-                  <View style={styles.disciplinaInfo}>
-                    <Text style={styles.disciplinaNome} numberOfLines={1}>
-                      {c.nome_disciplina}
-                    </Text>
-                    <Text style={styles.disciplinaCodigo}>
-                      {c.codigo_turma} • {c.data_chamada}
-                    </Text>
-                    <Text style={styles.disciplinaHorario}>
-                      {c.horario_inicio} – {c.horario_fim}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.percentBadge,
-                      {
-                        backgroundColor:
-                          c.percentual >= 75 ? "rgba(34,197,94,0.12)" : "rgba(255,75,75,0.12)",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.percentText,
-                        { color: c.percentual >= 75 ? "#22C55E" : Colors.brand.error },
-                      ]}
-                    >
-                      {c.percentual}%
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.statsRow}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>{c.total_alunos}</Text>
-                    <Text style={styles.statLabel}>Alunos</Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <Text style={[styles.statValue, { color: "#22C55E" }]}>{c.presentes_alunos}</Text>
-                    <Text style={styles.statLabel}>Presentes</Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <Text style={[styles.statValue, { color: Colors.brand.error }]}>{c.ausentes_alunos}</Text>
-                    <Text style={styles.statLabel}>Ausentes</Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <Text style={[styles.statValue, { color: "#F59E0B" }]}>{c.parciais_alunos}</Text>
-                    <Text style={styles.statLabel}>Parciais</Text>
-                  </View>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={Colors.brand.textSecondary}
-                    style={{ marginLeft: "auto" }}
-                  />
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-          <View style={{ height: 120 }} />
-        </ScrollView>
+          }
+          ListFooterComponent={
+            <>
+              {carregandoMais && (
+                <ActivityIndicator
+                  size="small"
+                  color={Colors.brand.primary}
+                  style={{ marginVertical: 16 }}
+                />
+              )}
+              {/* Respiro do FloatingMenu: sem isso o último card fica atrás dele. */}
+              <View style={{ height: 120 }} />
+            </>
+          }
+        />
       )}
 
       <Modal
@@ -441,7 +450,7 @@ export default function Relatorios() {
         onRequestClose={() => setPainelAberto(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 28) }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Filtros</Text>
               <TouchableOpacity onPress={() => setPainelAberto(false)} accessibilityLabel="Fechar filtros">
@@ -683,32 +692,6 @@ const styles = StyleSheet.create({
   activeChipText: { color: Colors.brand.text, fontSize: 13, fontWeight: "600", flexShrink: 1 },
 
   scrollContent: { paddingHorizontal: 24, paddingTop: 4 },
-  card: {
-    backgroundColor: Colors.brand.card,
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
-  },
-  cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
-  disciplinaInfo: { flex: 1, marginRight: 12 },
-  disciplinaNome: { color: Colors.brand.text, fontSize: 17, fontWeight: "800" },
-  disciplinaCodigo: { color: Colors.brand.textSecondary, fontSize: 13, marginTop: 4 },
-  disciplinaHorario: { color: Colors.brand.textSecondary, fontSize: 12, marginTop: 2 },
-  percentBadge: { borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, alignItems: "center", justifyContent: "center" },
-  percentText: { fontSize: 18, fontWeight: "800" },
-  statsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.05)",
-    paddingTop: 14,
-  },
-  statItem: { flex: 1, alignItems: "center" },
-  statValue: { color: Colors.brand.text, fontSize: 18, fontWeight: "800" },
-  statLabel: { color: Colors.brand.textSecondary, fontSize: 11, marginTop: 2 },
-  statDivider: { width: 1, height: 28, backgroundColor: "rgba(255,255,255,0.06)" },
 
   emptyContainer: {
     alignItems: "center",
@@ -730,13 +713,15 @@ const styles = StyleSheet.create({
   clearInlineText: { color: "#fff", fontWeight: "700", fontSize: 13 },
 
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  // paddingBottom vai inline no componente: precisa do inset da barra de
+  // navegação (Modal renderiza fora da hierarquia do SafeAreaView, então não
+  // herda nada) e StyleSheet.create é estático.
   modalSheet: {
     backgroundColor: Colors.brand.background,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 24,
     paddingTop: 20,
-    paddingBottom: 28,
     maxHeight: "85%",
   },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },

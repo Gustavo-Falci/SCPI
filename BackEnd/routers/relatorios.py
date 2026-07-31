@@ -11,6 +11,7 @@ from core.security import require_role
 from infra.relatorio_pdf import gerar_pdf_ata_chamada, gerar_pdf_consolidado, gerar_pdf_frequencia
 from repositories.usuarios import obter_professor_id
 from services.relatorios import (
+    contar_relatorios,
     listar_relatorios,
     detalhe_relatorio,
     opcoes_filtros_relatorios,
@@ -126,6 +127,7 @@ def listar_relatorios_professor(
     turno: Optional[str] = None,
     semestre: Optional[str] = None,
     formato: Optional[str] = None,
+    paginado: bool = False,
     current_user: dict = Depends(require_role("Professor")),
 ):
     professor_id = obter_professor_id(current_user.get("sub"))
@@ -156,6 +158,17 @@ def listar_relatorios_professor(
                     "turma": _rotulo_turma_pdf(turma_id, itens),
                 },
             )
+        if paginado:
+            total = contar_relatorios(
+                professor_id=professor_id, turma_id=turma_id,
+                data_inicio=data_inicio, data_fim=data_fim,
+                turno=turno, semestre=semestre,
+            )
+            return {
+                "items": itens,
+                "total": total,
+                "has_more": offset + len(itens) < total,
+            }
         return itens
     except HTTPException:
         raise
