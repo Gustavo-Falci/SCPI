@@ -30,7 +30,15 @@ async function loadAll() {
 
 function rotuloOrfao(painel, item) {
   if (painel === 'rek') return item.external_image_id || '(sem identificação)';
-  return (item.key || '').replace(/^alunos\//, '').replace(/_[a-f0-9]{32}\.(jpg|png|jpeg)$/i, '');
+  // Objeto órfão não tem linha no banco, então a própria key é tudo que se sabe
+  // sobre ele. Formato atual `alunos/{aluno_id}/{uuid}.jpg`: o primeiro segmento
+  // é o aluno_id, e é ele que permite rastrear de quem era o objeto.
+  // Formato antigo `alunos/{nome}_{uuid32}.jpg`: tratado no fallback porque
+  // objetos anteriores à troca de identidade seguem no bucket até serem varridos.
+  const semPrefixo = (item.key || '').replace(/^alunos\//, '');
+  const barra = semPrefixo.indexOf('/');
+  if (barra > 0) return semPrefixo.slice(0, barra);
+  return semPrefixo.replace(/_[a-f0-9]{32}\.(jpg|png|jpeg)$/i, '');
 }
 
 function idDoItem(painel, item) {
@@ -61,8 +69,9 @@ function passaNoFiltro(painel, item) {
 }
 
 // Agrupa por aluno quando o item tem dono; órfãos caem num grupo próprio,
-// identificado pelo external_image_id (Rekognition) ou pelo nome derivado da
-// key (S3), que é o máximo que se sabe sobre eles.
+// identificado pelo external_image_id (Rekognition) ou pelo aluno_id extraído da
+// key (S3), que é o máximo que se sabe sobre eles. Nenhum dos dois carrega nome:
+// a identidade biométrica é UUID de propósito, para não deixar dado pessoal na AWS.
 function agrupar(painel) {
   const todos = painel === 'rek' ? inventario.rekognition : inventario.s3;
   const itens = todos.filter(item => passaNoFiltro(painel, item));

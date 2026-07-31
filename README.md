@@ -133,7 +133,8 @@ SCPI/
 - Script Python autônomo em execução contínua
 - Captura e envia frames ao AWS Rekognition
 - Registra presença automaticamente ao identificar rosto cadastrado
-- Threshold de similaridade separado de selfie (variáveis dedicadas)
+- Informa a chamada da sala (`chamada_id`) ao registrar — a presença nunca cai na aula de outra turma
+- Anti-spoofing por textura + consenso de burst antes de confirmar
 
 ---
 
@@ -294,7 +295,6 @@ Requer no `.env`: `SCPI_API_URL`, `CAMERA_SERVICE_TOKEN`, `CAMERA_SALA`, `FACE_M
 | `CAMERA_SERVICE_TOKEN` | Token estático autenticando o script da câmera | `...` |
 | `CAMERA_SALA` | Identificador da sala física | `Sala 101` |
 | `CAMERA_INDEX` | Índice do dispositivo de câmera (padrão `0`) | `0` |
-| `FACE_MATCH_THRESHOLD_SELFIE` | Similaridade mínima (selfie) | `90` |
 | `FACE_MATCH_THRESHOLD_SALA` | Similaridade mínima (câmera fixa) | `80` |
 | `SCPI_EXPORT_HMAC_KEY` | Chave HMAC do manifesto de export LGPD (`secrets.token_hex(32)`) | `...` |
 

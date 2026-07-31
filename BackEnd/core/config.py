@@ -10,12 +10,14 @@ COLLECTION_ID = os.getenv("COLLECTION_ID", "sala_de_aula")
 BUCKET_NAME = os.getenv("BUCKET_NAME", "faces-sala-aula-2025")
 
 # ---------------------------------------------------------------------------
-# Thresholds de reconhecimento facial (similaridade mínima 0-100).
-# Centralizar evita divergência entre handlers e dificulta downgrade silencioso.
+# Threshold de reconhecimento facial (similaridade mínima 0-100).
 # Valores mais altos = menos false positives, mais false negatives.
+#
+# Havia um segundo threshold, para presença por selfie no app. O endpoint que o
+# usava foi removido junto com o fluxo de selfie (sem liveness e sem vínculo com
+# a sala), e a variável ficou órfã — config documentada para feature inexistente
+# é convite a alguém religar o caminho errado.
 # ---------------------------------------------------------------------------
-# Selfie no app — câmera frontal próxima, ambiente controlado pelo aluno.
-FACE_MATCH_THRESHOLD_SELFIE = int(os.getenv("FACE_MATCH_THRESHOLD_SELFIE", "90"))
 # Câmera fixa na sala — distância variável, iluminação irregular, múltiplos rostos.
 # Valor menor reflete maior tolerância empírica, NÃO menor exigência de segurança.
 # Revisar se a taxa de false positives crescer.

@@ -118,11 +118,6 @@ class SistemaReconhecimento:
                 else:
                     logger.info(f"📋 Nenhuma chamada aberta em {_CAMERA_SALA} — {anteriores} presentes resetados.")
 
-    # Status em que repetir não muda nada nesta chamada: 200 (gravado ou já
-    # gravado), 403 (aluno de outra turma), 404 (rosto sem cadastro ativo),
-    # 409 (chamada fechada). Insistir só gasta SearchFaces e API.
-    _STATUS_DEFINITIVOS = {200, 403, 404, 409}
-
     def _registrar_presenca(self, external_image_id, chamada_id):
         definitivo = False
         try:
@@ -132,7 +127,16 @@ class SistemaReconhecimento:
                 headers={"x-service-token": _SERVICE_TOKEN},
                 timeout=10,
             )
-            definitivo = resp.status_code in self._STATUS_DEFINITIVOS
+            # Semântica HTTP padrão em vez de lista de status conhecidos: 5xx é
+            # falha do lado do servidor (banco fora, deploy no meio do burst) e
+            # pode se resolver sozinha, então vale repetir. Qualquer outra
+            # resposta é uma decisão do servidor sobre ESTE aluno nesta chamada,
+            # e repetir só queima SearchFaces pago sem nunca convergir.
+            #
+            # Antes isto era uma allow-list {200, 403, 404, 409}. O buraco: um
+            # status fora da lista — 422 por payload malformado, por exemplo —
+            # caía como transitório e era retentado a cada burst para sempre.
+            definitivo = resp.status_code < 500
             if resp.status_code != 200:
                 logger.warning(
                     "API retornou %s para %s (chamada %s): %s",
