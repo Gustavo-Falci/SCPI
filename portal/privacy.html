@@ -22,7 +22,7 @@
 </head>
 <body>
   <div class="privacy-container">
-    <a href="index.html" class="back-link">← Voltar ao Portal</a>
+    <a href="index.html" class="back-link" id="back-link">← Voltar ao Portal</a>
     <h1>Política de Privacidade</h1>
     <p class="updated">Última atualização: 30 de julho de 2026 — versão 1.0</p>
 
@@ -151,5 +151,14 @@
       biométrico. Alterações significativas serão comunicadas pelo app.
     </p>
   </div>
+
+  <script>
+    // Aberto pelo app do aluno (?app=1): o link levaria à área administrativa,
+    // que ele não deveria sequer enxergar. O documento é o mesmo nos dois
+    // contextos de propósito — duplicar o texto jurídico garante divergência.
+    if (new URLSearchParams(location.search).has('app')) {
+      document.getElementById('back-link').remove();
+    }
+  </script>
 </body>
 </html>
