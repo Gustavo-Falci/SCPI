@@ -1,3 +1,5 @@
+import uuid
+
 from infra.database import get_db_cursor, logger
 
 
@@ -98,47 +100,74 @@ def obter_professor_id(usuario_id):
         return res["professor_id"] if res else None
 
 
-def registrar_presenca_por_face(external_image_id):
-    """Registra presença se houver chamada aberta.
+# Motivos de recusa. O router mapeia para status/error_code e a câmera loga.
+# Sem eles, "não registrou" chega no campo sem causa — com uma máquina por
+# sala, isso é indepurável.
+MOTIVO_ROSTO_DESCONHECIDO = "rosto_desconhecido"
+MOTIVO_CHAMADA_FECHADA = "chamada_fechada"
+MOTIVO_NAO_MATRICULADO = "nao_matriculado"
+MOTIVO_JA_REGISTRADO = "ja_registrado"
+MOTIVO_ERRO_INTERNO = "erro_interno"
 
-    Retorna dict com dados do aluno/turma quando bem-sucedido, ou None.
+
+def registrar_presenca_por_face(external_image_id, chamada_id):
+    """Registra presença do aluno na chamada informada.
+
+    `external_image_id` é o aluno_id (UUID) gravado como ExternalImageId na
+    collection do Rekognition. A chamada vem explícita de quem reconheceu — a
+    câmera sabe qual é a chamada da sala dela. Resolver "a chamada aberta mais
+    recente" globalmente gravava a presença na aula de outra sala sempre que
+    duas turmas estavam em aula ao mesmo tempo.
+
+    Devolve SEMPRE dict e nunca levanta: quem decide status HTTP é o router.
+    Sucesso traz motivo=None mais os dados de notificação; recusa traz só o
+    motivo.
     """
+    try:
+        aluno_uuid = str(uuid.UUID(str(external_image_id)))
+    except (ValueError, AttributeError, TypeError):
+        # Face legada (ExternalImageId derivado do nome) ou lixo. Recusa
+        # explícita em vez de um WHERE que silenciosamente não casa com nada.
+        logger.warning("ExternalImageId não é UUID: %r", external_image_id)
+        return {"motivo": MOTIVO_ROSTO_DESCONHECIDO}
+
     with get_db_cursor(commit=True) as cur:
         if not cur:
-            return None
+            # Banco fora: transitório. Não é "rosto desconhecido" — a câmera
+            # precisa distinguir para tentar de novo no próximo burst.
+            return {"motivo": MOTIVO_ERRO_INTERNO}
 
+        # Resolve por aluno_id, não por external_image_id: aproveita o prefixo
+        # do unique(aluno_id, angulo) e dispensa índice novo. O revogado_em
+        # cobre o caso de um FaceId sobreviver a uma revogação LGPD.
         cur.execute(
-            "SELECT aluno_id FROM Colecao_Rostos WHERE external_image_id = %s",
-            (external_image_id,),
+            "SELECT 1 FROM Colecao_Rostos "
+            "WHERE aluno_id = %s AND revogado_em IS NULL LIMIT 1",
+            (aluno_uuid,),
         )
-        aluno = cur.fetchone()
-
-        if not aluno:
-            logger.warning(f"Aluno não encontrado para ID: {external_image_id}")
-            return None
-
-        aluno_uuid = aluno["aluno_id"]
+        if not cur.fetchone():
+            logger.warning("Rosto sem cadastro ativo: aluno=%s", aluno_uuid)
+            return {"motivo": MOTIVO_ROSTO_DESCONHECIDO}
 
         cur.execute(
-            """
-            SELECT chamada_id, turma_id, total_aulas FROM Chamadas
-            WHERE status = 'Aberta' ORDER BY data_criacao DESC LIMIT 1
-            """
+            "SELECT chamada_id, turma_id, total_aulas FROM Chamadas "
+            "WHERE chamada_id = %s AND status = 'Aberta'",
+            (chamada_id,),
         )
         chamada = cur.fetchone()
-
         if not chamada:
-            logger.warning("Nenhuma chamada aberta no momento.")
-            return None
+            logger.warning("Chamada %s não está aberta.", chamada_id)
+            return {"motivo": MOTIVO_CHAMADA_FECHADA}
 
         cur.execute(
             "SELECT 1 FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = %s",
             (chamada["turma_id"], aluno_uuid),
         )
-
         if not cur.fetchone():
-            logger.warning(f"Aluno {external_image_id} não pertence a esta turma.")
-            return None
+            logger.warning(
+                "Aluno %s não pertence à turma da chamada %s.", aluno_uuid, chamada_id
+            )
+            return {"motivo": MOTIVO_NAO_MATRICULADO}
 
         total_aulas = chamada.get("total_aulas", 1) or 1
 
@@ -155,9 +184,9 @@ def registrar_presenca_por_face(external_image_id):
             rows_inserted += cur.rowcount
 
         if rows_inserted == 0:
-            return None
+            return {"motivo": MOTIVO_JA_REGISTRADO}
 
-        logger.info(f"✅ Presença confirmada: {external_image_id}")
+        logger.info("✅ Presença confirmada: aluno=%s chamada=%s", aluno_uuid, chamada_id)
 
         try:
             cur.execute(
@@ -176,8 +205,11 @@ def registrar_presenca_por_face(external_image_id):
             info = None
 
         return {
+            "motivo": None,
             "usuario_id": info["usuario_id"] if info else None,
-            "aluno_nome": info["nome"] if info else external_image_id,
+            # Fallback "Aluno" e não o external_image_id: com UUID, o antigo
+            # fallback colocaria um UUID no corpo do e-mail ao titular.
+            "aluno_nome": info["nome"] if info else "Aluno",
             "aluno_email": info["email"] if info else None,
             "turma_nome": info["nome_disciplina"] if info else "Turma",
         }
