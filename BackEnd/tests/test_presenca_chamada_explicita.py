@@ -5,6 +5,7 @@ O caso que motivou: com duas turmas em aula ao mesmo tempo, o backend resolvia
 de outra sala. Estes testes travam a resolução explícita por chamada_id.
 """
 import datetime
+from contextlib import contextmanager
 
 from infra.database import get_db_cursor
 
@@ -160,3 +161,35 @@ def test_external_image_id_nao_uuid_recusa_sem_tocar_no_banco():
     resultado = registrar_presenca_por_face("Joao_da_Silva", 1)
 
     assert resultado["motivo"] == MOTIVO_ROSTO_DESCONHECIDO
+
+
+def test_erro_de_banco_devolve_motivo_erro_interno_sem_levantar(monkeypatch):
+    """Erro real de banco (deadlock, conexão derrubada, query malformada) não
+    pode escapar como exceção não tratada.
+
+    `get_db_cursor` faz rollback e RE-LEVANTA qualquer exceção do corpo do
+    `with` (infra/database.py). Sem tratamento aqui, essa exceção subiria até
+    o router como um 500 genérico — e a câmera, que usa o 503/MOTIVO_ERRO_INTERNO
+    para saber que a falha é transitória e tentar de novo no próximo burst,
+    trataria como definitivo. A presença daquele aluno se perderia na aula
+    inteira. Este teste não precisa de Postgres: o cursor é falso e o
+    `execute` levanta de propósito.
+    """
+    import repositories.usuarios as usuarios_mod
+    from repositories.usuarios import MOTIVO_ERRO_INTERNO, registrar_presenca_por_face
+
+    class _CursorQuebrado:
+        def execute(self, *args, **kwargs):
+            raise Exception("conexão derrubada no meio da transação")
+
+    @contextmanager
+    def _get_db_cursor_quebrado(commit=False):
+        yield _CursorQuebrado()
+
+    monkeypatch.setattr(usuarios_mod, "get_db_cursor", _get_db_cursor_quebrado)
+
+    resultado = registrar_presenca_por_face(
+        "11111111-1111-1111-1111-111111111111", 1
+    )
+
+    assert resultado["motivo"] == MOTIVO_ERRO_INTERNO

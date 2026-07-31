@@ -137,54 +137,69 @@ def registrar_presenca_por_face(external_image_id, chamada_id):
             # precisa distinguir para tentar de novo no próximo burst.
             return {"motivo": MOTIVO_ERRO_INTERNO}
 
-        # Resolve por aluno_id, não por external_image_id: aproveita o prefixo
-        # do unique(aluno_id, angulo) e dispensa índice novo. O revogado_em
-        # cobre o caso de um FaceId sobreviver a uma revogação LGPD.
-        cur.execute(
-            "SELECT 1 FROM Colecao_Rostos "
-            "WHERE aluno_id = %s AND revogado_em IS NULL LIMIT 1",
-            (aluno_uuid,),
-        )
-        if not cur.fetchone():
-            logger.warning("Rosto sem cadastro ativo: aluno=%s", aluno_uuid)
-            return {"motivo": MOTIVO_ROSTO_DESCONHECIDO}
-
-        cur.execute(
-            "SELECT chamada_id, turma_id, total_aulas FROM Chamadas "
-            "WHERE chamada_id = %s AND status = 'Aberta'",
-            (chamada_id,),
-        )
-        chamada = cur.fetchone()
-        if not chamada:
-            logger.warning("Chamada %s não está aberta.", chamada_id)
-            return {"motivo": MOTIVO_CHAMADA_FECHADA}
-
-        cur.execute(
-            "SELECT 1 FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = %s",
-            (chamada["turma_id"], aluno_uuid),
-        )
-        if not cur.fetchone():
-            logger.warning(
-                "Aluno %s não pertence à turma da chamada %s.", aluno_uuid, chamada_id
-            )
-            return {"motivo": MOTIVO_NAO_MATRICULADO}
-
-        total_aulas = chamada.get("total_aulas", 1) or 1
-
-        rows_inserted = 0
-        for num_aula in range(1, total_aulas + 1):
+        try:
+            # Resolve por aluno_id, não por external_image_id: aproveita o
+            # prefixo do unique(aluno_id, angulo) e dispensa índice novo. O
+            # revogado_em cobre o caso de um FaceId sobreviver a uma
+            # revogação LGPD.
             cur.execute(
-                """
-                INSERT INTO Presencas (chamada_id, aluno_id, num_aula, tipo_registro)
-                VALUES (%s, %s, %s, 'Reconhecimento')
-                ON CONFLICT (chamada_id, aluno_id, num_aula) DO NOTHING
-                """,
-                (chamada["chamada_id"], aluno_uuid, num_aula),
+                "SELECT 1 FROM Colecao_Rostos "
+                "WHERE aluno_id = %s AND revogado_em IS NULL LIMIT 1",
+                (aluno_uuid,),
             )
-            rows_inserted += cur.rowcount
+            if not cur.fetchone():
+                logger.warning("Rosto sem cadastro ativo: aluno=%s", aluno_uuid)
+                return {"motivo": MOTIVO_ROSTO_DESCONHECIDO}
 
-        if rows_inserted == 0:
-            return {"motivo": MOTIVO_JA_REGISTRADO}
+            cur.execute(
+                "SELECT chamada_id, turma_id, total_aulas FROM Chamadas "
+                "WHERE chamada_id = %s AND status = 'Aberta'",
+                (chamada_id,),
+            )
+            chamada = cur.fetchone()
+            if not chamada:
+                logger.warning("Chamada %s não está aberta.", chamada_id)
+                return {"motivo": MOTIVO_CHAMADA_FECHADA}
+
+            cur.execute(
+                "SELECT 1 FROM Turma_Alunos WHERE turma_id = %s AND aluno_id = %s",
+                (chamada["turma_id"], aluno_uuid),
+            )
+            if not cur.fetchone():
+                logger.warning(
+                    "Aluno %s não pertence à turma da chamada %s.", aluno_uuid, chamada_id
+                )
+                return {"motivo": MOTIVO_NAO_MATRICULADO}
+
+            total_aulas = chamada.get("total_aulas", 1) or 1
+
+            rows_inserted = 0
+            for num_aula in range(1, total_aulas + 1):
+                cur.execute(
+                    """
+                    INSERT INTO Presencas (chamada_id, aluno_id, num_aula, tipo_registro)
+                    VALUES (%s, %s, %s, 'Reconhecimento')
+                    ON CONFLICT (chamada_id, aluno_id, num_aula) DO NOTHING
+                    """,
+                    (chamada["chamada_id"], aluno_uuid, num_aula),
+                )
+                rows_inserted += cur.rowcount
+
+            if rows_inserted == 0:
+                return {"motivo": MOTIVO_JA_REGISTRADO}
+        except Exception as e:
+            # Erro real de banco (deadlock, conexão derrubada no meio da
+            # transação, query malformada): sem este catch, get_db_cursor faz
+            # rollback e RE-LEVANTA, quebrando o contrato "sempre dict, nunca
+            # levanta" desta função. MOTIVO_ERRO_INTERNO vira 503 no router
+            # (Task 2) e a câmera trata como transitório, tentando de novo no
+            # próximo burst; um 500 genérico seria tratado como definitivo e a
+            # presença daquele aluno se perderia na aula inteira.
+            logger.error(
+                "Erro ao registrar presença: aluno=%s chamada=%s erro=%s",
+                aluno_uuid, chamada_id, e,
+            )
+            return {"motivo": MOTIVO_ERRO_INTERNO}
 
         logger.info("✅ Presença confirmada: aluno=%s chamada=%s", aluno_uuid, chamada_id)
 
