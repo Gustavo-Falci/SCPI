@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import HTTPException
 
 from repositories.chamadas import (
+    contar_relatorios_chamadas,
     listar_relatorios_chamadas,
     obter_relatorio_chamada,
     listar_opcoes_filtros_relatorios,
@@ -46,6 +47,20 @@ def listar_relatorios(professor_id: Optional[str] = None, turma_id: Optional[str
     if frequencia_baixa:
         itens = [i for i in itens if i["percentual"] < LIMITE_FREQUENCIA]
     return itens
+
+
+def contar_relatorios(professor_id: Optional[str] = None, turma_id: Optional[str] = None,
+                      data_inicio=None, data_fim=None, turno=None, semestre=None) -> int:
+    """Total de chamadas do recorte, para a paginação da tela.
+
+    Não aceita `frequencia_baixa` de propósito: aquele filtro roda em Python
+    depois do SQL (ver `listar_relatorios`), então um COUNT em SQL devolveria
+    um total maior que a lista realmente exibida.
+    """
+    return contar_relatorios_chamadas(
+        professor_id=professor_id, turma_id=turma_id,
+        data_inicio=data_inicio, data_fim=data_fim, turno=turno, semestre=semestre,
+    )
 
 
 def opcoes_filtros_relatorios(professor_id: Optional[str] = None):

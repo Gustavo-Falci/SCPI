@@ -316,6 +316,49 @@ def listar_relatorios_chamadas(professor_id=None, turma_id=None, limit=200, offs
         return cur.fetchall()
 
 
+def contar_relatorios_chamadas(professor_id=None, turma_id=None,
+                               data_inicio=None, data_fim=None, turno=None, semestre=None):
+    """Total de chamadas fechadas do recorte — para o `total` da paginação.
+
+    Sem os subselects correlacionados de `listar_relatorios_chamadas`: eles
+    montam o card e custam por linha. Sem os JOINs de Professores/Usuarios
+    também, que só serviam para trazer o nome do professor — `c.professor_id`
+    já filtra direto.
+    """
+    sql = """
+        SELECT COUNT(*) AS total
+        FROM Chamadas c
+        JOIN Turmas t ON t.turma_id = c.turma_id
+        WHERE c.status = 'Fechada'
+    """
+    params = []
+    if professor_id:
+        sql += " AND c.professor_id = %s"
+        params.append(professor_id)
+    if turma_id:
+        sql += " AND c.turma_id = %s"
+        params.append(turma_id)
+    if data_inicio:
+        sql += " AND c.data_chamada >= %s"
+        params.append(data_inicio)
+    if data_fim:
+        sql += " AND c.data_chamada <= %s"
+        params.append(data_fim)
+    if turno:
+        sql += " AND t.turno = %s"
+        params.append(turno)
+    if semestre:
+        sql += " AND t.semestre = %s"
+        params.append(semestre)
+
+    with get_db_cursor() as cur:
+        if not cur:
+            return 0
+        cur.execute(sql, tuple(params))
+        row = cur.fetchone()
+        return row["total"] if row else 0
+
+
 def obter_relatorio_chamada(chamada_id, professor_id=None):
     sql = """
         SELECT
