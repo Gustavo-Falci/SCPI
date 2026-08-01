@@ -3,40 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://api.scpi.me; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>SCPI — Admin Portal</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            surface: '#0C0C12',
-            card: '#151718',
-            'card-hover': '#1A1C1E',
-            accent: '#4B39EF',
-            'accent-dark': '#3D2DD4',
-          }
-        }
-      }
-    }
-  </script>
-  <!-- Estado da sidebar antes do primeiro paint. Sem isto ela pinta com 256px
-       e salta para o rail quando o main.js roda, meio segundo depois.
-       try/catch: localStorage lança em modo de cookies bloqueados, e uma
-       exceção aqui mataria o resto do <head>. -->
-  <script>
-    try {
-      if (localStorage.getItem('scpi.sidebar.collapsed') === '1') {
-        document.documentElement.classList.add('sidebar-collapsed');
-      }
-    } catch (e) {}
-  </script>
+  <script src="vendor/tailwind-3.4.17.js"></script>
+  <script src="js/tailwind-config.js"></script>
+  <script src="js/boot-sidebar.js"></script>
   <link rel="stylesheet" href="css/app.css">
-  <!-- Set your backend URL here (overrides default in config.js) -->
-  <script>window.__SCPI_API_URL__ = 'https://api.scpi.me'</script>
+  <script src="js/env.js"></script>
 </head>
 <!-- min-h-[100dvh] em vez de 100vh: no mobile, 100vh conta a área atrás da barra
      de URL e força scroll mesmo sem conteúdo excedente. -->
@@ -54,18 +27,7 @@
       <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
     </div>
   </div>
-  <script>
-    // Rede de segurança independente de main.js (inclusive versão em cache).
-    (function () {
-      var boot = document.getElementById('view-boot');
-      if (!boot) return;
-      var dismiss = function () { boot.style.display = 'none'; };
-      // Sem perfil salvo não há o que validar: vai direto ao login, sem splash.
-      try { if (!localStorage.getItem('admin_user')) return dismiss(); } catch (e) { return dismiss(); }
-      // Teto absoluto: nenhum caminho deixa o splash preso.
-      setTimeout(dismiss, 6000);
-    })();
-  </script>
+  <script src="js/boot-gate.js"></script>
 
   <!-- ============================== LOGIN ============================== -->
   <div id="view-login" class="relative min-h-[100dvh] flex items-center justify-center p-4 pb-12">

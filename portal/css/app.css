@@ -1,3 +1,13 @@
+/* Inter self-hosted: o portal não depende mais de fonts.googleapis.com em runtime,
+   o que permite font-src 'self' no CSP. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('../fonts/inter-variable.woff2') format('woff2');
+}
+
 /* ── Font ── */
 body, input, select, textarea, button { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
 
