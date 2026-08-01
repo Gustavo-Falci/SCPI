@@ -276,11 +276,19 @@ def logout(
     """
     refresh_plain = body.refresh_token or scpi_refresh
     try:
+        revogados = None
         if refresh_plain:
             token_hash = hash_refresh_token(refresh_plain)
-            revogar_refresh_token(token_hash, current_user.get("sub"))
+            revogados = revogar_refresh_token(token_hash, current_user.get("sub"))
         clear_auth_cookies(response)
-        audit_logger.info("Logout usuario=%s", current_user.get("sub"))
+        # revogados=0 não é erro (token já revogado/expirado), mas precisa
+        # aparecer no log: sem isso, uma revogação que não revogou nada (banco
+        # fora do ar, cursor None → rowcount 0) fica indistinguível de logout
+        # bem-sucedido. A resposta ao cliente não muda — a limpeza local dos
+        # cookies/tokens é autoritativa por design.
+        audit_logger.info(
+            "Logout usuario=%s revogados=%s", current_user.get("sub"), revogados
+        )
         return {"mensagem": "Sessão encerrada."}
     except Exception as e:
         raise internal_error(e, "logout")
