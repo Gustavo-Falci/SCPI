@@ -214,12 +214,15 @@ def finalizar_chamada(
         raise internal_error(e, "finalizar_chamada")
 
 
-@router.get("/aberta/sala/{sala}")
+@router.get("/aberta/sala")
 def chamada_aberta_por_sala(
-    sala: str,
-    _: str = Depends(require_service_token),
+    sala: str = Depends(require_service_token),
 ):
-    """Retorna chamada aberta para a sala informada no dia atual."""
+    """Retorna a chamada aberta hoje na sala do token de serviço.
+
+    A sala vem do token, não do cliente: assim o .env da câmera não tem como
+    divergir do token emitido para ela.
+    """
     try:
         row = obter_chamada_aberta_por_sala(sala)
         return {"chamada_id": row["chamada_id"] if row else None}
@@ -256,9 +259,19 @@ _DETALHE_POR_MOTIVO = {
 async def registrar_presenca_camera(
     payload: PresencaCameraPayload,
     background_tasks: BackgroundTasks,
-    _: str = Depends(require_service_token),
+    sala: str = Depends(require_service_token),
 ):
     """Registra presença a partir do reconhecimento feito pela câmera local."""
+    # Escopo de sala (A6): o token só registra presença na chamada aberta da
+    # própria sala. Reusa a consulta já validada em produção na branch de
+    # chamada por sala.
+    aberta = obter_chamada_aberta_por_sala(sala)
+    if not aberta or aberta["chamada_id"] != payload.chamada_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Chamada não pertence à sala deste token.",
+        )
+
     resultado = registrar_presenca_por_face(
         payload.external_image_id, payload.chamada_id
     )
