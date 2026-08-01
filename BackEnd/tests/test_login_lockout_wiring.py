@@ -47,7 +47,7 @@ def test_login_ok_limpa_falhas():
     }
     with patch("routers.auth.esta_bloqueado", return_value=None), \
          patch("routers.auth.buscar_usuario_login_por_email", return_value=fake_user), \
-         patch("routers.auth.verify_password", return_value=True), \
+         patch("routers.auth.verificar_e_atualizar_senha", return_value=(True, None)), \
          patch("routers.auth.inserir_refresh_token", return_value=True), \
          patch("routers.auth.limpar_falhas") as spy:
         resp = _client().post(

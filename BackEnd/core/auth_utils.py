@@ -95,7 +95,19 @@ def clear_auth_cookies(response: Response) -> None:
 # bcrypt removido dos schemes: passlib 1.7.4 + bcrypt 5.0.0 tem backend quebrado
 # (detect_wrap_bug levanta ValueError em entrada >72 bytes). Todas as senhas SCPI
 # sempre usaram pbkdf2_sha256 (default desde o 1º commit); nenhum hash $2 existe.
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+#
+# OWASP Password Storage Cheat Sheet: 600.000 iterações para PBKDF2-HMAC-SHA256.
+# min_rounds é o que faz deprecated="auto" marcar os hashes antigos (29k, o
+# default do passlib) como obsoletos — sem ele verify_and_update nunca devolveria
+# hash novo e a migração não aconteceria.
+_PBKDF2_ROUNDS = 600_000
+
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256"],
+    deprecated="auto",
+    pbkdf2_sha256__rounds=_PBKDF2_ROUNDS,
+    pbkdf2_sha256__min_rounds=_PBKDF2_ROUNDS,
+)
 
 def verify_password(plain_password, hashed_password):
     """Verifica se a senha em texto puro bate com o hash."""
@@ -104,6 +116,14 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     """Gera o hash da senha."""
     return pwd_context.hash(password)
+
+def verificar_e_atualizar_senha(plain_password: str, hashed_password: str) -> tuple[bool, str | None]:
+    """Verifica a senha e sinaliza re-hash quando o armazenado está defasado.
+
+    Retorna (senha_valida, hash_novo_ou_None). `hash_novo` vem preenchido quando
+    o hash usa menos iterações que a política atual; cabe ao chamador persistir.
+    """
+    return pwd_context.verify_and_update(plain_password, hashed_password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Cria um token JWT de acesso (curta duração)."""

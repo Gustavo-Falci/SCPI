@@ -20,6 +20,7 @@ from core.auth_utils import (
     hash_reset_code,
     senha_comprometida,
     set_auth_cookies,
+    verificar_e_atualizar_senha,
     verify_password,
 )
 from core.helpers import client_ip, internal_error, mask_email
@@ -37,6 +38,7 @@ from repositories.tokens import (
     substituir_codigo_reset,
 )
 from repositories.usuarios import (
+    atualizar_hash_senha,
     atualizar_senha_por_email,
     atualizar_senha_por_usuario_id,
     buscar_primeiro_acesso_por_usuario_id,
@@ -138,14 +140,22 @@ def login(
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
     try:
-        senha_valida = verify_password(form_data.password, user['senha'])
+        senha_valida, hash_novo = verificar_e_atualizar_senha(form_data.password, user['senha'])
     except Exception:
-        senha_valida = False
+        senha_valida, hash_novo = False, None
 
     if not senha_valida:
         registrar_falha(email_key)
         audit_logger.warning("Login falhou (senha incorreta) email=%s ip=%s", mask_email(email_limpo), request.client.host)
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+
+    if hash_novo:
+        # Migração transparente para a política atual de iterações (A3). Falha
+        # aqui não pode derrubar um login legítimo — o hash antigo continua válido.
+        try:
+            atualizar_hash_senha(user['usuario_id'], hash_novo)
+        except Exception:
+            logger.warning("Falha ao regravar hash de senha usuario=%s", user['usuario_id'])
 
     audit_logger.info("Login ok email=%s role=%s ip=%s", mask_email(email_limpo), user['tipo_usuario'], request.client.host)
     limpar_falhas(email_key)
