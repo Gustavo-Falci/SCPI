@@ -4,6 +4,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from core.auth_utils import get_password_hash
 from core.config import BUCKET_NAME, COLLECTION_ID
@@ -395,6 +396,52 @@ def _validar_extensao_csv(filename):
         raise HTTPException(status_code=400, detail="Apenas arquivos .csv são aceitos.")
 
 
+def _processar_professores_csv(csv_reader, background_tasks: BackgroundTasks):
+    """Loop síncrono da importação de professores — roda em threadpool porque
+    get_password_hash (pbkdf2 600k iterações, ~300ms) é chamado por linha e
+    bloquearia o event loop se rodasse direto no handler async."""
+    importados = 0
+    duplicados = 0
+    emails_enviados = 0
+    erros = []
+
+    for linha_num, row in enumerate(csv_reader, start=2):  # 1 = header
+        try:
+            nome = validar_celula_csv(row.get("nome", ""), "nome")
+            email = validar_celula_csv(row.get("email", ""), "email")
+
+            if not nome or not email:
+                continue
+
+            if len(nome) < 3:
+                raise ValueError("Nome deve ter ao menos 3 caracteres.")
+            if not EMAIL_REGEX.match(email):
+                raise ValueError("E-mail em formato inválido.")
+
+            senha_temporaria = gerar_senha_temporaria()
+            senha_hash = get_password_hash(senha_temporaria)
+
+            novo_usuario, _ = importar_professor_csv(
+                nome, email, senha_hash
+            )
+
+            if novo_usuario:
+                background_tasks.add_task(
+                    send_email_senha_temporaria, email, nome, senha_temporaria, "Professor"
+                )
+                emails_enviados += 1
+                importados += 1
+            else:
+                duplicados += 1
+        except ValueError as ve:
+            erros.append(f"Linha {linha_num}: {ve}")
+        except Exception as e:
+            erros.append(f"Linha {linha_num}: erro inesperado ({type(e).__name__}).")
+            logger.warning("Erro na importação CSV professor linha %s: %s", linha_num, e)
+
+    return importados, duplicados, emails_enviados, erros
+
+
 @router.post("/turmas/{turma_id}/importar-alunos")
 async def admin_importar_alunos_csv(
     turma_id: str,
@@ -410,7 +457,12 @@ async def admin_importar_alunos_csv(
         background_tasks.add_task(send_email_senha_temporaria, email, nome, senha, "Aluno")
 
     try:
-        res = processar_csv_alunos(conteudo, turma_id_fixo=turma_id, on_novo_usuario=agendar_email)
+        # pbkdf2 a 600k iterações (~300ms/hash) roda por linha do CSV — em thread
+        # separada para não travar o event loop (que o gunicorn mataria após 30s
+        # sem heartbeat, deixando o import parcialmente commitado).
+        res = await run_in_threadpool(
+            processar_csv_alunos, conteudo, turma_id_fixo=turma_id, on_novo_usuario=agendar_email
+        )
         total = res.importados + res.duplicados
         audit("Importação CSV alunos", admin=current_user.get("sub"), turma_id=turma_id,
               importados=total, emails=res.emails_enviados, erros=len(res.erros),
@@ -440,7 +492,8 @@ async def admin_importar_alunos_csv_global(
         background_tasks.add_task(send_email_senha_temporaria, email, nome, senha, "Aluno")
 
     try:
-        res = processar_csv_alunos(conteudo, on_novo_usuario=agendar_email)
+        # Mesmo motivo do endpoint por turma: pbkdf2 por linha sai do event loop.
+        res = await run_in_threadpool(processar_csv_alunos, conteudo, on_novo_usuario=agendar_email)
         audit("Importação CSV alunos (global)", admin=current_user.get("sub"),
               importados=res.importados, duplicados=res.duplicados,
               matriculados=res.matriculados, emails=res.emails_enviados,
@@ -486,44 +539,9 @@ async def admin_importar_professores_csv(
         raise HTTPException(status_code=400, detail=str(ve))
 
     try:
-        importados = 0
-        duplicados = 0
-        emails_enviados = 0
-        erros = []
-
-        for linha_num, row in enumerate(csv_reader, start=2):  # 1 = header
-            try:
-                nome = validar_celula_csv(row.get("nome", ""), "nome")
-                email = validar_celula_csv(row.get("email", ""), "email")
-
-                if not nome or not email:
-                    continue
-
-                if len(nome) < 3:
-                    raise ValueError("Nome deve ter ao menos 3 caracteres.")
-                if not EMAIL_REGEX.match(email):
-                    raise ValueError("E-mail em formato inválido.")
-
-                senha_temporaria = gerar_senha_temporaria()
-                senha_hash = get_password_hash(senha_temporaria)
-
-                novo_usuario, _ = importar_professor_csv(
-                    nome, email, senha_hash
-                )
-
-                if novo_usuario:
-                    background_tasks.add_task(
-                        send_email_senha_temporaria, email, nome, senha_temporaria, "Professor"
-                    )
-                    emails_enviados += 1
-                    importados += 1
-                else:
-                    duplicados += 1
-            except ValueError as ve:
-                erros.append(f"Linha {linha_num}: {ve}")
-            except Exception as e:
-                erros.append(f"Linha {linha_num}: erro inesperado ({type(e).__name__}).")
-                logger.warning("Erro na importação CSV professor linha %s: %s", linha_num, e)
+        importados, duplicados, emails_enviados, erros = await run_in_threadpool(
+            _processar_professores_csv, csv_reader, background_tasks
+        )
 
         audit("Importação CSV professores", admin=current_user.get("sub"), importados=importados,
               duplicados=duplicados, emails=emails_enviados, erros=len(erros), ip=client_ip(request))
