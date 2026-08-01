@@ -43,13 +43,11 @@ def test_verificar_codigo_inclui_jti_no_token(monkeypatch):
 
     from core.auth_utils import ALGORITHM, SECRET_KEY
 
-    # verify_jti=False: nosso jti é inteiro (id do PasswordResetCodes), não
-    # string — PyJWT >=2.10 rejeitaria por tipo antes de qualquer asserção.
-    payload = _jwt.decode(
-        resultado["reset_token"], SECRET_KEY, algorithms=[ALGORITHM],
-        options={"verify_jti": False},
-    )
-    assert payload["jti"] == 42
+    # jti é string (RFC 7519 — PyJWT valida o tipo no decode); o id numérico do
+    # PasswordResetCodes é convertido de volta a int só no redefinir_senha,
+    # logo antes do claim atômico.
+    payload = _jwt.decode(resultado["reset_token"], SECRET_KEY, algorithms=[ALGORITHM])
+    assert payload["jti"] == "42"
 
 
 def test_segundo_uso_do_mesmo_token_falha(monkeypatch):
@@ -70,7 +68,7 @@ def test_segundo_uso_do_mesmo_token_falha(monkeypatch):
     monkeypatch.setattr(auth, "buscar_usuario_id_por_email_lower", lambda _e: None)
 
     class _Body:
-        reset_token = _token(42)
+        reset_token = _token("42")
         nova_senha = "senha-nova-super-longa-1"
 
     class _Request:
@@ -111,9 +109,10 @@ def test_mensagem_nao_revela_que_o_token_ja_foi_usado(monkeypatch):
     import routers.auth as auth
 
     monkeypatch.setattr(auth, "consumir_token_reset", lambda _id: False)
+    monkeypatch.setattr(auth, "senha_comprometida", lambda _s: False)
 
     class _Body:
-        reset_token = _token(42)
+        reset_token = _token("42")
         nova_senha = "senha-nova-super-longa-1"
 
     class _Request:
@@ -123,3 +122,49 @@ def test_mensagem_nao_revela_que_o_token_ja_foi_usado(monkeypatch):
         auth.redefinir_senha(request=_Request(), body=_Body())
 
     assert exc.value.detail == "Token inválido ou expirado."
+
+
+def test_senha_recusada_pelo_hibp_nao_consome_o_token(monkeypatch):
+    """Fix round 1 (Gustavo): consumir o token antes de checar a senha no HIBP
+    queimaria o reset_token de quem só errou a senha na primeira tentativa,
+    obrigando a pedir código novo por e-mail à toa. O claim atômico tem que vir
+    depois das checagens que não escrevem nada — este teste fixa essa ordem.
+    """
+    import routers.auth as auth
+
+    consumos = []
+
+    def _consumir(codigo_id):
+        consumos.append(codigo_id)
+        return True
+
+    senhas = []
+    estado = {"comprometida": True}
+    monkeypatch.setattr(auth, "consumir_token_reset", _consumir)
+    monkeypatch.setattr(auth, "senha_comprometida", lambda _s: estado["comprometida"])
+    monkeypatch.setattr(auth, "atualizar_senha_por_email", lambda e, h: senhas.append(h))
+    monkeypatch.setattr(auth, "buscar_usuario_id_por_email_lower", lambda _e: None)
+
+    token = _token("42")
+
+    class _Body:
+        reset_token = token
+        nova_senha = "12345678"  # será recusada pelo HIBP na 1a tentativa
+
+    class _Request:
+        client = type("C", (), {"host": "127.0.0.1"})()
+
+    with pytest.raises(HTTPException) as exc:
+        auth.redefinir_senha(request=_Request(), body=_Body())
+
+    assert exc.value.status_code == 400
+    assert consumos == []  # token NÃO foi consumido pela senha recusada
+    assert senhas == []
+
+    # Mesmo token, agora com senha boa: continua válido.
+    estado["comprometida"] = False
+    _Body.nova_senha = "senha-nova-super-longa-1"
+    auth.redefinir_senha(request=_Request(), body=_Body())
+
+    assert consumos == [42]
+    assert len(senhas) == 1  # senha foi de fato gravada na 2a tentativa
