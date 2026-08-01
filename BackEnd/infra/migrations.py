@@ -308,6 +308,20 @@ def ensure_reset_codes_table():
         )
 
 
+def ensure_reset_token_consumo():
+    """Coluna que torna o reset_token de uso único (A4). Idempotente.
+
+    O código de 6 dígitos já era de uso único; o JWT que ele gera não era —
+    valia por 15 minutos e servia para quantas trocas de senha o portador
+    quisesse.
+    """
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            "ALTER TABLE PasswordResetCodes "
+            "ADD COLUMN IF NOT EXISTS token_consumido_em TIMESTAMP"
+        )
+
+
 def ensure_rate_limit_table():
     """Tabela do rate-limit compartilhado entre workers (M4). Idempotente."""
     with get_db_cursor(commit=True) as cur:
@@ -443,6 +457,7 @@ _ETAPAS = [
     "ensure_push_receipts_table",
     "ensure_primeiro_acesso_column",
     "ensure_reset_codes_table",
+    "ensure_reset_token_consumo",
     "ensure_rate_limit_table",
     "ensure_login_attempts_table",
     "ensure_presenca_por_aula",

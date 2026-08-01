@@ -29,6 +29,7 @@ from core.security import get_current_user
 from repositories.alunos import obter_aluno_e_face_status
 from repositories.tokens import (
     buscar_codigo_reset_valido,
+    consumir_token_reset,
     inserir_refresh_token,
     marcar_codigo_reset_usado,
     registrar_tentativa_codigo_invalida,
@@ -431,6 +432,9 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
     reset_payload = {
         "sub": email,
         "type": "password_reset",
+        # jti = id do código consumido: é o que amarra este token a uma única
+        # troca de senha (A4).
+        "jti": row["id"],
         "exp": datetime.utcnow() + timedelta(minutes=15),
     }
     reset_token = _jwt.encode(reset_payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -440,7 +444,13 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
 @router.post("/redefinir-senha")
 def redefinir_senha(request: Request, body: RedefinirSenhaBody):
     try:
-        payload = _jwt.decode(body.reset_token, SECRET_KEY, algorithms=[ALGORITHM])
+        # verify_jti=False: nosso jti é o id (inteiro) do PasswordResetCodes, não
+        # uma string — o PyJWT >=2.10 rejeitaria por tipo antes de chegarmos na
+        # checagem de uso único que realmente importa (consumir_token_reset).
+        payload = _jwt.decode(
+            body.reset_token, SECRET_KEY, algorithms=[ALGORITHM],
+            options={"verify_jti": False},
+        )
     except _jwt.InvalidTokenError:
         audit_logger.warning(
             "Redefinição de senha falhou (token inválido/expirado) ip=%s", client_ip(request)
@@ -452,6 +462,16 @@ def redefinir_senha(request: Request, body: RedefinirSenhaBody):
             "Redefinição de senha falhou (tipo de token inválido) ip=%s", client_ip(request)
         )
         raise HTTPException(status_code=400, detail="Token inválido.")
+
+    codigo_id = payload.get("jti")
+    if codigo_id is None or not consumir_token_reset(codigo_id):
+        # Mesma mensagem de token expirado de propósito: distinguir "já usado"
+        # confirmaria ao atacante que aquele token existiu e foi válido.
+        audit_logger.warning(
+            "Redefinição de senha falhou (token já consumido ou sem jti) ip=%s",
+            client_ip(request),
+        )
+        raise HTTPException(status_code=400, detail="Token inválido ou expirado.")
 
     email = payload.get("sub", "").strip().lower()
     if not email:
