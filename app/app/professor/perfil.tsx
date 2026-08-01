@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { storage } from "../../services/storage";
+import { logoutRequest } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 import { Button } from "../../components/ui/button";
@@ -31,7 +32,7 @@ export default function Perfil() {
   }, []);
 
   const handleLogout = async () => {
-    await storage.clear();
+    await logoutRequest();
     router.replace("/auth/login");
   };
 

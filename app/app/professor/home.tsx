@@ -14,7 +14,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 
 import { storage } from "../../services/storage";
-import { apiGet } from "../../services/api";
+import { apiGet, logoutRequest } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { DashboardHeader } from "../../components/layout/dashboard-header";
 import { FloatingMenu } from "../../components/layout/floating-menu";
@@ -57,7 +57,7 @@ export default function HomeProfessor() {
   }, []);
 
   const handleLogout = async () => {
-    await storage.clear();
+    await logoutRequest();
     router.replace('/auth/login');
   };
 
