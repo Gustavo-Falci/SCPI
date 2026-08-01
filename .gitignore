@@ -17,11 +17,11 @@ node_modules/
 admin-portal/dist/
 docs/*
 !docs/SECURITY_RUNBOOK.md
+!docs/PORTAL_NGINX.md
 BackEnd/scripts/models/*.onnx
 DESIGN.md
 logo-concept.svg
 MEMORIA_OBSIDIAN.md
 Arquivos .md/
 logo/
-docs/
 BackEnd/scripts/sigint_debug.log
