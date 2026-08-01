@@ -7,7 +7,7 @@ aplica aqui.
 import hashlib
 import secrets
 
-from infra.database import get_db_cursor
+from infra.database import DB_INDISPONIVEL, get_db_cursor
 
 
 def hash_camera_token(token_plain: str) -> str:
@@ -15,13 +15,15 @@ def hash_camera_token(token_plain: str) -> str:
     return hashlib.sha256(token_plain.encode("utf-8")).hexdigest()
 
 
-def buscar_sala_por_token(token_plain: str) -> str | None:
-    """Devolve a sala do token ativo, ou None se desconhecido ou revogado."""
+def buscar_sala_por_token(token_plain: str):
+    """Devolve a sala do token ativo, None se desconhecido/revogado, ou
+    DB_INDISPONIVEL se o banco não respondeu — os dois últimos casos têm
+    semântica http diferente (403 vs 503) e não podem ser achatados juntos."""
     if not token_plain:
         return None
     with get_db_cursor(commit=True) as cur:
         if not cur:
-            return None
+            return DB_INDISPONIVEL
         cur.execute(
             """
             UPDATE camera_tokens

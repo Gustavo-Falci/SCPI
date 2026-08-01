@@ -166,6 +166,24 @@ def release_connection(conn, broken: bool = False) -> None:
             pass
 
 
+class _DBIndisponivel:
+    """Sentinela para "o pool não devolveu conexão" (timeout/exaustão).
+
+    `get_db_cursor` já usa `None` para esse caso, mas a maioria dos repos trata
+    `if not cur: return None/[]/0` — ou seja, achatam "banco fora do ar" em cima
+    de "consultei e não achei nada", que tem semântica http bem diferente (503
+    vs 404/403). Repositórios que precisam preservar a distinção guardam esta
+    sentinela em vez de `None` quando `cur` vier vazio, e os chamadores
+    comparam com `is DB_INDISPONIVEL` antes de tratar o resultado como "vazio".
+    """
+
+    def __repr__(self):
+        return "DB_INDISPONIVEL"
+
+
+DB_INDISPONIVEL = _DBIndisponivel()
+
+
 @contextmanager
 def get_db_cursor(commit=False):
     """Gerenciador de contexto para operações de banco.

@@ -4,6 +4,7 @@ from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
 from core.auth_utils import ACCESS_COOKIE_NAME, decode_access_token
+from infra.database import DB_INDISPONIVEL
 from repositories.camera_tokens import buscar_sala_por_token
 
 logger = logging.getLogger("scpi.security")
@@ -85,8 +86,18 @@ def require_service_token(request: Request, x_service_token: str = Header(...)) 
 
     A sala vem do banco, nunca do cliente: é isso que impede um token vazado de
     marcar presença na chamada de outra sala.
+
+    Um banco que não respondeu (pool exaurido, timeout de conexão) vira 503,
+    não 403: a câmera classifica 4xx como recusa definitiva e nunca mais
+    tentaria aquele aluno nesta chamada — um blip de banco não pode ter o
+    mesmo efeito que um token revogado.
     """
     sala = buscar_sala_por_token(x_service_token)
+    if sala is DB_INDISPONIVEL:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Serviço temporariamente indisponível.",
+        )
     if not sala:
         audit_logger.warning(
             "Token de serviço inválido rota=%s ip=%s", request.url.path, _ip(request)
