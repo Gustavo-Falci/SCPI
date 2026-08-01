@@ -15,7 +15,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as WebBrowser from "expo-web-browser";
 import { storage } from "../../services/storage";
-import { apiGet } from "../../services/api";
+import { apiGet, logoutRequest } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
 import { Button } from "../../components/ui/button";
@@ -64,7 +64,7 @@ export default function PerfilAluno() {
   }, []);
 
   const handleLogout = async () => {
-    await storage.clear();
+    await logoutRequest();
     router.replace("/auth/login");
   };
 

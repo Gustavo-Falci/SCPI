@@ -77,6 +77,23 @@ def atualizar_senha_por_usuario_id(usuario_id, nova_senha_hash):
         return cur.rowcount
 
 
+def atualizar_hash_senha(usuario_id, novo_hash):
+    """Regrava só o hash da senha, sem tocar em primeiro_acesso.
+
+    Existe separada de atualizar_senha_por_usuario_id porque aquela zera
+    primeiro_acesso: usá-la no re-hash automático do login apagaria o fluxo de
+    primeiro acesso de quem ainda não trocou a senha inicial.
+    """
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return 0
+        cur.execute(
+            "UPDATE Usuarios SET senha = %s WHERE usuario_id = %s",
+            (novo_hash, usuario_id),
+        )
+        return cur.rowcount
+
+
 def atualizar_senha_por_email(email_lower, nova_senha_hash):
     with get_db_cursor(commit=True) as cur:
         if not cur:

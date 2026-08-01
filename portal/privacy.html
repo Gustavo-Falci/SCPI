@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://api.scpi.me; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>Política de Privacidade — SCPI</title>
   <link rel="stylesheet" href="css/app.css" />
   <style>
@@ -152,13 +153,6 @@
     </p>
   </div>
 
-  <script>
-    // Aberto pelo app do aluno (?app=1): o link levaria à área administrativa,
-    // que ele não deveria sequer enxergar. O documento é o mesmo nos dois
-    // contextos de propósito — duplicar o texto jurídico garante divergência.
-    if (new URLSearchParams(location.search).has('app')) {
-      document.getElementById('back-link').remove();
-    }
-  </script>
+  <script src="js/privacy-app-view.js"></script>
 </body>
 </html>

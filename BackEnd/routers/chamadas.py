@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from core.helpers import internal_error
 from core.security import get_current_user, require_role, require_service_token
+from infra.database import DB_INDISPONIVEL
 from repositories.chamadas import (
     abrir_chamada_para_turma,
     fechar_chamadas_abertas_por_turma,
@@ -214,15 +215,24 @@ def finalizar_chamada(
         raise internal_error(e, "finalizar_chamada")
 
 
-@router.get("/aberta/sala/{sala}")
+@router.get("/aberta/sala")
 def chamada_aberta_por_sala(
-    sala: str,
-    _: str = Depends(require_service_token),
+    sala: str = Depends(require_service_token),
 ):
-    """Retorna chamada aberta para a sala informada no dia atual."""
+    """Retorna a chamada aberta hoje na sala do token de serviço.
+
+    A sala vem do token, não do cliente: assim o .env da câmera não tem como
+    divergir do token emitido para ela.
+    """
     try:
         row = obter_chamada_aberta_por_sala(sala)
+        if row is DB_INDISPONIVEL:
+            raise HTTPException(
+                status_code=503, detail="Serviço temporariamente indisponível."
+            )
         return {"chamada_id": row["chamada_id"] if row else None}
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e, "chamada_aberta_por_sala")
 
@@ -256,9 +266,27 @@ _DETALHE_POR_MOTIVO = {
 async def registrar_presenca_camera(
     payload: PresencaCameraPayload,
     background_tasks: BackgroundTasks,
-    _: str = Depends(require_service_token),
+    sala: str = Depends(require_service_token),
 ):
     """Registra presença a partir do reconhecimento feito pela câmera local."""
+    # Escopo de sala (A6): o token só registra presença na chamada aberta da
+    # própria sala. Reusa a consulta já validada em produção na branch de
+    # chamada por sala.
+    aberta = obter_chamada_aberta_por_sala(sala)
+    if aberta is DB_INDISPONIVEL:
+        # Banco não respondeu — transitório. 403 aqui seria recusa definitiva
+        # para a câmera (nunca mais tentaria este aluno nesta chamada); um
+        # blip de banco tem que dar 503 para o burst seguinte poder repetir.
+        raise HTTPException(
+            status_code=503,
+            detail="Serviço temporariamente indisponível.",
+        )
+    if not aberta or aberta["chamada_id"] != payload.chamada_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Chamada não pertence à sala deste token.",
+        )
+
     resultado = registrar_presenca_por_face(
         payload.external_image_id, payload.chamada_id
     )

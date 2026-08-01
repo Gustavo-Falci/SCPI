@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 
-def _chamar(payload, background_tasks=None):
+def _chamar(payload, background_tasks=None, sala="Sala 101"):
     from routers.chamadas import registrar_presenca_camera
     from fastapi import BackgroundTasks
 
@@ -18,7 +18,7 @@ def _chamar(payload, background_tasks=None):
         registrar_presenca_camera(
             payload=payload,
             background_tasks=background_tasks or BackgroundTasks(),
-            _=None,
+            sala=sala,
         )
     )
 
@@ -61,6 +61,10 @@ def test_sucesso_responde_200_e_agenda_notificacao_com_argumentos_na_ordem(monke
             "aluno_email": "ana@x.com", "turma_nome": "Cálculo I",
         },
     )
+    monkeypatch.setattr(
+        mod, "obter_chamada_aberta_por_sala",
+        lambda _s: {"chamada_id": 1},
+    )
     background_tasks = BackgroundTasks()
 
     resp = _chamar(
@@ -84,6 +88,10 @@ def test_ja_registrado_responde_200_idempotente(monkeypatch):
         mod, "registrar_presenca_por_face",
         lambda eid, cid: {"motivo": MOTIVO_JA_REGISTRADO},
     )
+    monkeypatch.setattr(
+        mod, "obter_chamada_aberta_por_sala",
+        lambda _s: {"chamada_id": 1},
+    )
     resp = _chamar(PresencaCameraPayload(external_image_id="x", chamada_id=1))
     assert resp["ja_registrado"] is True
 
@@ -105,6 +113,10 @@ def test_recusa_mapeia_para_status_e_error_code(monkeypatch, motivo_attr, status
     motivo = getattr(repo, motivo_attr)
     monkeypatch.setattr(
         mod, "registrar_presenca_por_face", lambda eid, cid: {"motivo": motivo}
+    )
+    monkeypatch.setattr(
+        mod, "obter_chamada_aberta_por_sala",
+        lambda _s: {"chamada_id": 1},
     )
 
     with pytest.raises(HTTPException) as exc:

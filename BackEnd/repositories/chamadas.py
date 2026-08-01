@@ -2,7 +2,7 @@ import datetime
 import math
 from datetime import datetime as dt, date
 
-from infra.database import get_db_cursor, logger
+from infra.database import DB_INDISPONIVEL, get_db_cursor, logger
 
 
 def fechar_chamadas_abertas_por_turma(turma_id):
@@ -125,10 +125,14 @@ def obter_chamada_aberta_por_sala(sala):
     Limitação conhecida: não se desempata por horário. Fazer isso exige decisão
     de produto sobre tolerância de atraso (aluno que chega 20 min depois, aula
     que vira para o intervalo) e fica para outra alteração.
+
+    Devolve DB_INDISPONIVEL (não None) se o banco não respondeu: os chamadores
+    tratam essa recusa como transitória (503), não como "sem chamada aberta"
+    (que resultaria em 403 definitivo na câmera durante um blip de banco).
     """
     with get_db_cursor() as cur:
         if not cur:
-            return None
+            return DB_INDISPONIVEL
         # Sem LIMIT de propósito: são poucas linhas (chamadas abertas de uma
         # sala num dia) e precisamos enxergar TODAS as candidatas para logar.
         # NULLS LAST + chamada_id como desempate: data_criacao é DEFAULT, não

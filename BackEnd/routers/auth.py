@@ -20,6 +20,7 @@ from core.auth_utils import (
     hash_reset_code,
     senha_comprometida,
     set_auth_cookies,
+    verificar_e_atualizar_senha,
     verify_password,
 )
 from core.helpers import client_ip, internal_error, mask_email
@@ -28,6 +29,7 @@ from core.security import get_current_user
 from repositories.alunos import obter_aluno_e_face_status
 from repositories.tokens import (
     buscar_codigo_reset_valido,
+    consumir_token_reset,
     inserir_refresh_token,
     marcar_codigo_reset_usado,
     registrar_tentativa_codigo_invalida,
@@ -37,6 +39,7 @@ from repositories.tokens import (
     substituir_codigo_reset,
 )
 from repositories.usuarios import (
+    atualizar_hash_senha,
     atualizar_senha_por_email,
     atualizar_senha_por_usuario_id,
     buscar_primeiro_acesso_por_usuario_id,
@@ -138,14 +141,22 @@ def login(
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
     try:
-        senha_valida = verify_password(form_data.password, user['senha'])
+        senha_valida, hash_novo = verificar_e_atualizar_senha(form_data.password, user['senha'])
     except Exception:
-        senha_valida = False
+        senha_valida, hash_novo = False, None
 
     if not senha_valida:
         registrar_falha(email_key)
         audit_logger.warning("Login falhou (senha incorreta) email=%s ip=%s", mask_email(email_limpo), request.client.host)
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+
+    if hash_novo:
+        # Migração transparente para a política atual de iterações (A3). Falha
+        # aqui não pode derrubar um login legítimo — o hash antigo continua válido.
+        try:
+            atualizar_hash_senha(user['usuario_id'], hash_novo)
+        except Exception:
+            logger.warning("Falha ao regravar hash de senha usuario=%s", user['usuario_id'])
 
     audit_logger.info("Login ok email=%s role=%s ip=%s", mask_email(email_limpo), user['tipo_usuario'], request.client.host)
     limpar_falhas(email_key)
@@ -265,11 +276,19 @@ def logout(
     """
     refresh_plain = body.refresh_token or scpi_refresh
     try:
+        revogados = None
         if refresh_plain:
             token_hash = hash_refresh_token(refresh_plain)
-            revogar_refresh_token(token_hash, current_user.get("sub"))
+            revogados = revogar_refresh_token(token_hash, current_user.get("sub"))
         clear_auth_cookies(response)
-        audit_logger.info("Logout usuario=%s", current_user.get("sub"))
+        # revogados=0 não é erro (token já revogado/expirado), mas precisa
+        # aparecer no log: sem isso, uma revogação que não revogou nada (banco
+        # fora do ar, cursor None → rowcount 0) fica indistinguível de logout
+        # bem-sucedido. A resposta ao cliente não muda — a limpeza local dos
+        # cookies/tokens é autoritativa por design.
+        audit_logger.info(
+            "Logout usuario=%s revogados=%s", current_user.get("sub"), revogados
+        )
         return {"mensagem": "Sessão encerrada."}
     except Exception as e:
         raise internal_error(e, "logout")
@@ -421,6 +440,10 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
     reset_payload = {
         "sub": email,
         "type": "password_reset",
+        # jti = id do código consumido, como string (RFC 7519 — PyJWT valida o
+        # tipo no decode): é o que amarra este token a uma única troca de senha
+        # (A4).
+        "jti": str(row["id"]),
         "exp": datetime.utcnow() + timedelta(minutes=15),
     }
     reset_token = _jwt.encode(reset_payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -443,6 +466,15 @@ def redefinir_senha(request: Request, body: RedefinirSenhaBody):
         )
         raise HTTPException(status_code=400, detail="Token inválido.")
 
+    if payload.get("jti") is None:
+        # Sem camada de compatibilidade: token emitido antes do A4 (sem jti)
+        # nunca é aceito. Mesma mensagem de token expirado de propósito — ver
+        # nota abaixo, no claim atômico.
+        audit_logger.warning(
+            "Redefinição de senha falhou (token sem jti) ip=%s", client_ip(request)
+        )
+        raise HTTPException(status_code=400, detail="Token inválido ou expirado.")
+
     email = payload.get("sub", "").strip().lower()
     if not email:
         raise HTTPException(status_code=400, detail="Token inválido.")
@@ -452,6 +484,26 @@ def redefinir_senha(request: Request, body: RedefinirSenhaBody):
             status_code=400,
             detail="Esta senha aparece em vazamentos públicos. Escolha outra.",
         )
+
+    # Claim atômico: só agora, depois de todas as checagens que não escrevem
+    # nada. Consumir antes de senha_comprometida queimaria o reset_token de
+    # quem digitou uma senha vazada na primeira tentativa, sem ter trocado
+    # senha nenhuma (forçaria pedir código novo por e-mail à toa). O claim
+    # continua sendo a última coisa antes da escrita — uso único e segurança
+    # sob concorrência ficam idênticos.
+    try:
+        codigo_id = int(payload["jti"])
+    except (TypeError, ValueError):
+        codigo_id = None
+
+    if codigo_id is None or not consumir_token_reset(codigo_id):
+        # Mesma mensagem de token expirado de propósito: distinguir "já usado"
+        # confirmaria ao atacante que aquele token existiu e foi válido.
+        audit_logger.warning(
+            "Redefinição de senha falhou (token já consumido ou inválido) ip=%s",
+            client_ip(request),
+        )
+        raise HTTPException(status_code=400, detail="Token inválido ou expirado.")
 
     nova_hash = get_password_hash(body.nova_senha)
     atualizar_senha_por_email(email, nova_hash)

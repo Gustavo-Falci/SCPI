@@ -243,14 +243,25 @@ export async function loginRequest(email, senha) {
 export { friendlyErrorMessage };
 
 export async function logoutRequest() {
-  const refresh = await storage.getItem("refresh_token");
-  if (refresh) {
+  const antes = await storage.getItem("refresh_token");
+  if (antes) {
     try {
       await authFetch(
         "/auth/logout",
-        { method: "POST", body: JSON.stringify({ refresh_token: refresh }) },
+        { method: "POST", body: JSON.stringify({ refresh_token: antes }) },
         "application/json"
       );
+      // authFetch pode ter rotacionado o refresh no meio do caminho (access
+      // expirado → 401 → tryRefreshToken). Nesse caso o corpo acima levou o
+      // token velho, já morto, e o novo continuaria válido por 7 dias.
+      const depois = await storage.getItem("refresh_token");
+      if (depois && depois !== antes) {
+        await authFetch(
+          "/auth/logout",
+          { method: "POST", body: JSON.stringify({ refresh_token: depois }) },
+          "application/json"
+        );
+      }
     } catch {
       // ignorado: limpeza local é autoritativa
     }

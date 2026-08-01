@@ -20,7 +20,6 @@ from scripts.registro_tracker import RegistroPresencaTracker
 load_dotenv(find_dotenv())
 _API_URL = os.getenv("SCPI_API_URL", "https://api.scpi.me").rstrip("/")
 _SERVICE_TOKEN = os.getenv("CAMERA_SERVICE_TOKEN", "")
-_CAMERA_SALA = os.getenv("CAMERA_SALA", "")
 _CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
 
 # --- Liveness passivo (burst X-de-Y + pose) — ver spec 2026-07-15 ---
@@ -44,8 +43,8 @@ logger = logging.getLogger(__name__)
 
 class SistemaReconhecimento:
     def __init__(self):
-        if not _CAMERA_SALA:
-            raise ValueError("CAMERA_SALA não definido. Configure a variável de ambiente antes de iniciar.")
+        if not _SERVICE_TOKEN:
+            raise ValueError("CAMERA_SERVICE_TOKEN não definido. Emita um token com scripts/camera_token.py e configure o .env.")
 
         self.rodando = False
         self.frame_atual = None
@@ -99,7 +98,7 @@ class SistemaReconhecimento:
     def _sincronizar_chamada(self):
         try:
             resp = requests.get(
-                f"{_API_URL}/chamadas/aberta/sala/{_CAMERA_SALA}",
+                f"{_API_URL}/chamadas/aberta/sala",
                 headers={"x-service-token": _SERVICE_TOKEN},
                 timeout=5,
             )
@@ -116,7 +115,7 @@ class SistemaReconhecimento:
                 if chamada_id:
                     logger.info(f"📋 Nova chamada detectada: {chamada_id} — {anteriores} presentes resetados.")
                 else:
-                    logger.info(f"📋 Nenhuma chamada aberta em {_CAMERA_SALA} — {anteriores} presentes resetados.")
+                    logger.info(f"📋 Nenhuma chamada aberta na sala deste token — {anteriores} presentes resetados.")
 
     def _registrar_presenca(self, external_image_id, chamada_id):
         definitivo = False
@@ -341,7 +340,7 @@ class SistemaReconhecimento:
         ultima_sync = 0
         INTERVALO_SYNC = 5
 
-        logger.info(f"🔍 Monitorando chamadas em {_CAMERA_SALA}. Câmera desligada até chamada aberta.")
+        logger.info("🔍 Monitorando chamadas na sala deste token. Câmera desligada até chamada aberta.")
 
         try:
             while self.rodando:

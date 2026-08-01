@@ -264,7 +264,7 @@ cd BackEnd
 python scripts/reconhecimento_tempo_real.py
 ```
 
-Requer no `.env`: `SCPI_API_URL`, `CAMERA_SERVICE_TOKEN`, `CAMERA_SALA`, `FACE_MATCH_THRESHOLD_SALA`.
+Requer no `.env`: `SCPI_API_URL`, `CAMERA_SERVICE_TOKEN`, `FACE_MATCH_THRESHOLD_SALA`.
 
 ---
 
@@ -292,8 +292,7 @@ Requer no `.env`: `SCPI_API_URL`, `CAMERA_SERVICE_TOKEN`, `CAMERA_SALA`, `FACE_M
 | `VITE_API_URL` | URL da API consumida pelo portal | `http://localhost:8000` |
 | `EXPO_PUBLIC_API_URL` | URL da API consumida pelo app | `http://192.168.1.10:8000` |
 | `SCPI_API_URL` | URL da API consumida pelo script da câmera | `http://localhost:8000` |
-| `CAMERA_SERVICE_TOKEN` | Token estático autenticando o script da câmera | `...` |
-| `CAMERA_SALA` | Identificador da sala física | `Sala 101` |
+| `CAMERA_SERVICE_TOKEN` | Token de serviço da câmera, emitido por sala via `scripts/camera_token.py` | `...` |
 | `CAMERA_INDEX` | Índice do dispositivo de câmera (padrão `0`) | `0` |
 | `FACE_MATCH_THRESHOLD_SALA` | Similaridade mínima (câmera fixa) | `80` |
 | `SCPI_EXPORT_HMAC_KEY` | Chave HMAC do manifesto de export LGPD (`secrets.token_hex(32)`) | `...` |

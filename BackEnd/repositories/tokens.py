@@ -170,3 +170,25 @@ def marcar_codigo_reset_usado(codigo_id):
             return 0
         cur.execute("UPDATE PasswordResetCodes SET used = TRUE WHERE id = %s", (codigo_id,))
         return cur.rowcount
+
+
+def consumir_token_reset(codigo_id):
+    """Marca o reset_token como consumido. True só na primeira chamada.
+
+    O UPDATE condicional é o que garante uso único mesmo com duas requisições
+    simultâneas: só uma encontra token_consumido_em NULL e recebe a linha de
+    volta; a outra sai de mãos vazias.
+    """
+    with get_db_cursor(commit=True) as cur:
+        if not cur:
+            return False
+        cur.execute(
+            """
+            UPDATE PasswordResetCodes
+               SET token_consumido_em = NOW()
+             WHERE id = %s AND token_consumido_em IS NULL
+            RETURNING id
+            """,
+            (codigo_id,),
+        )
+        return cur.fetchone() is not None

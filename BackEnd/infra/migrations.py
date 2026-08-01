@@ -308,6 +308,20 @@ def ensure_reset_codes_table():
         )
 
 
+def ensure_reset_token_consumo():
+    """Coluna que torna o reset_token de uso único (A4). Idempotente.
+
+    O código de 6 dígitos já era de uso único; o JWT que ele gera não era —
+    valia por 15 minutos e servia para quantas trocas de senha o portador
+    quisesse.
+    """
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            "ALTER TABLE PasswordResetCodes "
+            "ADD COLUMN IF NOT EXISTS token_consumido_em TIMESTAMP"
+        )
+
+
 def ensure_rate_limit_table():
     """Tabela do rate-limit compartilhado entre workers (M4). Idempotente."""
     with get_db_cursor(commit=True) as cur:
@@ -336,6 +350,28 @@ def ensure_login_attempts_table():
                 fails         INTEGER     NOT NULL DEFAULT 0,
                 first_fail_at TIMESTAMPTZ,
                 locked_until  TIMESTAMPTZ
+            )
+            """
+        )
+
+
+def ensure_camera_tokens_table():
+    """Tokens de serviço da câmera, um por sala (A6). Idempotente.
+
+    Substitui o CAMERA_SERVICE_TOKEN global de env: com a sala no banco, um
+    token vazado só serve para a sala dele, e a revogação é individual.
+    """
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS camera_tokens (
+                id            SERIAL PRIMARY KEY,
+                sala          TEXT NOT NULL,
+                token_hash    TEXT NOT NULL UNIQUE,
+                descricao     TEXT,
+                criado_em     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                ultimo_uso_em TIMESTAMPTZ,
+                revogado_em   TIMESTAMPTZ
             )
             """
         )
@@ -443,8 +479,10 @@ _ETAPAS = [
     "ensure_push_receipts_table",
     "ensure_primeiro_acesso_column",
     "ensure_reset_codes_table",
+    "ensure_reset_token_consumo",
     "ensure_rate_limit_table",
     "ensure_login_attempts_table",
+    "ensure_camera_tokens_table",
     "ensure_presenca_por_aula",
     "ensure_chamada_aberta_unica",
     "ensure_indices_filtros_alunos",
