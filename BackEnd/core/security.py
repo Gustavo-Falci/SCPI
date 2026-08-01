@@ -1,11 +1,10 @@
 import logging
-import os
-import secrets
 
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
 from core.auth_utils import ACCESS_COOKIE_NAME, decode_access_token
+from repositories.camera_tokens import buscar_sala_por_token
 
 logger = logging.getLogger("scpi.security")
 audit_logger = logging.getLogger("scpi.audit")
@@ -81,14 +80,19 @@ def require_role(*roles: str):
     return _checker
 
 
-def require_service_token(request: Request, x_service_token: str = Header(...)):
-    """Valida token estático de serviço interno (câmera local)."""
-    expected = os.getenv("CAMERA_SERVICE_TOKEN")
-    if not expected or not secrets.compare_digest(x_service_token, expected):
+def require_service_token(request: Request, x_service_token: str = Header(...)) -> str:
+    """Valida o token de serviço da câmera e devolve a sala à qual ele pertence.
+
+    A sala vem do banco, nunca do cliente: é isso que impede um token vazado de
+    marcar presença na chamada de outra sala.
+    """
+    sala = buscar_sala_por_token(x_service_token)
+    if not sala:
         audit_logger.warning(
             "Token de serviço inválido rota=%s ip=%s", request.url.path, _ip(request)
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token de serviço inválido.")
+    return sala
 
 
 def require_self_or_admin(usuario_id: str, current_user: dict) -> None:

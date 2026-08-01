@@ -355,6 +355,28 @@ def ensure_login_attempts_table():
         )
 
 
+def ensure_camera_tokens_table():
+    """Tokens de serviço da câmera, um por sala (A6). Idempotente.
+
+    Substitui o CAMERA_SERVICE_TOKEN global de env: com a sala no banco, um
+    token vazado só serve para a sala dele, e a revogação é individual.
+    """
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS camera_tokens (
+                id            SERIAL PRIMARY KEY,
+                sala          TEXT NOT NULL,
+                token_hash    TEXT NOT NULL UNIQUE,
+                descricao     TEXT,
+                criado_em     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                ultimo_uso_em TIMESTAMPTZ,
+                revogado_em   TIMESTAMPTZ
+            )
+            """
+        )
+
+
 def ensure_presenca_por_aula():
     """Adiciona total_aulas em chamadas e num_aula em presencas (idempotente)."""
     with get_db_cursor(commit=True) as cur:
@@ -460,6 +482,7 @@ _ETAPAS = [
     "ensure_reset_token_consumo",
     "ensure_rate_limit_table",
     "ensure_login_attempts_table",
+    "ensure_camera_tokens_table",
     "ensure_presenca_por_aula",
     "ensure_chamada_aberta_unica",
     "ensure_indices_filtros_alunos",
