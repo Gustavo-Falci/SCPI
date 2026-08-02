@@ -465,6 +465,46 @@ def ensure_indices_filtros_alunos():
         )
 
 
+def ensure_indices_performance():
+    """Índices do caminho quente da câmera e dos relatórios.
+
+    O primeiro é o que dói: obter_chamada_aberta_por_sala roda a cada burst da
+    câmera (poucos segundos, por sala, aula inteira) e filtra horarios_aulas por
+    sala + dia_semana — sem índice é seq scan da tabela toda a cada rosto
+    reconhecido. Os demais cobrem os JOINs por turma_id e os recortes das telas
+    de relatório (por professor, por data), que hoje varrem Chamadas inteira.
+
+    Presencas (aluno_id) não é redundante com a unique (chamada_id, aluno_id,
+    num_aula): aquela só serve consulta que começa por chamada_id; o histórico
+    do aluno começa por aluno_id.
+    """
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_horarios_sala_dia "
+            "ON Horarios_Aulas (sala, dia_semana)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_horarios_turma "
+            "ON Horarios_Aulas (turma_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_presencas_aluno "
+            "ON Presencas (aluno_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chamadas_turma_status "
+            "ON Chamadas (turma_id, status)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chamadas_professor "
+            "ON Chamadas (professor_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chamadas_data "
+            "ON Chamadas (data_chamada)"
+        )
+
+
 # Nomes, não referências: os testes de pipeline usam patch.object(m, nome, stub)
 # e uma lista de referências capturaria as funções originais no import, fazendo
 # o patch virar no-op silencioso.
@@ -486,6 +526,7 @@ _ETAPAS = [
     "ensure_presenca_por_aula",
     "ensure_chamada_aberta_unica",
     "ensure_indices_filtros_alunos",
+    "ensure_indices_performance",
     "ensure_consentimentos_table",
 ]
 

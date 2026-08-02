@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import EmailStr
+from starlette.concurrency import run_in_threadpool
 
 from core.config import (
     BUCKET_NAME,
@@ -196,6 +197,103 @@ def registrar_aceite_se_novo(aluno_id, politica_versao, ip, user_agent):
     return True
 
 
+def _persistir_biometria(
+    image_bytes: bytes,
+    safe_basename: str,
+    user_id: Optional[str],
+    email: str,
+    angulo: str,
+    politica_versao: str,
+    current_user: dict,
+    ip: Optional[str],
+    user_agent: Optional[str],
+) -> dict:
+    """Parte bloqueante do cadastro de face: queries, S3 e Rekognition.
+
+    Vive fora do endpoint async porque psycopg2 e boto3 são síncronos — rodando
+    no corpo da corrotina, um upload de foto mais o IndexFaces (centenas de ms
+    de rede) travam o event loop do worker inteiro.
+    """
+    if user_id:
+        user = buscar_usuario_id_por_id(user_id)
+    else:
+        user = buscar_usuario_id_por_email_simples(email)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não localizado para vincular face.")
+
+    target_user_id = user['usuario_id']
+
+    if current_user.get("role") == "Aluno" and str(target_user_id) != current_user.get("sub"):
+        raise HTTPException(status_code=403, detail="Aluno só pode cadastrar a própria face.")
+    if current_user.get("role") not in {"Aluno", "Admin"}:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    # aluno_id resolvido ANTES do upload: além de ser o identificador da
+    # biometria, evita gastar upload no S3 e IndexFaces quando o perfil de
+    # aluno nem existe.
+    aluno = buscar_aluno_por_usuario_id(target_user_id)
+    if not aluno:
+        raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado para este usuário.")
+
+    aluno_id = aluno['aluno_id']
+
+    # ExternalImageId = aluno_id, não o nome: dois alunos homônimos geravam
+    # o mesmo id e a presença caía no aluno errado. De quebra tira o nome
+    # dos metadados da collection e do caminho no S3 (minimização LGPD).
+    external_id = str(aluno_id)
+    filename = f"alunos/{external_id}/{safe_basename}"
+
+    # Upload direto da memória — sem arquivo temporário em disco (evita race,
+    # escrita em CWD não-gravável e leak por crash entre write e remove).
+    s3_client.upload_fileobj(io.BytesIO(image_bytes), BUCKET_NAME, filename)
+
+    resultado_rekognition = indexar_rosto_da_imagem_s3(filename, external_id, detection_attributes="ALL")
+
+    if not resultado_rekognition or not resultado_rekognition.get("FaceRecords"):
+        raise HTTPException(status_code=400, detail="Nenhum rosto detectado na imagem.")
+
+    face_id = resultado_rekognition["FaceRecords"][0]["Face"]["FaceId"]
+
+    # Captura o rosto anterior deste ângulo ANTES do upsert sobrescrever o
+    # ponteiro. Sem isso o FaceId/objeto S3 antigos ficam órfãos e a
+    # collection do Rekognition acumula (aluno acaba com 8 faces após
+    # re-cadastrar os 4 ângulos).
+    rosto_anterior = obter_rosto_por_angulo(aluno_id, angulo)
+
+    upsert_rosto(aluno_id, external_id, face_id, filename, angulo)
+
+    registrar_aceite_se_novo(
+        aluno_id,
+        politica_versao,
+        ip=ip,
+        user_agent=user_agent,
+    )
+
+    # Remove o rosto antigo só depois do novo estar indexado e persistido —
+    # se o index acima falhasse, a biometria anterior permaneceria intacta.
+    # Best-effort: falha na limpeza não invalida o cadastro bem-sucedido.
+    if rosto_anterior:
+        old_face_id = rosto_anterior.get("face_id_rekognition")
+        old_s3_path = rosto_anterior.get("s3_path_cadastro")
+        if old_face_id and old_face_id != face_id:
+            try:
+                deletar_rosto(old_face_id)
+            except Exception as e:
+                logger.warning("Falha ao deletar FaceId antigo %s (angulo=%s): %s", old_face_id, angulo, e)
+        if old_s3_path and old_s3_path != filename:
+            try:
+                s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_s3_path)
+            except Exception as e:
+                logger.warning("Falha ao deletar objeto S3 antigo %s (angulo=%s): %s", old_s3_path, angulo, e)
+
+    audit_logger.info(
+        "Biometria cadastrada aluno=%s angulo=%s por=%s ip=%s",
+        target_user_id, angulo, current_user.get("sub"), ip,
+    )
+    return {"status": "sucesso", "face_id": face_id, "external_id": external_id, "angulo": angulo}
+
+
 @router.post("/alunos/cadastrar-face")
 @limiter.limit("10/minute")
 async def cadastrar_aluno_api(
@@ -221,86 +319,22 @@ async def cadastrar_aluno_api(
     ext = ".jpg" if foto.content_type in {"image/jpeg", "image/jpg"} else ".png"
     safe_basename = f"{uuid.uuid4().hex}{ext}"
 
+    # Request não atravessa o threadpool: ip e user-agent são lidos aqui e vão
+    # como valores. Ler do Request numa thread é o tipo de acoplamento que
+    # quebra silenciosamente quando o Starlette muda o ciclo de vida do escopo.
     try:
-        if user_id:
-            user = buscar_usuario_id_por_id(user_id)
-        else:
-            user = buscar_usuario_id_por_email_simples(email)
-
-        if not user:
-            raise HTTPException(status_code=404, detail="Usuário não localizado para vincular face.")
-
-        target_user_id = user['usuario_id']
-
-        if current_user.get("role") == "Aluno" and str(target_user_id) != current_user.get("sub"):
-            raise HTTPException(status_code=403, detail="Aluno só pode cadastrar a própria face.")
-        if current_user.get("role") not in {"Aluno", "Admin"}:
-            raise HTTPException(status_code=403, detail="Acesso negado.")
-
-        # aluno_id resolvido ANTES do upload: além de ser o identificador da
-        # biometria, evita gastar upload no S3 e IndexFaces quando o perfil de
-        # aluno nem existe.
-        aluno = buscar_aluno_por_usuario_id(target_user_id)
-        if not aluno:
-            raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado para este usuário.")
-
-        aluno_id = aluno['aluno_id']
-
-        # ExternalImageId = aluno_id, não o nome: dois alunos homônimos geravam
-        # o mesmo id e a presença caía no aluno errado. De quebra tira o nome
-        # dos metadados da collection e do caminho no S3 (minimização LGPD).
-        external_id = str(aluno_id)
-        filename = f"alunos/{external_id}/{safe_basename}"
-
-        # Upload direto da memória — sem arquivo temporário em disco (evita race,
-        # escrita em CWD não-gravável e leak por crash entre write e remove).
-        s3_client.upload_fileobj(io.BytesIO(image_bytes), BUCKET_NAME, filename)
-
-        resultado_rekognition = indexar_rosto_da_imagem_s3(filename, external_id, detection_attributes="ALL")
-
-        if not resultado_rekognition or not resultado_rekognition.get("FaceRecords"):
-            raise HTTPException(status_code=400, detail="Nenhum rosto detectado na imagem.")
-
-        face_id = resultado_rekognition["FaceRecords"][0]["Face"]["FaceId"]
-
-        # Captura o rosto anterior deste ângulo ANTES do upsert sobrescrever o
-        # ponteiro. Sem isso o FaceId/objeto S3 antigos ficam órfãos e a
-        # collection do Rekognition acumula (aluno acaba com 8 faces após
-        # re-cadastrar os 4 ângulos).
-        rosto_anterior = obter_rosto_por_angulo(aluno_id, angulo)
-
-        upsert_rosto(aluno_id, external_id, face_id, filename, angulo)
-
-        registrar_aceite_se_novo(
-            aluno_id,
+        return await run_in_threadpool(
+            _persistir_biometria,
+            image_bytes,
+            safe_basename,
+            user_id,
+            email,
+            angulo,
             politica_versao,
-            ip=client_ip(request),
-            user_agent=request.headers.get("user-agent") if request else None,
+            current_user,
+            client_ip(request),
+            request.headers.get("user-agent") if request else None,
         )
-
-        # Remove o rosto antigo só depois do novo estar indexado e persistido —
-        # se o index acima falhasse, a biometria anterior permaneceria intacta.
-        # Best-effort: falha na limpeza não invalida o cadastro bem-sucedido.
-        if rosto_anterior:
-            old_face_id = rosto_anterior.get("face_id_rekognition")
-            old_s3_path = rosto_anterior.get("s3_path_cadastro")
-            if old_face_id and old_face_id != face_id:
-                try:
-                    deletar_rosto(old_face_id)
-                except Exception as e:
-                    logger.warning("Falha ao deletar FaceId antigo %s (angulo=%s): %s", old_face_id, angulo, e)
-            if old_s3_path and old_s3_path != filename:
-                try:
-                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_s3_path)
-                except Exception as e:
-                    logger.warning("Falha ao deletar objeto S3 antigo %s (angulo=%s): %s", old_s3_path, angulo, e)
-
-        audit_logger.info(
-            "Biometria cadastrada aluno=%s angulo=%s por=%s ip=%s",
-            target_user_id, angulo, current_user.get("sub"), client_ip(request),
-        )
-        return {"status": "sucesso", "face_id": face_id, "external_id": external_id, "angulo": angulo}
-
     except HTTPException:
         raise
     except Exception as e:

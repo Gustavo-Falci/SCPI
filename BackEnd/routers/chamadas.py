@@ -2,6 +2,7 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from core.helpers import internal_error
 from core.security import get_current_user, require_role, require_service_token
@@ -268,11 +269,17 @@ async def registrar_presenca_camera(
     background_tasks: BackgroundTasks,
     sala: str = Depends(require_service_token),
 ):
-    """Registra presença a partir do reconhecimento feito pela câmera local."""
+    """Registra presença a partir do reconhecimento feito pela câmera local.
+
+    Endpoint async com corpo síncrono (psycopg2 + boto3): sem threadpool, cada
+    rosto reconhecido bloqueia o event loop por duas queries mais a chamada ao
+    Rekognition — e numa sala com aula isso acontece a cada poucos segundos,
+    parando todos os outros requests do worker.
+    """
     # Escopo de sala (A6): o token só registra presença na chamada aberta da
     # própria sala. Reusa a consulta já validada em produção na branch de
     # chamada por sala.
-    aberta = obter_chamada_aberta_por_sala(sala)
+    aberta = await run_in_threadpool(obter_chamada_aberta_por_sala, sala)
     if aberta is DB_INDISPONIVEL:
         # Banco não respondeu — transitório. 403 aqui seria recusa definitiva
         # para a câmera (nunca mais tentaria este aluno nesta chamada); um
@@ -287,8 +294,8 @@ async def registrar_presenca_camera(
             detail="Chamada não pertence à sala deste token.",
         )
 
-    resultado = registrar_presenca_por_face(
-        payload.external_image_id, payload.chamada_id
+    resultado = await run_in_threadpool(
+        registrar_presenca_por_face, payload.external_image_id, payload.chamada_id
     )
     motivo = resultado["motivo"]
 
