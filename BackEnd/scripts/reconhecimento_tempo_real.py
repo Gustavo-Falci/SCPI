@@ -102,6 +102,18 @@ class SistemaReconhecimento:
                 headers={"x-service-token": _SERVICE_TOKEN},
                 timeout=5,
             )
+            # 5xx é adiamento, não resposta: o servidor não sabe dizer qual é a
+            # chamada. Achatá-lo em `chamada_id = None` fazia o bloco abaixo
+            # entender "a chamada acabou" e dar limpar() no tracker — no ciclo
+            # seguinte a chamada reaparecia e a sala inteira era re-enviada, um
+            # SearchFaces por aluno. Um blip de banco custava uma rodada de
+            # Rekognition. Mesmo tratamento do timeout: mantém o estado.
+            if resp.status_code >= 500:
+                logger.warning(
+                    "Sincronização adiada: API respondeu %s. Estado da chamada preservado.",
+                    resp.status_code,
+                )
+                return
             chamada_id = resp.json().get("chamada_id") if resp.status_code == 200 else None
         except Exception as e:
             logger.error(f"Erro ao sincronizar chamada: {e}")
