@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
+  AppState,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,6 +29,10 @@ export default function ListaPresenca() {
   const [alunos, setAlunos] = useState<any[]>([]);
   const [lastChamadaId, setLastChamadaId] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Lidos pelo listener do AppState, que é registrado uma vez só e não pode
+  // depender do estado capturado no render em que foi criado.
+  const chamadaAbertaRef = useRef(false);
+  const buscandoRef = useRef(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -42,11 +47,28 @@ export default function ListaPresenca() {
     return () => pulse.stop();
   }, []);
 
+  const pararPolling = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+
+  const iniciarPolling = () => {
+    if (intervalRef.current) return;
+    intervalRef.current = setInterval(carregarStatus, 3000);
+  };
+
   const carregarStatus = async () => {
+    // O ciclo faz dois requests em série; em rede lenta a próxima batida do
+    // intervalo chegaria antes desta terminar e as chamadas se empilhariam.
+    if (buscandoRef.current) return;
     try {
       if (!turma_id) return;
+      buscandoRef.current = true;
       const statusResp = await apiGet(`/chamadas/status/${turma_id}`);
       setStatusChamada(statusResp);
+      chamadaAbertaRef.current = statusResp.status === "Aberta";
 
       if (statusResp.status === "Aberta") {
         setLastChamadaId(String(statusResp.chamada_id));
@@ -56,23 +78,36 @@ export default function ListaPresenca() {
         } catch (e) {
           console.log("Erro ao buscar alunos", e);
         }
-      } else if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+      } else {
+        pararPolling();
       }
     } catch (err: any) {
       console.error("Erro ao carregar status:", err);
     } finally {
+      buscandoRef.current = false;
       setLoading(false);
     }
   };
 
   useEffect(() => {
     carregarStatus();
-    intervalRef.current = setInterval(carregarStatus, 3000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    iniciarPolling();
+    return pararPolling;
+  }, [turma_id]);
+
+  // Em background o timer do JS segue rodando no Android, queimando rede e
+  // bateria numa tela que ninguém está vendo. Ao voltar, buscar antes de
+  // rearmar o intervalo — senão a tela fica com o dado congelado por até 3s.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        carregarStatus();
+        if (chamadaAbertaRef.current) iniciarPolling();
+      } else {
+        pararPolling();
+      }
+    });
+    return () => sub.remove();
   }, [turma_id]);
 
   const [encerrandoChamada, setEncerrandoChamada] = useState(false);
