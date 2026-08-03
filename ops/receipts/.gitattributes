@@ -1,0 +1,6 @@
+# Artefatos destinados à VM Linux — nunca CRLF no checkout (script com \r quebra o shebang)
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
+*.env.example text eol=lf
+README.md text eol=lf
