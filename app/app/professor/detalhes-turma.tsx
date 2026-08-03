@@ -14,10 +14,12 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 
 import { apiGet } from "../../services/api";
 import { Colors } from "../../constants/theme";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 export default function DetalhesTurma() {
   const { turma_id, turma_nome } = useLocalSearchParams();
   const router = useRouter();
+  const { showError } = useErrorToast();
   const [alunos, setAlunos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,12 +30,13 @@ export default function DetalhesTurma() {
         setAlunos(response.alunos || []);
       } catch (err: any) {
         console.error("Erro ao carregar alunos:", err);
+        showError(err, "Não foi possível carregar os alunos da turma");
       } finally {
         setLoading(false);
       }
     }
     loadAlunos();
-  }, [turma_id]);
+  }, [turma_id, showError]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

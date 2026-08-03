@@ -24,7 +24,7 @@ export default function IniciarChamada() {
   const [loading, setLoading] = useState(true);
   const [openingTurmaId, setOpeningTurmaId] = useState<string | null>(null);
 
-  const loadTurmas = async () => {
+  const loadTurmas = useCallback(async () => {
     try {
       const userId = await storage.getItem("user_id");
       if (!userId) return;
@@ -36,12 +36,12 @@ export default function IniciarChamada() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showError]);
 
   useFocusEffect(
     useCallback(() => {
       loadTurmas();
-    }, [])
+    }, [loadTurmas])
   );
 
   const handleAbrirChamada = async (turmaId: string, nomeTurma: string, podeIniciar: boolean) => {

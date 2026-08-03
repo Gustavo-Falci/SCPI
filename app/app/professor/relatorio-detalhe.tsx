@@ -59,12 +59,13 @@ export default function RelatorioDetalhe() {
         setDetalhe(data);
       } catch (err) {
         console.error("Erro ao carregar detalhe:", err);
+        showError(err, "Não foi possível carregar o relatório");
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, [chamada_id]);
+  }, [chamada_id, showError]);
 
   const presentes_count = detalhe
     ? detalhe.alunos.filter((a: any) => a.aulas_presentes_count === a.total_aulas).length

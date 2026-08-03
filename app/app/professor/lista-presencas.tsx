@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   AppState,
   ScrollView,
@@ -33,6 +33,10 @@ export default function ListaPresenca() {
   // depender do estado capturado no render em que foi criado.
   const chamadaAbertaRef = useRef(false);
   const buscandoRef = useRef(false);
+  // Este ciclo roda a cada 3s: um toast por falha viraria um toast a cada 3
+  // segundos com a rede fora. Só a PRIMEIRA falha de cada sequência é
+  // reportada; o flag zera no primeiro ciclo que voltar a dar certo.
+  const jaAvisouFalhaRef = useRef(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -45,24 +49,23 @@ export default function ListaPresenca() {
     );
     pulse.start();
     return () => pulse.stop();
-  }, []);
+  }, [pulseAnim]);
 
-  const pararPolling = () => {
+  // Ordem importa: pararPolling → carregarStatus → iniciarPolling. Cada um
+  // aparece nas dependências do seguinte, e dependência é lida durante o
+  // render — declarar fora de ordem estoura TDZ.
+  const pararPolling = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-  };
+  }, []);
 
-  const iniciarPolling = () => {
-    if (intervalRef.current) return;
-    intervalRef.current = setInterval(carregarStatus, 3000);
-  };
-
-  const carregarStatus = async () => {
+  const carregarStatus = useCallback(async () => {
     // O ciclo faz dois requests em série; em rede lenta a próxima batida do
     // intervalo chegaria antes desta terminar e as chamadas se empilhariam.
     if (buscandoRef.current) return;
+    let falhou = false;
     try {
       if (!turma_id) return;
       buscandoRef.current = true;
@@ -76,24 +79,42 @@ export default function ListaPresenca() {
           const listResp = await apiGet(`/chamadas/${statusResp.chamada_id}/alunos`);
           if (listResp && listResp.alunos) setAlunos(listResp.alunos);
         } catch (e) {
+          falhou = true;
           console.log("Erro ao buscar alunos", e);
+          if (!jaAvisouFalhaRef.current) {
+            jaAvisouFalhaRef.current = true;
+            showError(e, "A lista de presenças parou de atualizar");
+          }
         }
       } else {
         pararPolling();
       }
     } catch (err: any) {
+      falhou = true;
       console.error("Erro ao carregar status:", err);
+      if (!jaAvisouFalhaRef.current) {
+        jaAvisouFalhaRef.current = true;
+        showError(err, "A chamada parou de atualizar");
+      }
     } finally {
+      // Só um ciclo inteiramente limpo rearma o aviso — senão a falha interna
+      // da lista de alunos zeraria o flag que ela mesma acabou de levantar.
+      if (!falhou) jaAvisouFalhaRef.current = false;
       buscandoRef.current = false;
       setLoading(false);
     }
-  };
+  }, [turma_id, showError, pararPolling]);
+
+  const iniciarPolling = useCallback(() => {
+    if (intervalRef.current) return;
+    intervalRef.current = setInterval(carregarStatus, 3000);
+  }, [carregarStatus]);
 
   useEffect(() => {
     carregarStatus();
     iniciarPolling();
     return pararPolling;
-  }, [turma_id]);
+  }, [carregarStatus, iniciarPolling, pararPolling]);
 
   // Em background o timer do JS segue rodando no Android, queimando rede e
   // bateria numa tela que ninguém está vendo. Ao voltar, buscar antes de
@@ -108,7 +129,7 @@ export default function ListaPresenca() {
       }
     });
     return () => sub.remove();
-  }, [turma_id]);
+  }, [carregarStatus, iniciarPolling, pararPolling]);
 
   const [encerrandoChamada, setEncerrandoChamada] = useState(false);
 

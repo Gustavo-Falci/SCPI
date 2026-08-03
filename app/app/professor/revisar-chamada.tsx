@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -36,11 +36,10 @@ export default function RevisarChamada() {
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [dirty, setDirty] = useState(false);
 
-  useEffect(() => {
-    carregarAlunos();
-  }, [chamada_id]);
-
-  const carregarAlunos = async () => {
+  // Definido ANTES do useEffect que o consome: a lista de dependências é
+  // avaliada durante o render, e uma `const` referenciada antes da própria
+  // linha de atribuição estoura TDZ.
+  const carregarAlunos = useCallback(async () => {
     try {
       const resp = await apiGet(`/chamadas/${chamada_id}/alunos`);
       const n = resp?.total_aulas ?? 1;
@@ -59,7 +58,11 @@ export default function RevisarChamada() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [chamada_id, showError]);
+
+  useEffect(() => {
+    carregarAlunos();
+  }, [carregarAlunos]);
 
   const toggleCard = (alunoId: string) => {
     setDirty(true);
@@ -87,7 +90,7 @@ export default function RevisarChamada() {
     );
   };
 
-  const confirmLeave = (action: () => void) => {
+  const confirmLeave = useCallback((action: () => void) => {
     if (dirty) {
       Alert.alert(
         "Descartar ajustes?",
@@ -100,18 +103,25 @@ export default function RevisarChamada() {
     } else {
       action();
     }
-  };
+  }, [dirty]);
 
-  const handleBack = () => confirmLeave(() => router.replace("/professor/home"));
+  const handleBack = useCallback(
+    () => confirmLeave(() => router.replace("/professor/home")),
+    [confirmLeave, router]
+  );
   const handleMenuNavigate = (route: string) => confirmLeave(() => router.replace(route as any));
 
+  // Depende de handleBack, não de `dirty`: era a mesma coisa por tabela (o
+  // único uso de dirty é dentro de confirmLeave), mas assim a cadeia fica
+  // explícita e o listener não fica preso a um handleBack velho se confirmLeave
+  // passar a olhar outro estado.
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       handleBack();
       return true;
     });
     return () => sub.remove();
-  }, [dirty]);
+  }, [handleBack]);
 
   const totalPresencas = alunos.filter((a) => a.aulasPresentes.every(Boolean)).length;
   const totalFaltas = alunos.filter((a) => a.aulasPresentes.every((v) => !v)).length;

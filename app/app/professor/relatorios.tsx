@@ -68,6 +68,18 @@ function buildQuery(f: Filtros, paginacao?: { offset: number }): string {
   return qs ? `?${qs}` : "";
 }
 
+// Normaliza as duas formas de resposta: envelope (backend novo) e array puro
+// (backend antigo ignora `paginado` e devolve a lista como sempre).
+//
+// Fica no módulo, e não no componente: dentro dele seria recriada a cada
+// render, e aí o useCallback de loadRelatorios nunca estabilizaria — o
+// useFocusEffect que depende dele re-dispararia sem parar.
+function extrair(data: any) {
+  return Array.isArray(data)
+    ? { items: data, total: data.length, has_more: false }
+    : { items: data?.items ?? [], total: data?.total ?? 0, has_more: !!data?.has_more };
+}
+
 function contarAtivos(f: Filtros): number {
   let n = 0;
   if (f.dataInicio || f.dataFim) n++;
@@ -176,14 +188,7 @@ export default function Relatorios() {
     );
   };
 
-  // Normaliza as duas formas de resposta: envelope (backend novo) e array puro
-  // (backend antigo ignora `paginado` e devolve a lista como sempre).
-  const extrair = (data: any) =>
-    Array.isArray(data)
-      ? { items: data, total: data.length, has_more: false }
-      : { items: data?.items ?? [], total: data?.total ?? 0, has_more: !!data?.has_more };
-
-  const loadRelatorios = async (f: Filtros) => {
+  const loadRelatorios = useCallback(async (f: Filtros) => {
     const token = ++requisicaoRef.current;
     setLoading(true);
     try {
@@ -196,10 +201,11 @@ export default function Relatorios() {
     } catch (err) {
       if (token !== requisicaoRef.current) return;
       console.error("Erro ao carregar relatórios:", err);
+      showError(err, "Não foi possível carregar os relatórios");
     } finally {
       if (token === requisicaoRef.current) setLoading(false);
     }
-  };
+  }, [showError]);
 
   const carregarMais = async () => {
     if (carregandoMais || loading || !temMais) return;
@@ -218,13 +224,14 @@ export default function Relatorios() {
     } catch (err) {
       if (token !== requisicaoRef.current) return;
       console.error("Erro ao carregar mais relatórios:", err);
+      showError(err, "Não foi possível carregar mais resultados");
       setTemMais(false);
     } finally {
       if (token === requisicaoRef.current) setCarregandoMais(false);
     }
   };
 
-  const loadOpcoes = async () => {
+  const loadOpcoes = useCallback(async () => {
     try {
       const data = await apiGet("/professor/relatorios/filtros");
       setOpcoes({
@@ -233,15 +240,18 @@ export default function Relatorios() {
         semestres: data?.semestres ?? [],
       });
     } catch (err) {
+      // Falhar calado aqui deixa o painel de filtros vazio sem explicação —
+      // parece "não há turmas", não "a requisição quebrou".
       console.error("Erro ao carregar opções de filtro:", err);
+      showError(err, "Não foi possível carregar os filtros");
     }
-  };
+  }, [showError]);
 
   // Recarrega opções a cada foco da tela.
   useFocusEffect(
     useCallback(() => {
       loadOpcoes();
-    }, [])
+    }, [loadOpcoes])
   );
 
   // Recarrega a lista ao focar a tela e sempre que os filtros mudam
@@ -249,7 +259,7 @@ export default function Relatorios() {
   useFocusEffect(
     useCallback(() => {
       loadRelatorios(filtros);
-    }, [filtros])
+    }, [filtros, loadRelatorios])
   );
 
   const abrirPainel = () => {

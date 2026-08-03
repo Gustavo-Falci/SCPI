@@ -9,7 +9,7 @@
     "android": "npm run sync-env && expo start --android",
     "ios": "npm run sync-env && expo start --ios",
     "web": "npm run sync-env && expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint -- --max-warnings 0"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

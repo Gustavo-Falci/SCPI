@@ -23,7 +23,9 @@ export default function Frequencia() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadFrequencias = async () => {
+  // Sem toast de propósito: esta tela já renderiza o erro em `error` (o bloco
+  // de errorText abaixo). Um showError aqui reportaria a mesma falha duas vezes.
+  const loadFrequencias = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -40,12 +42,12 @@ export default function Frequencia() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
 
   useFocusEffect(
     useCallback(() => {
       loadFrequencias();
-    }, [])
+    }, [loadFrequencias])
   );
 
   const menuItems: any[] = [

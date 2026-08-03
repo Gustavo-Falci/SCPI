@@ -15,9 +15,11 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { storage } from "../../services/storage";
 import { apiGet } from "../../services/api";
 import { Colors } from "../../constants/theme";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 export default function FrequenciaDetalhe() {
   const router = useRouter();
+  const { showError } = useErrorToast();
   const { turma_id, turma_nome } = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
   const [detalhe, setDetalhe] = useState<any>(null);
@@ -34,12 +36,13 @@ export default function FrequenciaDetalhe() {
         setDetalhe(data);
       } catch (err) {
         console.error("Erro ao carregar histórico:", err);
+        showError(err, "Não foi possível carregar o histórico da turma");
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, [turma_id]);
+  }, [turma_id, router, showError]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
