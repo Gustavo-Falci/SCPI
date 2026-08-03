@@ -47,7 +47,7 @@ def rotacionar_refresh_token(token_hash_antigo, token_hash_novo, expires_at_novo
             )
             return {"_status": "reuse", "usuario_id": row["usuario_id"]}
 
-        # expires_at vem de coluna TIMESTAMP (naive); agora_utc() também é naive.
+        # Ambos aware: expires_at é TIMESTAMPTZ e agora_utc() tem tzinfo.
         if row["expires_at"] < agora_utc():
             return {"_status": "expired"}
 

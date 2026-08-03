@@ -236,9 +236,9 @@ def ensure_refresh_tokens_table():
             CREATE TABLE IF NOT EXISTS RefreshTokens (
                 token_hash VARCHAR(128) PRIMARY KEY,
                 usuario_id VARCHAR(64) NOT NULL,
-                expires_at TIMESTAMP NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                revoked_at TIMESTAMP NULL
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                revoked_at TIMESTAMPTZ NULL
             )
             """
         )
@@ -291,9 +291,9 @@ def ensure_reset_codes_table():
                 id SERIAL PRIMARY KEY,
                 email VARCHAR(255) NOT NULL,
                 code VARCHAR(6) NOT NULL,
-                expires_at TIMESTAMP NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
                 used BOOLEAN NOT NULL DEFAULT FALSE,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """
         )
@@ -318,7 +318,7 @@ def ensure_reset_token_consumo():
     with get_db_cursor(commit=True) as cur:
         cur.execute(
             "ALTER TABLE PasswordResetCodes "
-            "ADD COLUMN IF NOT EXISTS token_consumido_em TIMESTAMP"
+            "ADD COLUMN IF NOT EXISTS token_consumido_em TIMESTAMPTZ"
         )
 
 
@@ -508,6 +508,56 @@ def ensure_indices_performance():
 # Nomes, não referências: os testes de pipeline usam patch.object(m, nome, stub)
 # e uma lista de referências capturaria as funções originais no import, fazendo
 # o patch virar no-op silencioso.
+def ensure_timestamptz_tokens():
+    """Converte as colunas de data das tabelas de token para TIMESTAMPTZ.
+
+    Motivo: `RefreshTokens` e `PasswordResetCodes` tinham semântica MISTA. As
+    colunas `expires_at` recebiam UTC vindo do Python, enquanto `created_at`,
+    `revoked_at` e `token_consumido_em` recebiam `NOW()`/`CURRENT_TIMESTAMP`,
+    que num `timestamp` sem tz grava a hora de PAREDE da sessão. Se o TimeZone
+    do banco não for UTC, os dois grupos estavam deslocados entre si — e
+    `purgar_tokens_expirados` ("expires_at < NOW()") comparava um contra o
+    outro, apagando refresh token cedo ou tarde demais pelo offset.
+
+    Por isso a conversão usa cláusulas DIFERENTES por grupo:
+      - `expires_at`      → interpretar o valor gravado como UTC
+      - as demais         → interpretar como o TimeZone da sessão
+
+    Com TimeZone = UTC as duas são idênticas, então o DDL está correto nos dois
+    cenários e não depende de descobrir a configuração antes.
+
+    A guarda por `information_schema` não é cosmética: `ALTER COLUMN ... TYPE`
+    reescreve a tabela inteira sob ACCESS EXCLUSIVE. Sem ela, todo boot da API
+    travaria as duas tabelas de autenticação.
+    """
+    grupos = [
+        # (tabela, coluna, fuso de origem do valor já gravado)
+        ("refreshtokens", "expires_at", "UTC"),
+        ("refreshtokens", "created_at", None),
+        ("refreshtokens", "revoked_at", None),
+        ("passwordresetcodes", "expires_at", "UTC"),
+        ("passwordresetcodes", "created_at", None),
+        ("passwordresetcodes", "token_consumido_em", None),
+    ]
+    with get_db_cursor(commit=True) as cur:
+        for tabela, coluna, fuso in grupos:
+            cur.execute(
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_name = %s AND column_name = %s
+                """,
+                (tabela, coluna),
+            )
+            row = cur.fetchone()
+            if not row or row["data_type"] != "timestamp without time zone":
+                continue  # já convertida, ou coluna ainda não existe
+            origem = "'UTC'" if fuso == "UTC" else "current_setting('TimeZone')"
+            cur.execute(
+                f"ALTER TABLE {tabela} ALTER COLUMN {coluna} "
+                f"TYPE timestamptz USING {coluna} AT TIME ZONE {origem}"
+            )
+
+
 _ETAPAS = [
     "ensure_base_schema",
     "ensure_professor_departamento_dropped",
@@ -520,6 +570,8 @@ _ETAPAS = [
     "ensure_primeiro_acesso_column",
     "ensure_reset_codes_table",
     "ensure_reset_token_consumo",
+    # Depois das duas tabelas existirem e de token_consumido_em ter sido criada.
+    "ensure_timestamptz_tokens",
     "ensure_rate_limit_table",
     "ensure_login_attempts_table",
     "ensure_camera_tokens_table",
