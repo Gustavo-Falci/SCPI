@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 from logging.handlers import TimedRotatingFileHandler
 
 from dotenv import load_dotenv, find_dotenv
@@ -94,6 +95,34 @@ def _check_aws_connectivity():
     except Exception as e:
         logger.warning("AWS S3: falha na verificação de conectividade: %s", e)
 
+
+_agendador_task: asyncio.Task | None = None
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Substitui os antigos @app.on_event("startup"/"shutdown"), deprecados.
+
+    O `try/finally` cerca só o `yield`: se `run_all()` levantar, o teardown
+    NÃO roda — mesmo comportamento de antes, quando um startup que falhava
+    impedia o evento de shutdown de ser disparado. Cercar o startup também
+    faria `close_pool()` rodar sobre um pool que talvez nem tenha sido criado.
+
+    Migrations concorrentes dos 4 workers do gunicorn já são cobertas por
+    advisory lock dentro de `run_all` (infra/migrations.py).
+    """
+    global _agendador_task
+    _migrations.run_all()
+    _agendador_task = asyncio.create_task(iniciar_agendador())
+    _check_aws_connectivity()
+    try:
+        yield
+    finally:
+        if _agendador_task:
+            _agendador_task.cancel()
+        close_pool()
+
+
 # Em produção, desabilita docs/schema interativos — evita expor toda a superfície
 # da API (endpoints + schemas) a anônimos. Em dev/homolog seguem disponíveis.
 _IS_PRODUCTION = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
@@ -102,6 +131,7 @@ app = FastAPI(
     docs_url=None if _IS_PRODUCTION else "/docs",
     redoc_url=None if _IS_PRODUCTION else "/redoc",
     openapi_url=None if _IS_PRODUCTION else "/openapi.json",
+    lifespan=lifespan,
 )
 
 app.state.limiter = limiter
@@ -135,25 +165,6 @@ app.add_middleware(
 
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["127.0.0.1"])
 app.add_middleware(SecurityHeadersMiddleware)
-
-
-_agendador_task: asyncio.Task | None = None
-
-
-@app.on_event("startup")
-async def _on_startup():
-    global _agendador_task
-    _migrations.run_all()
-    _agendador_task = asyncio.create_task(iniciar_agendador())
-    _check_aws_connectivity()
-
-
-@app.on_event("shutdown")
-async def _on_shutdown():
-    global _agendador_task
-    if _agendador_task:
-        _agendador_task.cancel()
-    close_pool()
 
 
 app.include_router(public.router)
