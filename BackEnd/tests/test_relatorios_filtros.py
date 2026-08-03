@@ -48,6 +48,34 @@ def test_listar_relatorios_chamadas_sem_filtros_nao_adiciona_clausulas():
     assert params == ("p1", 200, 0)
 
 
+def test_listar_relatorios_agrega_situacoes_num_unico_lateral():
+    """Os 3 subselects que repetiam o mesmo join viraram um LATERAL.
+
+    Asserção sobre a forma do SQL porque o cursor aqui é mock e não executa
+    nada; os números estão pinados em test_relatorios_lateral_db.py.
+    """
+    cm, cur = _mock_cursor()
+    with patch("repositories.chamadas.get_db_cursor", return_value=cm):
+        from repositories.chamadas import listar_relatorios_chamadas
+        listar_relatorios_chamadas(professor_id="p1")
+    sql = cur.execute.call_args[0][0]
+    assert "LEFT JOIN LATERAL" in sql
+    assert sql.count("FROM Turma_Alunos ta") == 1
+
+
+def test_listar_relatorios_mantem_presentes_fora_do_lateral():
+    """`presentes` conta Presencas da chamada, inclusive de quem saiu da turma.
+
+    O LATERAL parte de Turma_Alunos e perderia essas linhas.
+    """
+    cm, cur = _mock_cursor()
+    with patch("repositories.chamadas.get_db_cursor", return_value=cm):
+        from repositories.chamadas import listar_relatorios_chamadas
+        listar_relatorios_chamadas(professor_id="p1")
+    sql = cur.execute.call_args[0][0]
+    assert "FROM Presencas p  WHERE p.chamada_id  = c.chamada_id) AS presentes" in sql
+
+
 def test_listar_opcoes_filtros_relatorios_deriva_distintos():
     # professor_id/professor_nome entraram no SELECT junto com o filtro de
     # professor do admin; a query real devolve as duas colunas.
