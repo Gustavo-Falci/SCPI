@@ -32,7 +32,7 @@ function renderGrid(container) {
     const aulas = filtered.filter(g => g.dia_semana === idx).sort((a, b) => (a.inicio || a.horario_inicio || '').localeCompare(b.inicio || b.horario_inicio || ''));
     return `
       <div class="min-w-[140px]">
-        <div class="text-center font-black text-gray-600 text-xs uppercase tracking-[0.2em] mb-3">${dia}</div>
+        <div class="text-center font-black text-faint text-xs uppercase tracking-[0.2em] mb-3">${dia}</div>
         <div class="space-y-3">
           ${aulas.map(h => `
             <div class="group p-3 rounded-2xl border-2 transition-all ${colorCard}">
@@ -48,7 +48,7 @@ function renderGrid(container) {
               </div>
             </div>
           `).join('')}
-          <button data-dia="${idx}" class="add-horario w-full py-4 border-2 border-dashed border-white/5 rounded-2xl flex items-center justify-center text-gray-700 hover:border-accent/40 hover:text-accent transition-all">${icon('plus', 20)}</button>
+          <button data-dia="${idx}" class="add-horario w-full py-4 border-2 border-dashed border-white/5 rounded-2xl flex items-center justify-center text-faint hover:border-accent/40 hover:text-accent transition-all">${icon('plus', 20)}</button>
         </div>
       </div>
     `;
@@ -78,12 +78,12 @@ function showAddModal(diaIdx, container) {
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
-        <div><h3 class="font-black text-lg">Adicionar Aula</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${DIAS_SEMANA[diaIdx]}</p></div>
-        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <div><h3 class="font-black text-lg">Adicionar Aula</h3><p class="text-muted text-xs font-bold mt-0.5">${DIAS_SEMANA[diaIdx]}</p></div>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted">${icon('x', 16)}</button>
       </div>
       <form id="horario-form" class="space-y-4">
         <div>
-          <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Disciplina *</label>
+          <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Disciplina *</label>
           <select name="turma_id" class="scpi-input" required>
             <option value="">Selecione...</option>
             ${turmas.map(t => `<option value="${escapeHtml(t.turma_id)}">${escapeHtml(t.nome_disciplina)} — ${escapeHtml(t.codigo_turma)}</option>`).join('')}
@@ -91,14 +91,14 @@ function showAddModal(diaIdx, container) {
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Início *</label>
+            <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Início *</label>
             <select name="horario_inicio" class="scpi-input" required>
               <option value="">Selecione...</option>
               ${slots.map(s => `<option value="${s.inicio}">${s.inicio}</option>`).join('')}
             </select>
           </div>
           <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Fim *</label>
+            <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Fim *</label>
             <select name="horario_fim" class="scpi-input" required>
               <option value="">Selecione...</option>
               ${slots.map(s => `<option value="${s.fim}">${s.fim}</option>`).join('')}
@@ -106,7 +106,7 @@ function showAddModal(diaIdx, container) {
           </div>
         </div>
         <div>
-          <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Sala *</label>
+          <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Sala *</label>
           <input name="sala" type="text" placeholder="Lab 01" class="scpi-input" required>
         </div>
         <div class="flex gap-3 pt-2">

@@ -37,23 +37,23 @@
           <span class="logo-icon text-white"></span>
         </div>
         <h1 class="text-2xl font-black tracking-tight">SCPI</h1>
-        <p class="text-gray-500 text-sm font-bold mt-1">Portal Administrativo</p>
+        <p class="text-muted text-sm font-bold mt-1">Portal Administrativo</p>
       </div>
 
       <div class="bg-card rounded-3xl p-8 border border-white/5 shadow-2xl shadow-black/60">
         <form id="login-form" class="space-y-5" autocomplete="on">
           <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email</label>
+            <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Email</label>
             <input id="login-email" name="email" type="email" placeholder="admin@escola.com" autocomplete="email"
               class="scpi-input" required>
           </div>
           <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Senha</label>
+            <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Senha</label>
             <div class="relative">
               <input id="login-password" name="password" type="password" placeholder="••••••••" autocomplete="current-password"
                 class="scpi-input pr-12" required>
               <button type="button" id="toggle-password"
-                class="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-gray-600 hover:text-gray-300 transition-colors rounded-xl hover:bg-white/5">
+                class="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-faint hover:text-gray-300 transition-colors rounded-xl hover:bg-white/5">
               </button>
             </div>
           </div>
@@ -73,8 +73,8 @@
 
     <!-- Link de privacidade: absolute e sem borda — em fluxo ou com border-top
          ele reintroduz o scroll e a linha cinza do footer antigo. -->
-    <p class="absolute bottom-4 left-0 right-0 text-center text-[11px] font-bold text-gray-600">
-      <a href="privacy.html" class="hover:text-gray-400 transition-colors">Política de Privacidade</a>
+    <p class="absolute bottom-4 left-0 right-0 text-center text-[11px] font-bold text-faint">
+      <a href="privacy.html" class="hover:text-muted transition-colors">Política de Privacidade</a>
       <span class="mx-1.5">·</span>SCPI &copy; 2025
     </p>
   </div>
@@ -101,10 +101,10 @@
           </div>
           <div id="sidebar-brand" class="min-w-0">
             <h1 class="font-black text-base tracking-tight leading-tight">SCPI</h1>
-            <p class="text-gray-600 text-[10px] font-black uppercase tracking-widest">Admin Portal</p>
+            <p class="text-faint text-[10px] font-black uppercase tracking-widest">Admin Portal</p>
           </div>
           <button id="sidebar-toggle" type="button"
-            class="hidden lg:flex ml-auto w-8 h-8 items-center justify-center rounded-xl text-gray-500 hover:text-white hover:bg-white/5 transition-colors flex-shrink-0"
+            class="hidden lg:flex ml-auto w-8 h-8 items-center justify-center rounded-xl text-muted hover:text-white hover:bg-white/5 transition-colors flex-shrink-0"
             aria-expanded="true" aria-controls="sidebar-nav" aria-label="Recolher menu"></button>
         </div>
       </div>
@@ -116,10 +116,10 @@
       <div class="p-3 border-t border-white/5 flex-shrink-0 space-y-1">
         <div id="sidebar-userbox" class="px-4 py-3 rounded-2xl bg-surface border border-white/5">
           <p class="font-black text-sm truncate" id="sidebar-username"></p>
-          <p class="text-[10px] font-black text-gray-600 uppercase tracking-widest mt-0.5">Administrador</p>
+          <p class="text-[10px] font-black text-faint uppercase tracking-widest mt-0.5">Administrador</p>
         </div>
         <button id="logout-btn"
-          class="w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all">
+          class="w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm text-muted hover:text-red-400 hover:bg-red-500/10 transition-all">
         </button>
       </div>
     </aside>
@@ -135,12 +135,12 @@
         <div class="flex items-center gap-3 min-w-0">
           <!-- Hamburger -->
           <button id="hamburger"
-            class="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/5 text-gray-500 hover:text-white transition-colors flex-shrink-0">
+            class="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/5 text-muted hover:text-white transition-colors flex-shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
           </button>
           <div class="min-w-0">
             <h2 id="header-title" class="font-black text-base sm:text-lg leading-tight truncate"></h2>
-            <p id="header-subtitle" class="text-[11px] sm:text-xs text-gray-500 font-bold truncate"></p>
+            <p id="header-subtitle" class="text-[11px] sm:text-xs text-muted font-bold truncate"></p>
           </div>
         </div>
 
@@ -209,7 +209,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
       </div>
       <h3 id="confirm-title" class="font-black text-lg mb-2"></h3>
-      <p id="confirm-message" class="text-gray-400 font-bold text-sm mb-6 leading-relaxed"></p>
+      <p id="confirm-message" class="text-muted font-bold text-sm mb-6 leading-relaxed"></p>
       <div class="flex gap-3">
         <button id="confirm-cancel"
           class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">
