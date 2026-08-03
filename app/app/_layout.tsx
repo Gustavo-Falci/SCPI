@@ -42,6 +42,11 @@ export default function RootLayout() {
           }
         }
       } catch (e) {
+        // Sem showError aqui de propósito: este componente RENDERIZA o
+        // <ErrorToastProvider/>, então o contexto ainda não existe neste ponto
+        // da árvore — useErrorToast lançaria. A falha só acontece se a leitura
+        // do storage quebrar no boot, e o `finally` segue para a tela mesmo
+        // assim, em vez de travar num splash eterno.
         console.error('Erro no RootLayout:', e);
       } finally {
         setIsReady(true);
@@ -49,7 +54,7 @@ export default function RootLayout() {
     };
 
     checkAuth();
-  }, [segments]);
+  }, [segments, pathname, router]);
 
   if (!isReady) return null;
 

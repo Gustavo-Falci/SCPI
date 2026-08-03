@@ -18,14 +18,16 @@ import { apiGet, logoutRequest } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { DashboardHeader } from "../../components/layout/dashboard-header";
 import { FloatingMenu } from "../../components/layout/floating-menu";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 export default function HomeProfessor() {
   const router = useRouter();
+  const { showError } = useErrorToast();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
       const userId = await storage.getItem("user_id");
       if (!userId) {
@@ -36,15 +38,16 @@ export default function HomeProfessor() {
       setData(resp);
     } catch (err) {
       console.error("Erro ao carregar dashboard professor:", err);
+      showError(err, "Não foi possível carregar seu painel");
     } finally {
       setLoading(false);
     }
-  };
+  }, [router, showError]);
 
   useFocusEffect(
     useCallback(() => {
       loadDashboard();
-    }, [])
+    }, [loadDashboard])
   );
 
   useEffect(() => {
@@ -54,7 +57,7 @@ export default function HomeProfessor() {
         Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
       ])
     ).start();
-  }, []);
+  }, [pulseAnim]);
 
   const handleLogout = async () => {
     await logoutRequest();

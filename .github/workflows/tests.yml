@@ -106,9 +106,8 @@ jobs:
 
       - name: Lint
         working-directory: app
-        # Bloqueia em erro, não em warning. O app tem 19 warnings de
-        # react-hooks/exhaustive-deps hoje, vários deliberados (listener que
-        # não pode re-registrar a cada render). Apertar para `--max-warnings 0`
-        # é decisão à parte, depois de triar os 19 — não pode entrar de carona
-        # aqui ou o CI nasce vermelho.
+        # `--max-warnings 0` mora no script `lint` do package.json, para o CI e
+        # a máquina do dev cobrarem a mesma coisa. Os 19 warnings de
+        # react-hooks/exhaustive-deps que existiam foram triados e corrigidos;
+        # o zero é o que impede que voltem um a um.
         run: npm run lint

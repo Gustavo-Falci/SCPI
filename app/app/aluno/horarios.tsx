@@ -17,6 +17,7 @@ import { storage } from "../../services/storage";
 import { apiGet } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { FloatingMenu } from "../../components/layout/floating-menu";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 function isAulaAoVivo(horario: string): boolean {
   const parts = horario.split(' - ');
@@ -40,16 +41,17 @@ function PulsingDot() {
         Animated.timing(anim, { toValue: 1, duration: 700, useNativeDriver: true }),
       ])
     ).start();
-  }, []);
+  }, [anim]);
   return <Animated.View style={[styles.dot, { opacity: anim }]} />;
 }
 
 export default function Horarios() {
   const router = useRouter();
+  const { showError } = useErrorToast();
   const [loading, setLoading] = useState(true);
   const [aulas, setAulas] = useState<any[]>([]);
 
-  const loadHorarios = async () => {
+  const loadHorarios = useCallback(async () => {
     try {
       const userId = await storage.getItem("user_id");
       if (!userId) {
@@ -61,15 +63,16 @@ export default function Horarios() {
       setAulas(resp.aulas_hoje || []);
     } catch (err) {
       console.error("Erro ao carregar horários aluno:", err);
+      showError(err, "Não foi possível carregar seus horários");
     } finally {
       setLoading(false);
     }
-  };
+  }, [router, showError]);
 
   useFocusEffect(
     useCallback(() => {
       loadHorarios();
-    }, [])
+    }, [loadHorarios])
   );
 
   const getTodayDateFormatted = () => {

@@ -17,9 +17,11 @@ import { storage } from "../../services/storage";
 import { Colors } from "../../constants/theme";
 import { Input } from "../../components/ui/input";
 import { FloatingMenu } from "../../components/layout/floating-menu";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 export default function Turmas() {
   const router = useRouter();
+  const { showError } = useErrorToast();
   const [turmas, setTurmas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -41,12 +43,13 @@ export default function Turmas() {
         setTurmas(response.turmas || []);
       } catch (err: any) {
         console.error("Erro carregar turmas:", err.message);
+        showError(err, "Não foi possível carregar suas turmas");
       } finally {
         setLoading(false);
       }
     }
     loadTurmas();
-  }, []);
+  }, [router, showError]);
 
   const menuItems: any[] = [
     { icon: 'home-outline', activeIcon: 'home', route: '/professor/home', label: 'Início' },

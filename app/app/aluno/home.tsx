@@ -18,6 +18,7 @@ import { apiGet, logoutRequest } from "../../services/api";
 import { Colors } from "../../constants/theme";
 import { DashboardHeader } from "../../components/layout/dashboard-header";
 import { FloatingMenu } from "../../components/layout/floating-menu";
+import { useErrorToast } from "../../hooks/useErrorToast";
 
 function isAulaAgora(horario: string): boolean {
   if (!horario) return false;
@@ -42,11 +43,15 @@ function isAulaAgora(horario: string): boolean {
 
 export default function HomeAluno() {
   const router = useRouter();
+  const { showError } = useErrorToast();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  const loadDashboard = async () => {
+  // useCallback com deps estáveis: `router` é o singleton do expo-router e
+  // `showError` é memoizado no provider, então a identidade não muda entre
+  // renders e o useFocusEffect abaixo pode depender dela sem re-disparar.
+  const loadDashboard = useCallback(async () => {
     try {
       const userId = await storage.getItem("user_id");
       if (!userId) {
@@ -57,15 +62,16 @@ export default function HomeAluno() {
       setData(resp);
     } catch (err) {
       console.error("Erro ao carregar dashboard aluno:", err);
+      showError(err, "Não foi possível carregar seu painel");
     } finally {
       setLoading(false);
     }
-  };
+  }, [router, showError]);
 
   useFocusEffect(
     useCallback(() => {
       loadDashboard();
-    }, [])
+    }, [loadDashboard])
   );
 
   useEffect(() => {
@@ -75,7 +81,7 @@ export default function HomeAluno() {
         Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
       ])
     ).start();
-  }, []);
+  }, [pulseAnim]);
 
   const handleLogout = async () => {
     await logoutRequest();
