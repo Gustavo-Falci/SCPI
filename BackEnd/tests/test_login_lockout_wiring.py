@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -7,6 +7,7 @@ from slowapi.errors import RateLimitExceeded
 
 from core.errors import rate_limit_handler
 from core.limiter import limiter
+from core.tempo import agora_utc
 
 
 def _client():
@@ -20,7 +21,7 @@ def _client():
 
 
 def test_login_bloqueado_retorna_429():
-    futuro = datetime.utcnow() + timedelta(minutes=10)
+    futuro = agora_utc() + timedelta(minutes=10)
     with patch("routers.auth.esta_bloqueado", return_value=futuro):
         resp = _client().post(
             "/auth/login", data={"username": "x@x.com", "password": "seja-o-que-for"}

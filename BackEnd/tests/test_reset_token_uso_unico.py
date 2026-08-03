@@ -4,10 +4,12 @@ Antes, era um JWT stateless de 15 min sem jti: dentro da janela servia para
 trocar a senha quantas vezes o portador quisesse.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import jwt as _jwt
 from fastapi import HTTPException
+
+from core.tempo import agora_utc
 
 
 def _token(jti, email="teste@exemplo.com", minutos=15):
@@ -16,7 +18,7 @@ def _token(jti, email="teste@exemplo.com", minutos=15):
     payload = {
         "sub": email,
         "type": "password_reset",
-        "exp": datetime.utcnow() + timedelta(minutes=minutos),
+        "exp": agora_utc() + timedelta(minutes=minutos),
     }
     if jti is not None:
         payload["jti"] = jti
@@ -28,7 +30,7 @@ def test_verificar_codigo_inclui_jti_no_token(monkeypatch):
 
     monkeypatch.setattr(
         auth, "buscar_codigo_reset_valido",
-        lambda _e, _h: {"id": 42, "expires_at": datetime.utcnow() + timedelta(minutes=10)},
+        lambda _e, _h: {"id": 42, "expires_at": agora_utc() + timedelta(minutes=10)},
     )
     monkeypatch.setattr(auth, "marcar_codigo_reset_usado", lambda _id: 1)
 

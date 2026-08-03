@@ -1,7 +1,7 @@
 import logging
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import resend as _resend
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
@@ -26,6 +26,7 @@ from core.auth_utils import (
 from core.helpers import client_ip, internal_error, mask_email
 from core.limiter import limiter
 from core.security import get_current_user
+from core.tempo import agora_utc
 from repositories.alunos import obter_aluno_e_face_status
 from repositories.tokens import (
     buscar_codigo_reset_valido,
@@ -366,7 +367,7 @@ def esqueci_senha(request: Request, body: EsqueciSenhaBody):
         return generic_response
 
     code = str(secrets.randbelow(900000) + 100000)
-    expires_at = datetime.utcnow() + timedelta(minutes=15)
+    expires_at = agora_utc() + timedelta(minutes=15)
 
     # Persiste apenas o HMAC do código; o texto puro só vai no e-mail ao titular.
     substituir_codigo_reset(email, hash_reset_code(email, code), expires_at)
@@ -425,7 +426,8 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
         )
         raise HTTPException(status_code=400, detail="Código inválido ou já utilizado.")
 
-    if datetime.utcnow() > row["expires_at"]:
+    # row["expires_at"] vem de coluna TIMESTAMP (naive) — ver core/tempo.py.
+    if agora_utc() > row["expires_at"]:
         audit_logger.warning(
             "Verificação de código falhou (expirado) email=%s ip=%s",
             mask_email(email), client_ip(request),
@@ -444,7 +446,7 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
         # tipo no decode): é o que amarra este token a uma única troca de senha
         # (A4).
         "jti": str(row["id"]),
-        "exp": datetime.utcnow() + timedelta(minutes=15),
+        "exp": agora_utc() + timedelta(minutes=15),
     }
     reset_token = _jwt.encode(reset_payload, SECRET_KEY, algorithm=ALGORITHM)
     return {"reset_token": reset_token}
