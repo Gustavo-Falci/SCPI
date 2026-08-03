@@ -105,28 +105,56 @@ def test_valor_gravado_sobrevive_a_conversao_em_qualquer_fuso(fuso):
     )
 
 
-def test_ciclo_do_refresh_token_com_datetime_aware():
-    """Grava e lê de volta pelo caminho real do repositório."""
-    from core.auth_utils import create_refresh_token
+@pytest.fixture
+def usuario_probe():
+    """Usuário real, porque `rotacionar_refresh_token` faz JOIN com Usuarios.
+
+    Sem a linha em Usuarios o JOIN não casa, a função devolve `invalid` e
+    retorna ANTES de comparar `expires_at` — o teste passaria sem nunca ter
+    exercitado a comparação aware que é o motivo dele existir.
+    """
+    import uuid
+
     from infra.database import get_db_cursor
     from infra.migrations import _apply_all
-    from repositories.tokens import inserir_refresh_token, rotacionar_refresh_token
 
     _apply_all()
-    plain, token_hash, expires_at = create_refresh_token()
-    assert expires_at.tzinfo is not None, "create_refresh_token deveria devolver aware"
+    usuario_id = str(uuid.uuid4())
+    marca = usuario_id[:8]
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO Usuarios (usuario_id, nome, email, senha, tipo_usuario) "
+            "VALUES (%s, 'TZ Probe', %s, 'x', 'Aluno')",
+            (usuario_id, f"tz-probe-{marca}@teste.local"),
+        )
+
+    yield usuario_id
 
     with get_db_cursor(commit=True) as cur:
-        cur.execute("DELETE FROM RefreshTokens WHERE usuario_id = %s", ("tz-probe",))
+        cur.execute("DELETE FROM RefreshTokens WHERE usuario_id = %s", (usuario_id,))
+        cur.execute("DELETE FROM Usuarios WHERE usuario_id = %s::uuid", (usuario_id,))
 
-    assert inserir_refresh_token(token_hash, "tz-probe", expires_at) is True
+
+def test_ciclo_do_refresh_token_com_datetime_aware(usuario_probe):
+    """Grava e lê de volta pelo caminho real do repositório.
+
+    O `_status == "ok"` é o que prova o ponto: para chegar nele a função
+    passou pela comparação `row["expires_at"] < agora_utc()`, que levantaria
+    TypeError se a coluna tivesse ficado naive.
+    """
+    from core.auth_utils import create_refresh_token
+    from repositories.tokens import inserir_refresh_token, rotacionar_refresh_token
+
+    _, token_hash, expires_at = create_refresh_token()
+    assert expires_at.tzinfo is not None, "create_refresh_token deveria devolver aware"
+
+    assert inserir_refresh_token(token_hash, usuario_probe, expires_at) is True
 
     _, hash_novo, expires_novo = create_refresh_token()
     resultado = rotacionar_refresh_token(token_hash, hash_novo, expires_novo)
-    # Não pode ser "expired": a comparação naive-vs-aware levantaria TypeError,
-    # e um token de dias no futuro nunca deveria expirar aqui.
-    assert resultado.get("_status") != "expired"
-    assert resultado["usuario_id"] == "tz-probe" or resultado.get("_status") == "invalid"
 
-    with get_db_cursor(commit=True) as cur:
-        cur.execute("DELETE FROM RefreshTokens WHERE usuario_id = %s", ("tz-probe",))
+    assert resultado["_status"] == "ok", f"rotação falhou: {resultado}"
+    assert resultado["row"]["usuario_id"] == usuario_probe
+    assert resultado["row"]["expires_at"].tzinfo is not None, (
+        "psycopg2 devolveu expires_at naive — a coluna não é TIMESTAMPTZ"
+    )
