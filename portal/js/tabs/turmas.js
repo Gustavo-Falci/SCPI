@@ -43,7 +43,7 @@ function renderList(container) {
 
   if (!items.length) {
     list.innerHTML = `
-      <div class="flex flex-col items-center justify-center py-16 text-gray-600 gap-3">
+      <div class="flex flex-col items-center justify-center py-16 text-faint gap-3">
         ${icon('graduation-cap', 40)}
         <p class="font-black text-sm">${search ? 'Nenhuma turma encontrada' : 'Nenhuma turma cadastrada'}</p>
         ${!search ? `<button id="cta-create-turma" class="mt-1 px-4 py-2 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent font-black text-xs flex items-center gap-1.5 transition-colors">${icon('plus', 14)} Criar primeira turma</button>` : ''}
@@ -60,8 +60,8 @@ function renderList(container) {
           <div class="w-10 h-10 rounded-2xl flex items-center justify-center font-black text-base flex-shrink-0 ${colorBadge}">${t.semestre}º</div>
           <div class="min-w-0">
             <p class="font-black text-white text-sm truncate">${escapeHtml(t.nome_disciplina)}</p>
-            <p class="text-gray-500 font-bold text-xs truncate">${escapeHtml(t.codigo_turma)} · ${escapeHtml(t.professor_nome || 'Sem professor')}<span class="hidden lg:inline"> · ${t.total_alunos ?? 0} alunos</span></p>
-            <p class="text-gray-600 font-bold text-xs lg:hidden">${t.total_alunos ?? 0} alunos</p>
+            <p class="text-muted font-bold text-xs truncate">${escapeHtml(t.codigo_turma)} · ${escapeHtml(t.professor_nome || 'Sem professor')}<span class="hidden lg:inline"> · ${t.total_alunos ?? 0} alunos</span></p>
+            <p class="text-faint font-bold text-xs lg:hidden">${t.total_alunos ?? 0} alunos</p>
           </div>
         </div>
         <div class="hidden lg:flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -70,7 +70,7 @@ function renderList(container) {
           <button title="Importar CSV" data-id="${t.turma_id}" class="btn-csv w-8 h-8 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 flex items-center justify-center text-yellow-400 transition-all">${icon('upload', 14)}</button>
           <button title="Excluir" data-id="${t.turma_id}" class="btn-del w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all">${icon('trash-2', 14)}</button>
         </div>
-        <span class="lg:hidden text-gray-600 flex-shrink-0" aria-hidden="true">${icon('chevron-right', 18)}</span>
+        <span class="lg:hidden text-faint flex-shrink-0" aria-hidden="true">${icon('chevron-right', 18)}</span>
       </div>
     `).join('');
 
@@ -107,19 +107,19 @@ function showTurmaDetail(turma, container) {
     <div class="p-6">
       <div class="flex items-start justify-between gap-3 mb-1">
         <h3 class="font-black text-lg leading-tight">${escapeHtml(turma.nome_disciplina)}</h3>
-        <button id="td-close" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 flex-shrink-0">${icon('x', 16)}</button>
+        <button id="td-close" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted flex-shrink-0">${icon('x', 16)}</button>
       </div>
-      <p class="text-gray-500 text-xs font-bold mb-5">
+      <p class="text-muted text-xs font-bold mb-5">
         ${escapeHtml(turma.codigo_turma)} · ${turma.semestre}º semestre · ${escapeHtml(turma.turno || '')}${turma.sala_padrao ? ` · Sala ${escapeHtml(turma.sala_padrao)}` : ''}
       </p>
 
       <div class="grid grid-cols-2 gap-2 mb-5">
         <div class="px-4 py-3 rounded-2xl bg-surface border border-white/5 min-w-0">
-          <p class="text-[10px] font-black text-gray-600 uppercase tracking-widest">Professor</p>
+          <p class="text-[10px] font-black text-faint uppercase tracking-widest">Professor</p>
           <p class="font-black text-sm truncate mt-0.5">${escapeHtml(turma.professor_nome || 'Sem professor')}</p>
         </div>
         <div class="px-4 py-3 rounded-2xl bg-surface border border-white/5">
-          <p class="text-[10px] font-black text-gray-600 uppercase tracking-widest">Alunos</p>
+          <p class="text-[10px] font-black text-faint uppercase tracking-widest">Alunos</p>
           <p class="font-black text-sm mt-0.5">${turma.total_alunos ?? 0}</p>
         </div>
       </div>
@@ -163,14 +163,14 @@ function showProfModal(turma, container) {
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
-        <div><h3 class="font-black text-lg">Atribuir Professor</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${escapeHtml(turma.nome_disciplina)}</p></div>
-        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <div><h3 class="font-black text-lg">Atribuir Professor</h3><p class="text-muted text-xs font-bold mt-0.5">${escapeHtml(turma.nome_disciplina)}</p></div>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted">${icon('x', 16)}</button>
       </div>
       <div class="space-y-2 max-h-72 overflow-y-auto mb-6">
         ${opts.map(p => `
           <label class="flex items-center gap-3 px-4 py-3 rounded-2xl border border-white/5 hover:border-accent/30 hover:bg-accent/5 cursor-pointer transition-all">
             <input type="radio" name="professor" value="${p.professor_id ?? ''}" ${String(turma.professor_id) === String(p.professor_id) ? 'checked' : ''} class="accent-[#4B39EF]">
-            <div><p class="font-black text-sm text-white">${escapeHtml(p.nome)}</p>${p.email ? `<p class="text-xs text-gray-600 font-bold">${escapeHtml(p.email)}</p>` : ''}</div>
+            <div><p class="font-black text-sm text-white">${escapeHtml(p.nome)}</p>${p.email ? `<p class="text-xs text-faint font-bold">${escapeHtml(p.email)}</p>` : ''}</div>
           </label>
         `).join('')}
       </div>
@@ -247,15 +247,15 @@ async function showMatriculaModal(turmaId, container) {
     const someSelected = filtered.some(a => st.selected.has(String(a.aluno_id)));
     const selCount = st.selected.size;
 
-    const tabBtn = (id, label) => `<button data-aba="${id}" class="aba-btn flex-1 py-2 rounded-xl font-black text-xs transition-colors ${aba === id ? 'bg-accent text-white' : 'text-gray-500 hover:bg-white/5'}">${label}</button>`;
+    const tabBtn = (id, label) => `<button data-aba="${id}" class="aba-btn flex-1 py-2 rounded-xl font-black text-xs transition-colors ${aba === id ? 'bg-accent text-white' : 'text-muted hover:bg-white/5'}">${label}</button>`;
     const emptyMsg = isRemover ? 'Nenhum aluno matriculado' : 'Nenhum aluno elegível';
     const actionLabel = isRemover ? 'Desmatricular' : 'Matricular';
     const actionColor = isRemover ? 'bg-red-500 hover:bg-red-600' : 'bg-accent hover:bg-accent-dark';
 
     document.getElementById('modal-box').innerHTML = `
       <div class="flex items-center justify-between p-6 border-b border-white/5 flex-shrink-0">
-        <div><h3 class="font-black text-lg">Alunos da Turma</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${escapeHtml(turma.nome_disciplina)} · ${escapeHtml(turma.turno)}</p></div>
-        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <div><h3 class="font-black text-lg">Alunos da Turma</h3><p class="text-muted text-xs font-bold mt-0.5">${escapeHtml(turma.nome_disciplina)} · ${escapeHtml(turma.turno)}</p></div>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted">${icon('x', 16)}</button>
       </div>
       <div class="p-4 border-b border-white/5 flex-shrink-0 flex gap-2">
         ${tabBtn('matricular', 'Matricular')}
@@ -263,7 +263,7 @@ async function showMatriculaModal(turmaId, container) {
       </div>
       <div class="p-4 border-b border-white/5 flex-shrink-0">
         <div class="relative">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600">${icon('search', 15)}</span>
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-faint">${icon('search', 15)}</span>
           <input id="mat-search" type="search" value="${escapeHtml(st.search)}" placeholder="Buscar aluno..." class="scpi-input pl-9 w-full">
         </div>
       </div>
@@ -274,14 +274,14 @@ async function showMatriculaModal(turmaId, container) {
         </label>
       </div>
       <div class="flex-1 overflow-y-auto">
-        ${!items.length ? `<div class="flex flex-col items-center py-10 text-gray-600">${icon('user', 28)}<p class="mt-2 font-black text-xs">${emptyMsg}</p></div>` : items.map(a => `
+        ${!items.length ? `<div class="flex flex-col items-center py-10 text-faint">${icon('user', 28)}<p class="mt-2 font-black text-xs">${emptyMsg}</p></div>` : items.map(a => `
           <label class="flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer transition-colors">
             <input type="checkbox" class="mat-check accent-[#4B39EF] w-4 h-4" data-id="${a.aluno_id}" ${st.selected.has(String(a.aluno_id)) ? 'checked' : ''}>
-            <div class="flex-1 min-w-0"><p class="font-black text-sm text-white truncate">${escapeHtml(a.nome)}</p><p class="text-xs text-gray-600 font-bold">${escapeHtml(a.ra || '')}</p></div>
+            <div class="flex-1 min-w-0"><p class="font-black text-sm text-white truncate">${escapeHtml(a.nome)}</p><p class="text-xs text-faint font-bold">${escapeHtml(a.ra || '')}</p></div>
           </label>
         `).join('')}
       </div>
-      ${total > 1 ? `<div class="px-4 py-3 border-t border-white/5 flex-shrink-0 flex items-center justify-between"><span class="text-xs text-gray-600 font-black">${count} ${isRemover ? 'matriculados' : 'elegíveis'}</span><div class="flex items-center gap-1"><button id="mat-prev" ${st.page <= 1 ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-gray-500 disabled:opacity-30">${icon('chevron-left', 13)}</button><span class="text-xs font-black text-gray-500 px-2">${st.page}/${total}</span><button id="mat-next" ${st.page >= total ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-gray-500 disabled:opacity-30">${icon('chevron-right', 13)}</button></div></div>` : ''}
+      ${total > 1 ? `<div class="px-4 py-3 border-t border-white/5 flex-shrink-0 flex items-center justify-between"><span class="text-xs text-faint font-black">${count} ${isRemover ? 'matriculados' : 'elegíveis'}</span><div class="flex items-center gap-1"><button id="mat-prev" ${st.page <= 1 ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-muted disabled:opacity-30">${icon('chevron-left', 13)}</button><span class="text-xs font-black text-muted px-2">${st.page}/${total}</span><button id="mat-next" ${st.page >= total ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-muted disabled:opacity-30">${icon('chevron-right', 13)}</button></div></div>` : ''}
       <div class="p-4 border-t border-white/5 flex gap-3 flex-shrink-0">
         <button data-close-modal class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
         <button id="mat-submit" ${!selCount ? 'disabled' : ''} class="flex-1 py-3 rounded-2xl ${actionColor} disabled:opacity-40 text-white font-black text-sm transition-colors">${actionLabel} ${selCount > 0 ? `(${selCount})` : ''}</button>
@@ -401,33 +401,33 @@ export async function mount(container) {
         <h3 class="font-black text-base mb-5 flex items-center gap-2">${icon('plus', 16)}<span>Nova Turma</span></h3>
         <form id="turma-form" class="space-y-4">
           <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Disciplina *</label>
+            <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Disciplina *</label>
             <input name="nome_disciplina" type="text" placeholder="Engenharia de Software" class="scpi-input" required>
           </div>
           <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Código *</label>
+            <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Código *</label>
             <input name="codigo_turma" type="text" placeholder="ES-2025-1" class="scpi-input" required>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Semestre *</label>
+              <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Semestre *</label>
               <select name="semestre" class="scpi-input" required>
                 ${SEMESTRES.map(s => `<option value="${s}">${s}º</option>`).join('')}
               </select>
             </div>
             <div>
-              <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno *</label>
+              <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Turno *</label>
               <select name="turno" class="scpi-input" required>
                 ${TURNOS.map(t => `<option value="${t}">${t}</option>`).join('')}
               </select>
             </div>
           </div>
           <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Sala Padrão</label>
+            <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Sala Padrão</label>
             <input name="sala_padrao" type="text" placeholder="Lab 01" class="scpi-input">
           </div>
           <div>
-            <label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Período Letivo *</label>
+            <label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Período Letivo *</label>
             <select name="periodo_letivo" class="scpi-input" required>
               ${PERIODOS.map(p => `<option value="${p}">${p}</option>`).join('')}
             </select>
@@ -437,7 +437,7 @@ export async function mount(container) {
       </div>
       <div class="flex-1 flex flex-col overflow-hidden gap-3 min-h-0">
         <div class="relative flex-shrink-0">
-          <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">${icon('search', 16)}</span>
+          <span class="absolute left-4 top-1/2 -translate-y-1/2 text-faint">${icon('search', 16)}</span>
           <input id="turmas-search" type="search" value="${escapeHtml(search)}" placeholder="Buscar turma..." class="scpi-input pl-10 w-full">
         </div>
         <div id="turmas-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
@@ -453,17 +453,17 @@ export async function mount(container) {
       <div class="p-6">
         <div class="flex items-center justify-between mb-5">
           <h3 class="font-black text-lg">Nova Turma</h3>
-          <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+          <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted">${icon('x', 16)}</button>
         </div>
         <form id="turma-form-modal" class="space-y-4">
-          <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Disciplina *</label><input name="nome_disciplina" class="scpi-input" placeholder="Engenharia de Software" required></div>
-          <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Código *</label><input name="codigo_turma" class="scpi-input" placeholder="ES-2025-1" required></div>
+          <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Disciplina *</label><input name="nome_disciplina" class="scpi-input" placeholder="Engenharia de Software" required></div>
+          <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Código *</label><input name="codigo_turma" class="scpi-input" placeholder="ES-2025-1" required></div>
           <div class="grid grid-cols-2 gap-3">
-            <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Semestre</label><select name="semestre" class="scpi-input">${SEMESTRES.map(s => `<option value="${s}">${s}º</option>`).join('')}</select></div>
-            <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label><select name="turno" class="scpi-input">${TURNOS.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
+            <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Semestre</label><select name="semestre" class="scpi-input">${SEMESTRES.map(s => `<option value="${s}">${s}º</option>`).join('')}</select></div>
+            <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Turno</label><select name="turno" class="scpi-input">${TURNOS.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
           </div>
-          <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Sala</label><input name="sala_padrao" class="scpi-input" placeholder="Lab 01"></div>
-          <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Período</label><select name="periodo_letivo" class="scpi-input">${PERIODOS.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>
+          <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Sala</label><input name="sala_padrao" class="scpi-input" placeholder="Lab 01"></div>
+          <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Período</label><select name="periodo_letivo" class="scpi-input">${PERIODOS.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>
           <button type="submit" class="w-full py-3 rounded-2xl bg-accent text-white font-black text-sm transition-all flex items-center justify-center gap-2">${icon('plus', 16)}<span>Criar Turma</span></button>
         </form>
       </div>`);

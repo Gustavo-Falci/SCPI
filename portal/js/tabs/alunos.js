@@ -79,7 +79,7 @@ function renderFiltros(container, turmas) {
 
   const chip = (valor, rotulo) => `
     <button data-situacao="${valor}" class="chip-situacao px-3 py-1.5 rounded-xl font-black text-[11px] transition-colors whitespace-nowrap ${
-      filtros.situacao === valor ? 'bg-accent text-white' : 'bg-white/5 text-gray-500 hover:bg-white/10'
+      filtros.situacao === valor ? 'bg-accent text-white' : 'bg-white/5 text-muted hover:bg-white/10'
     }">${rotulo}</button>`;
 
   container.querySelector('#alunos-filtros').innerHTML = `
@@ -98,8 +98,8 @@ function renderFiltros(container, turmas) {
         ${chip('sem_biometria', 'Sem biometria')}
         ${chip('pendentes', 'Pendentes')}
       </div>
-      ${temFiltroLocal ? `<button id="filtro-limpar" class="px-3 py-1.5 rounded-xl font-black text-[11px] text-gray-500 hover:text-white transition-colors">Limpar</button>` : ''}
-      <span class="text-[11px] font-black text-gray-600 ml-auto whitespace-nowrap">Escopo: ${escapeHtml(escopo)}</span>
+      ${temFiltroLocal ? `<button id="filtro-limpar" class="px-3 py-1.5 rounded-xl font-black text-[11px] text-muted hover:text-white transition-colors">Limpar</button>` : ''}
+      <span class="text-[11px] font-black text-faint ml-auto whitespace-nowrap">Escopo: ${escapeHtml(escopo)}</span>
     </div>`;
 
   const aplicar = async () => {
@@ -172,7 +172,7 @@ function renderList(container) {
 
   if (!items.length) {
     list.innerHTML = `
-      <div class="flex flex-col items-center justify-center py-16 text-gray-600 gap-3">
+      <div class="flex flex-col items-center justify-center py-16 text-faint gap-3">
         ${icon('user', 40)}
         <p class="font-black text-sm">${temFiltro ? 'Nenhum aluno para este filtro' : 'Nenhum aluno cadastrado'}</p>
         ${!temFiltro ? `<button id="cta-create-aluno" class="mt-1 px-4 py-2 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent font-black text-xs flex items-center gap-1.5 transition-colors">${icon('plus', 14)} Criar primeiro aluno</button>` : ''}
@@ -186,12 +186,12 @@ function renderList(container) {
           <div class="flex items-center gap-2 mb-0.5">
             <p class="font-black text-white text-sm truncate">${escapeHtml(a.nome)}</p>
             ${turnoBadge(a.turno)}
-            ${a.tem_biometria ? '' : `<span class="bg-gray-500/10 text-gray-400 text-[10px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tighter" title="Sem rosto cadastrado">sem biometria</span>`}
+            ${a.tem_biometria ? '' : `<span class="bg-gray-500/10 text-muted text-[10px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tighter" title="Sem rosto cadastrado">sem biometria</span>`}
           </div>
           <!-- Email e RA numa linha só truncavam os dois no celular; em lg+
                cabem inline, então lá seguem juntos. -->
-          <p class="text-gray-500 font-bold text-xs truncate">${escapeHtml(a.email)}${a.ra ? `<span class="hidden lg:inline"> · RA/CPF: ${escapeHtml(a.ra)}</span>` : ''}</p>
-          ${a.ra ? `<p class="text-gray-600 font-bold text-xs truncate lg:hidden">RA/CPF: ${escapeHtml(a.ra)}</p>` : ''}
+          <p class="text-muted font-bold text-xs truncate">${escapeHtml(a.email)}${a.ra ? `<span class="hidden lg:inline"> · RA/CPF: ${escapeHtml(a.ra)}</span>` : ''}</p>
+          ${a.ra ? `<p class="text-faint font-bold text-xs truncate lg:hidden">RA/CPF: ${escapeHtml(a.ra)}</p>` : ''}
         </div>
         <!-- Mobile: sempre visíveis. opacity-0 sem hover deixava os botões
              invisíveis mas ainda clicáveis — incluindo Excluir. Só em lg+,
@@ -237,14 +237,14 @@ function showEditModal(aluno, container) {
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3">${avatar(aluno.nome, 40)}<div><h3 class="font-black text-lg">Editar Aluno</h3><p class="text-gray-500 text-xs font-bold">${escapeHtml(aluno.ra || '')}</p></div></div>
-        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <div class="flex items-center gap-3">${avatar(aluno.nome, 40)}<div><h3 class="font-black text-lg">Editar Aluno</h3><p class="text-muted text-xs font-bold">${escapeHtml(aluno.ra || '')}</p></div></div>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted">${icon('x', 16)}</button>
       </div>
       <form id="edit-aluno-form" class="space-y-4">
-        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome</label><input name="nome" type="text" value="${escapeHtml(aluno.nome || '')}" class="scpi-input" required></div>
-        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email</label><input name="email" type="email" value="${escapeHtml(aluno.email || '')}" class="scpi-input" required></div>
-        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">RA</label><input name="ra" type="text" value="${escapeHtml(aluno.ra || '')}" class="scpi-input"></div>
-        <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label>
+        <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Nome</label><input name="nome" type="text" value="${escapeHtml(aluno.nome || '')}" class="scpi-input" required></div>
+        <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Email</label><input name="email" type="email" value="${escapeHtml(aluno.email || '')}" class="scpi-input" required></div>
+        <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">RA</label><input name="ra" type="text" value="${escapeHtml(aluno.ra || '')}" class="scpi-input"></div>
+        <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Turno</label>
           <select name="turno" class="scpi-input"><option value="">Não definido</option><option value="Matutino" ${aluno.turno === 'Matutino' ? 'selected' : ''}>Matutino</option><option value="Noturno" ${aluno.turno === 'Noturno' ? 'selected' : ''}>Noturno</option></select></div>
         <div class="flex gap-3 pt-2">
           <button type="button" data-close-modal class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
@@ -273,11 +273,11 @@ function showCreatedModal(email) {
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
-        <div><h3 class="font-black text-lg">Aluno Criado</h3><p class="text-gray-500 text-xs font-bold mt-0.5">Credenciais enviadas por email</p></div>
-        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <div><h3 class="font-black text-lg">Aluno Criado</h3><p class="text-muted text-xs font-bold mt-0.5">Credenciais enviadas por email</p></div>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted">${icon('x', 16)}</button>
       </div>
       <div class="bg-[#0C0C12] rounded-2xl p-4 border border-white/5 mb-3">
-        <p class="text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Email</p>
+        <p class="text-xs font-black text-muted uppercase tracking-widest mb-1">Email</p>
         <p class="font-bold text-white">${escapeHtml(email)}</p>
       </div>
       <p class="text-blue-300 text-xs font-bold bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
@@ -290,10 +290,10 @@ function showCreatedModal(email) {
 function formHTML() {
   return `
     <form id="aluno-form" class="space-y-4">
-      <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome Completo *</label><input name="nome" type="text" placeholder="Maria Santos" class="scpi-input" required></div>
-      <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email *</label><input name="email" type="email" placeholder="maria@escola.com" class="scpi-input" required></div>
-      <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">RA/CPF</label><input name="ra" type="text" placeholder="2024001" class="scpi-input"></div>
-      <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label>
+      <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Nome Completo *</label><input name="nome" type="text" placeholder="Maria Santos" class="scpi-input" required></div>
+      <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Email *</label><input name="email" type="email" placeholder="maria@escola.com" class="scpi-input" required></div>
+      <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">RA/CPF</label><input name="ra" type="text" placeholder="2024001" class="scpi-input"></div>
+      <div><label class="text-xs font-black text-muted uppercase tracking-widest mb-2 block">Turno</label>
         <select name="turno" class="scpi-input"><option value="">Não definido</option><option value="Matutino">Matutino</option><option value="Noturno">Noturno</option></select></div>
       <button id="aluno-create-btn" type="submit" class="w-full py-3 rounded-2xl bg-accent text-white font-black text-sm transition-all flex items-center justify-center gap-2">${icon('plus', 16)}<span>Criar Aluno</span></button>
     </form>`;
@@ -322,20 +322,20 @@ function showImportResultModal(res) {
   const card = (valor, rotulo) => `
     <div class="flex-1 bg-[#0C0C12] rounded-2xl p-3 border border-white/5 text-center">
       <p class="font-black text-white text-xl">${valor ?? 0}</p>
-      <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-0.5">${rotulo}</p>
+      <p class="text-[10px] font-black text-muted uppercase tracking-widest mt-0.5">${rotulo}</p>
     </div>`;
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-5">
-        <div><h3 class="font-black text-lg">Importação concluída</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${res.erros.length} linha(s) com erro</p></div>
-        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <div><h3 class="font-black text-lg">Importação concluída</h3><p class="text-muted text-xs font-bold mt-0.5">${res.erros.length} linha(s) com erro</p></div>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted">${icon('x', 16)}</button>
       </div>
       <div class="flex gap-2 mb-3">
         ${card(res.importados, 'Criados')}
         ${card(res.duplicados, 'Duplicados')}
         ${card(res.matriculados, 'Matriculados')}
       </div>
-      <p class="text-gray-500 text-xs font-bold mb-4">${res.emails_enviados ?? 0} e-mail(s) de senha temporária enviado(s).</p>
+      <p class="text-muted text-xs font-bold mb-4">${res.emails_enviados ?? 0} e-mail(s) de senha temporária enviado(s).</p>
       <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
         ${res.erros.map(e => `<p class="text-red-400 text-xs font-bold bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">${escapeHtml(e)}</p>`).join('')}
       </div>
@@ -373,19 +373,19 @@ export async function mount(container) {
         <h3 class="font-black text-base mb-5 flex items-center gap-2">${icon('plus', 16)}<span>Novo Aluno</span></h3>
         ${formHTML()}
         <div class="mt-6 pt-6 border-t border-white/5">
-          <h4 class="font-black text-xs uppercase tracking-widest text-gray-500 mb-3">Importar em massa</h4>
+          <h4 class="font-black text-xs uppercase tracking-widest text-muted mb-3">Importar em massa</h4>
           <label for="aluno-csv-input" class="cursor-pointer w-full py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-black text-sm transition-all flex items-center justify-center gap-2 border border-white/10">
             ${icon('upload', 16)}<span>Importar CSV</span>
           </label>
           <input id="aluno-csv-input" type="file" accept=".csv" class="hidden">
-          <p class="text-[10px] text-gray-600 font-bold mt-2 text-center">Colunas: nome, email, ra, turno, turma</p>
-          <p class="text-[10px] text-gray-700 font-bold text-center">turno e turma são opcionais · turma = código da turma</p>
+          <p class="text-[10px] text-faint font-bold mt-2 text-center">Colunas: nome, email, ra, turno, turma</p>
+          <p class="text-[10px] text-faint font-bold text-center">turno e turma são opcionais · turma = código da turma</p>
           <button id="aluno-csv-modelo" class="w-full mt-2 text-[10px] font-black text-accent hover:underline">Baixar modelo</button>
         </div>
       </div>
       <div class="flex-1 flex flex-col overflow-hidden gap-3 min-h-0">
         <div class="relative flex-shrink-0">
-          <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">${icon('search', 16)}</span>
+          <span class="absolute left-4 top-1/2 -translate-y-1/2 text-faint">${icon('search', 16)}</span>
           <input id="alunos-search" type="search" value="${escapeHtml(search)}" placeholder="Buscar aluno..." class="scpi-input pl-10 w-full">
         </div>
         <div id="alunos-filtros" class="flex-shrink-0"></div>
@@ -420,7 +420,7 @@ export async function mount(container) {
       <div class="p-6">
         <div class="flex items-center justify-between mb-5">
           <h3 class="font-black text-lg">Novo Aluno</h3>
-          <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+          <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted">${icon('x', 16)}</button>
         </div>
         ${formHTML()}
       </div>`);

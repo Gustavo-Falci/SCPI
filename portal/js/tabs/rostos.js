@@ -97,7 +97,7 @@ function badgeResumo(qtdGrupos, resumo, isRek) {
     ? `<button data-chip="${situacao}" class="badge-chip text-amber-400 hover:underline">${valor} ${rotulo}</button>`
     : '';
   return `
-    <span class="text-xs font-black text-gray-500 flex flex-wrap items-center gap-x-2">
+    <span class="text-xs font-black text-muted flex flex-wrap items-center gap-x-2">
       <span>${qtdGrupos} grupos · ${resumo.total} ${isRek ? 'faces' : 'arquivos'}</span>
       ${problema(resumo.orfaos, 'órfãos', 'orfao')}
       ${problema(resumo.revogados, 'revogados', 'revogado')}
@@ -132,7 +132,7 @@ function renderFiltros(container, panelId) {
 
   const chip = (valor, rotulo) => `
     <button data-chip="${valor}" class="chip-situacao px-2.5 py-1 rounded-lg font-black text-[11px] transition-colors whitespace-nowrap ${
-      f.situacao === valor ? 'bg-accent text-white' : 'bg-white/5 text-gray-500 hover:bg-white/10'
+      f.situacao === valor ? 'bg-accent text-white' : 'bg-white/5 text-muted hover:bg-white/10'
     }">${rotulo}</button>`;
 
   alvo.innerHTML = `
@@ -189,7 +189,7 @@ function renderPanel(container, panelId) {
   const listEl = panel.querySelector('.panel-list');
   if (!grupos.length) {
     const temFiltro = Boolean(filtros[panelId].busca || filtros[panelId].situacao);
-    listEl.innerHTML = `<div class="flex flex-col items-center justify-center py-12 text-gray-600">${icon('scan-face', 36)}<p class="mt-3 font-black text-sm">${temFiltro ? 'Nada para este filtro' : 'Sem registros'}</p></div>`;
+    listEl.innerHTML = `<div class="flex flex-col items-center justify-center py-12 text-faint">${icon('scan-face', 36)}<p class="mt-3 font-black text-sm">${temFiltro ? 'Nada para este filtro' : 'Sem registros'}</p></div>`;
     ligarBadgeChips(container, panel, panelId);
     return;
   }
@@ -209,18 +209,18 @@ function renderPanel(container, panelId) {
           </label>
           <div class="flex-1 min-w-0">
             <p class="font-black text-sm text-white truncate">${escapeHtml(g.nome)}</p>
-            <p class="text-xs text-gray-600 font-bold">${allIds.length} ${isRek ? 'face(s)' : 'arquivo(s)'}${selosDoGrupo(g)}</p>
+            <p class="text-xs text-faint font-bold">${allIds.length} ${isRek ? 'face(s)' : 'arquivo(s)'}${selosDoGrupo(g)}</p>
           </div>
           <button data-panel="${panelId}" data-ids="${escapeHtml(JSON.stringify(allIds))}" class="del-group w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0 group-hover-btn">${icon('trash-2', 13)}</button>
-          <span class="text-gray-600 transition-transform ${isOpen ? 'rotate-90' : ''}">${icon('chevron-right', 14)}</span>
+          <span class="text-faint transition-transform ${isOpen ? 'rotate-90' : ''}">${icon('chevron-right', 14)}</span>
         </div>
         ${isOpen ? `
           <div class="border-t border-white/5">
             ${g.itens.map(item => {
               const id = idDoItem(panelId, item);
               const detalhe = isRek
-                ? `<p class="text-xs font-black text-gray-400 truncate font-mono">${escapeHtml(item.face_id)}</p>`
-                : `<p class="text-xs font-black text-gray-400 truncate">${escapeHtml(item.key)}</p>`;
+                ? `<p class="text-xs font-black text-muted truncate font-mono">${escapeHtml(item.face_id)}</p>`
+                : `<p class="text-xs font-black text-muted truncate">${escapeHtml(item.key)}</p>`;
               const subtitulo = isRek
                 ? escapeHtml(item.angulo || 'ângulo desconhecido')
                 : `${item.size ? (item.size / 1024).toFixed(1) + ' KB' : ''}${item.angulo ? ' · ' + escapeHtml(item.angulo) : ''}`;
@@ -232,7 +232,7 @@ function renderPanel(container, panelId) {
                   </label>
                   <div class="flex-1 min-w-0">
                     ${detalhe}
-                    <p class="text-xs text-gray-600 font-bold">${subtitulo}${seloStatus(item)}</p>
+                    <p class="text-xs text-faint font-bold">${subtitulo}${seloStatus(item)}</p>
                   </div>
                   <button data-panel="${panelId}" data-id="${id}" class="del-item w-6 h-6 rounded-lg bg-red-500/10 hover:bg-red-500 flex items-center justify-center text-red-400 hover:text-white transition-all flex-shrink-0">${icon('trash-2', 11)}</button>
                 </div>
@@ -372,7 +372,7 @@ export async function mount(container) {
               <h3 class="font-black text-sm flex items-center gap-2">${icon('scan-face', 16)} Rekognition Collection</h3>
               <div class="panel-badge mt-0.5"></div>
             </div>
-            <button id="refresh-rek" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 hover:text-white transition-all">${icon('refresh-cw', 15)}</button>
+            <button id="refresh-rek" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted hover:text-white transition-all">${icon('refresh-cw', 15)}</button>
           </div>
           <div class="panel-filtros flex-shrink-0"></div>
           <div class="panel-aviso flex-shrink-0"></div>
@@ -385,7 +385,7 @@ export async function mount(container) {
               <h3 class="font-black text-sm flex items-center gap-2">${icon('upload', 16)} S3 Bucket</h3>
               <div class="panel-badge mt-0.5"></div>
             </div>
-            <button id="refresh-s3" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 hover:text-white transition-all">${icon('refresh-cw', 15)}</button>
+            <button id="refresh-s3" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted hover:text-white transition-all">${icon('refresh-cw', 15)}</button>
           </div>
           <div class="panel-filtros flex-shrink-0"></div>
           <div class="panel-aviso flex-shrink-0"></div>

@@ -80,9 +80,9 @@ function renderFiltros(container, opcoes) {
         ${(opcoes.professores || []).map(p => `<option value="${escapeHtml(String(p.professor_id))}" ${filtros.professor_id === String(p.professor_id) ? 'selected' : ''}>${escapeHtml(p.nome)}</option>`).join('')}
       </select>
       <button id="rel-freq" class="px-3 py-1.5 rounded-xl font-black text-[11px] transition-colors whitespace-nowrap ${
-        filtros.frequencia_baixa ? 'bg-accent text-white' : 'bg-white/5 text-gray-500 hover:bg-white/10'
+        filtros.frequencia_baixa ? 'bg-accent text-white' : 'bg-white/5 text-muted hover:bg-white/10'
       }">Só frequência &lt; 75%</button>
-      ${ativo ? `<button id="rel-limpar" class="px-3 py-1.5 rounded-xl font-black text-[11px] text-gray-500 hover:text-white transition-colors">Limpar</button>` : ''}
+      ${ativo ? `<button id="rel-limpar" class="px-3 py-1.5 rounded-xl font-black text-[11px] text-muted hover:text-white transition-colors">Limpar</button>` : ''}
     </div>`;
 
   const aplicar = async () => {
@@ -117,7 +117,7 @@ function renderFiltros(container, opcoes) {
 }
 
 function statCard(label, value, color) {
-  return `<div class="text-center"><p class="text-sm font-black ${color}">${value}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-0.5">${label}</p></div>`;
+  return `<div class="text-center"><p class="text-sm font-black ${color}">${value}</p><p class="text-xs text-faint font-black uppercase tracking-widest mt-0.5">${label}</p></div>`;
 }
 
 function renderList(container) {
@@ -133,7 +133,7 @@ function renderList(container) {
     const dica = temFiltroLocal
       ? 'Tente ampliar o período ou limpar os filtros'
       : 'Tente mudar o turno ou semestre';
-    list.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-gray-600 gap-2">${icon('file-text', 40)}<p class="font-black text-sm">Nenhuma chamada para este filtro</p><p class="text-xs text-gray-700">${dica}</p></div>`;
+    list.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-faint gap-2">${icon('file-text', 40)}<p class="font-black text-sm">Nenhuma chamada para este filtro</p><p class="text-xs text-faint">${dica}</p></div>`;
   } else {
     const isNight = getState().turno === 'Noturno';
     const colorBadge = isNight ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-500';
@@ -151,7 +151,7 @@ function renderList(container) {
                 <h4 class="font-black text-white text-sm">${escapeHtml(r.nome_disciplina)}</h4>
                 <span class="text-xs font-black px-2 py-0.5 rounded-md uppercase tracking-tighter ${colorBadge}">${escapeHtml(r.turno)}</span>
               </div>
-              <p class="text-gray-500 font-bold text-xs truncate">Prof. ${escapeHtml(r.professor_nome)} · ${escapeHtml(r.codigo_turma)} · ${escapeHtml(r.data_chamada)} · ${escapeHtml(r.horario_inicio)} – ${escapeHtml(r.horario_fim)}</p>
+              <p class="text-muted font-bold text-xs truncate">Prof. ${escapeHtml(r.professor_nome)} · ${escapeHtml(r.codigo_turma)} · ${escapeHtml(r.data_chamada)} · ${escapeHtml(r.horario_inicio)} – ${escapeHtml(r.horario_fim)}</p>
             </div>
           </div>
           <div class="flex items-center gap-4 xl:gap-6 flex-shrink-0">
@@ -163,7 +163,7 @@ function renderList(container) {
             </div>
             <div class="flex md:hidden items-center gap-2 text-xs font-black">
               <span class="text-green-400">${r.presentes_alunos ?? 0}P</span>
-              <span class="text-gray-700">/</span>
+              <span class="text-faint">/</span>
               <span class="text-red-400">${r.ausentes_alunos ?? 0}A</span>
             </div>
             <div class="text-center min-w-[54px]">
@@ -172,7 +172,7 @@ function renderList(container) {
                 <div class="prog-bar-fill h-full rounded-full" style="width:${freq}%;background:${freq >= 75 ? '#4ade80' : freq >= 50 ? '#facc15' : '#f87171'}"></div>
               </div>
             </div>
-            <span class="text-gray-600 group-hover:text-accent transition-colors">${icon('chevron-right', 16)}</span>
+            <span class="text-faint group-hover:text-accent transition-colors">${icon('chevron-right', 16)}</span>
           </div>
         </button>
       `;
@@ -203,17 +203,17 @@ function abrirModalFrequencia(turmaId, codigoTurma) {
   openModal(`
     <div class="p-6">
       <h3 class="font-black text-lg mb-1">Frequência por aluno</h3>
-      <p class="text-gray-500 text-xs font-bold mb-5">${escapeHtml(codigoTurma)} · deixe as datas em branco para todo o histórico</p>
+      <p class="text-muted text-xs font-bold mb-5">${escapeHtml(codigoTurma)} · deixe as datas em branco para todo o histórico</p>
       <div class="grid grid-cols-2 gap-3 mb-5">
-        <label class="text-xs font-black text-gray-500 uppercase tracking-widest">De
+        <label class="text-xs font-black text-muted uppercase tracking-widest">De
           <input id="freq-inicio" type="date" class="mt-1 w-full bg-[#0C0C12] border border-white/10 rounded-xl px-3 py-2 text-sm text-white font-bold">
         </label>
-        <label class="text-xs font-black text-gray-500 uppercase tracking-widest">Até
+        <label class="text-xs font-black text-muted uppercase tracking-widest">Até
           <input id="freq-fim" type="date" class="mt-1 w-full bg-[#0C0C12] border border-white/10 rounded-xl px-3 py-2 text-sm text-white font-bold">
         </label>
       </div>
       <div class="flex gap-2 justify-end">
-        <button data-close-modal class="px-4 py-2 rounded-xl border border-white/10 text-sm font-black text-gray-400">Cancelar</button>
+        <button data-close-modal class="px-4 py-2 rounded-xl border border-white/10 text-sm font-black text-muted">Cancelar</button>
         <button id="freq-gerar" class="px-4 py-2 rounded-xl bg-accent text-sm font-black text-white">Gerar PDF</button>
       </div>
     </div>
@@ -254,26 +254,26 @@ async function openDetalhe(chamadaId) {
             <h3 class="font-black text-lg">${escapeHtml(d.nome_disciplina)}</h3>
             <span class="text-xs font-black px-2 py-0.5 rounded-md uppercase ${colorBadge}">${escapeHtml(d.turno)}</span>
           </div>
-          <p class="text-gray-500 text-xs font-bold">Prof. ${escapeHtml(d.professor_nome)} · ${escapeHtml(d.codigo_turma)} · ${escapeHtml(d.data_chamada)} · ${escapeHtml(d.horario_inicio)} – ${escapeHtml(d.horario_fim)}</p>
+          <p class="text-muted text-xs font-bold">Prof. ${escapeHtml(d.professor_nome)} · ${escapeHtml(d.codigo_turma)} · ${escapeHtml(d.data_chamada)} · ${escapeHtml(d.horario_inicio)} – ${escapeHtml(d.horario_fim)}</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-          <button id="btn-pdf-freq" title="Frequência por aluno da turma" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 hover:text-accent transition-colors">${icon('users', 16)}</button>
-          <button id="btn-pdf-ata" title="Exportar ata em PDF" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 hover:text-accent transition-colors">${icon('download', 16)}</button>
-          <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+          <button id="btn-pdf-freq" title="Frequência por aluno da turma" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted hover:text-accent transition-colors">${icon('users', 16)}</button>
+          <button id="btn-pdf-ata" title="Exportar ata em PDF" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted hover:text-accent transition-colors">${icon('download', 16)}</button>
+          <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-muted">${icon('x', 16)}</button>
         </div>
       </div>
       <div class="p-6 overflow-y-auto">
         <!-- Stats -->
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-          <div class="bg-[#0C0C12] rounded-2xl p-4 text-center border border-white/5"><p class="text-xl font-black text-white">${d.total_alunos}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Alunos</p></div>
-          <div class="bg-green-500/5 rounded-2xl p-4 text-center border border-green-500/10"><p class="text-xl font-black text-green-400">${presentes_count}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Presentes</p></div>
-          <div class="bg-red-500/5 rounded-2xl p-4 text-center border border-red-500/10"><p class="text-xl font-black text-red-400">${ausentes_count}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Ausentes</p></div>
-          <div class="bg-yellow-500/5 rounded-2xl p-4 text-center border border-yellow-500/10"><p class="text-xl font-black text-yellow-400">${parciais_count}</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Parciais</p></div>
-          <div class="bg-[#0C0C12] rounded-2xl p-4 text-center border border-white/5"><p class="text-xl font-black ${freqColor}">${freq}%</p><p class="text-xs text-gray-600 font-black uppercase tracking-widest mt-1">Presença</p></div>
+          <div class="bg-[#0C0C12] rounded-2xl p-4 text-center border border-white/5"><p class="text-xl font-black text-white">${d.total_alunos}</p><p class="text-xs text-faint font-black uppercase tracking-widest mt-1">Alunos</p></div>
+          <div class="bg-green-500/5 rounded-2xl p-4 text-center border border-green-500/10"><p class="text-xl font-black text-green-400">${presentes_count}</p><p class="text-xs text-faint font-black uppercase tracking-widest mt-1">Presentes</p></div>
+          <div class="bg-red-500/5 rounded-2xl p-4 text-center border border-red-500/10"><p class="text-xl font-black text-red-400">${ausentes_count}</p><p class="text-xs text-faint font-black uppercase tracking-widest mt-1">Ausentes</p></div>
+          <div class="bg-yellow-500/5 rounded-2xl p-4 text-center border border-yellow-500/10"><p class="text-xl font-black text-yellow-400">${parciais_count}</p><p class="text-xs text-faint font-black uppercase tracking-widest mt-1">Parciais</p></div>
+          <div class="bg-[#0C0C12] rounded-2xl p-4 text-center border border-white/5"><p class="text-xl font-black ${freqColor}">${freq}%</p><p class="text-xs text-faint font-black uppercase tracking-widest mt-1">Presença</p></div>
         </div>
         <!-- Alunos table -->
         <div class="bg-[#0C0C12] rounded-2xl border border-white/5 overflow-hidden">
-          <div class="grid text-xs font-black text-gray-600 uppercase tracking-widest px-4 py-3 border-b border-white/5" style="grid-template-columns: 1fr auto auto auto">
+          <div class="grid text-xs font-black text-faint uppercase tracking-widest px-4 py-3 border-b border-white/5" style="grid-template-columns: 1fr auto auto auto">
             <span>Aluno</span><span class="text-center">Aulas</span><span class="text-center mx-4">Tipo</span><span class="text-center">Status</span>
           </div>
           ${(d.alunos || []).map(a => {
@@ -283,9 +283,9 @@ async function openDetalhe(chamadaId) {
               : { label: 'Parcial', cls: 'bg-yellow-500/10 text-yellow-400' };
             return `
               <div class="grid items-center px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors" style="grid-template-columns: 1fr auto auto auto">
-                <div><p class="font-black text-sm text-white">${escapeHtml(a.nome)}</p><p class="text-xs text-gray-600 font-bold">${a.ra !== '—' ? `RA/CPF: ${escapeHtml(a.ra)}` : ''}</p></div>
+                <div><p class="font-black text-sm text-white">${escapeHtml(a.nome)}</p><p class="text-xs text-faint font-bold">${a.ra !== '—' ? `RA/CPF: ${escapeHtml(a.ra)}` : ''}</p></div>
                 <span class="text-center font-black text-sm text-white">${a.aulas_presentes_count}/${d.total_aulas}</span>
-                <span class="text-center font-bold text-xs text-gray-500 mx-4">${a.tipo_registro !== '—' ? escapeHtml(a.tipo_registro) : '—'}</span>
+                <span class="text-center font-bold text-xs text-muted mx-4">${a.tipo_registro !== '—' ? escapeHtml(a.tipo_registro) : '—'}</span>
                 <span class="text-xs font-black px-2 py-1 rounded-lg ${status.cls}">${status.label}</span>
               </div>
             `;

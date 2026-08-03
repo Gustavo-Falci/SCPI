@@ -34,7 +34,7 @@ const BOTTOM_NAV_TABS = ['turmas', 'alunos', 'professores', 'relatorios'];
 function buildSidebar() {
   const nav = document.getElementById('sidebar-nav');
   nav.innerHTML = TABS.map(t => `
-    <button data-tab="${t.id}" data-label="${t.label}" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm transition-all text-left text-gray-500 hover:text-white hover:bg-white/5">
+    <button data-tab="${t.id}" data-label="${t.label}" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm transition-all text-left text-muted hover:text-white hover:bg-white/5">
       ${icon(t.iconName, 18)}<span>${t.label}</span>
     </button>
   `).join('');
@@ -65,7 +65,7 @@ function buildBottomNav() {
 function setActiveNav(tabId) {
   document.querySelectorAll('.nav-item').forEach(btn => {
     const a = btn.dataset.tab === tabId;
-    btn.className = `nav-item w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm transition-all text-left ${a ? 'bg-accent/10 text-accent border border-accent/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`;
+    btn.className = `nav-item w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm transition-all text-left ${a ? 'bg-accent/10 text-accent border border-accent/20' : 'text-muted hover:text-white hover:bg-white/5'}`;
   });
   document.querySelectorAll('.bnav-item[data-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tabId);
