@@ -426,7 +426,7 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
         )
         raise HTTPException(status_code=400, detail="Código inválido ou já utilizado.")
 
-    # row["expires_at"] vem de coluna TIMESTAMP (naive) — ver core/tempo.py.
+    # Ambos aware: expires_at é TIMESTAMPTZ e agora_utc() tem tzinfo.
     if agora_utc() > row["expires_at"]:
         audit_logger.warning(
             "Verificação de código falhou (expirado) email=%s ip=%s",

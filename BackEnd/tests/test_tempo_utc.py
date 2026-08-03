@@ -21,25 +21,27 @@ BACKEND = Path(__file__).resolve().parents[1]
 UTCNOW = re.compile(r"\butcnow\s*\(")
 
 
-def test_agora_utc_devolve_naive():
-    """Aware aqui quebraria a comparação com o que volta do banco."""
+def test_agora_utc_devolve_aware_em_utc():
+    """Naive voltaria a depender do TimeZone da sessão do banco ao gravar."""
     from core.tempo import agora_utc
 
-    assert agora_utc().tzinfo is None
+    agora = agora_utc()
+    assert agora.tzinfo is not None
+    assert agora.utcoffset() == timedelta(0)
 
 
 def test_agora_utc_bate_com_o_relogio_utc():
     from core.tempo import agora_utc
 
-    referencia = datetime.now(timezone.utc).replace(tzinfo=None)
-    assert abs(agora_utc() - referencia) < timedelta(seconds=5)
+    assert abs(agora_utc() - datetime.now(timezone.utc)) < timedelta(seconds=5)
 
 
-def test_agora_utc_nao_usa_horario_local():
-    """Se alguém trocar por datetime.now() sem tz, isto pega em qualquer TZ != UTC."""
+def test_agora_utc_comparavel_com_o_que_o_banco_devolve():
+    """psycopg2 lê TIMESTAMPTZ como aware; comparar com naive levanta TypeError."""
     from core.tempo import agora_utc
 
-    assert abs(agora_utc() - datetime.now(timezone.utc).replace(tzinfo=None)) < timedelta(minutes=1)
+    do_banco = datetime.now(timezone.utc) - timedelta(minutes=1)
+    assert do_banco < agora_utc()  # não pode levantar
 
 
 # core/tempo.py e este arquivo citam `utcnow()` em prosa para explicar o que
