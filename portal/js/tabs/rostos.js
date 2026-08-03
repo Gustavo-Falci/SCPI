@@ -203,7 +203,7 @@ function renderPanel(container, panelId) {
     return `
       <div class="bg-[#0C0C12] rounded-2xl border border-white/5 overflow-hidden">
         <div class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white/5 transition-colors group-row" data-group="${escapeHtml(g.chave)}" data-panel="${panelId}">
-          <label class="custom-checkbox flex-shrink-0" onclick="event.stopPropagation()">
+          <label class="custom-checkbox flex-shrink-0">
             <input type="checkbox" class="group-check sr-only" data-panel="${panelId}" data-ids="${escapeHtml(JSON.stringify(allIds))}" ${selAll ? 'checked' : ''} ${selSome ? 'data-indeterminate="true"' : ''}>
             <span class="checkbox-ui ${selSome ? 'indeterminate' : ''}"></span>
           </label>
@@ -226,7 +226,7 @@ function renderPanel(container, panelId) {
                 : `${item.size ? (item.size / 1024).toFixed(1) + ' KB' : ''}${item.angulo ? ' · ' + escapeHtml(item.angulo) : ''}`;
               return `
                 <div class="flex items-center gap-3 px-4 py-2.5 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
-                  <label class="custom-checkbox flex-shrink-0" onclick="event.stopPropagation()">
+                  <label class="custom-checkbox flex-shrink-0">
                     <input type="checkbox" class="item-check sr-only" data-panel="${panelId}" data-id="${escapeHtml(id)}" ${selected.has(id) ? 'checked' : ''}>
                     <span class="checkbox-ui"></span>
                   </label>

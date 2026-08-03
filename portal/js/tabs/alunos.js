@@ -234,12 +234,11 @@ async function deleteAluno(id, container) {
 }
 
 function showEditModal(aluno, container) {
-  window.closeModal = closeModal;
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">${avatar(aluno.nome, 40)}<div><h3 class="font-black text-lg">Editar Aluno</h3><p class="text-gray-500 text-xs font-bold">${escapeHtml(aluno.ra || '')}</p></div></div>
-        <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <form id="edit-aluno-form" class="space-y-4">
         <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome</label><input name="nome" type="text" value="${escapeHtml(aluno.nome || '')}" class="scpi-input" required></div>
@@ -248,7 +247,7 @@ function showEditModal(aluno, container) {
         <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Turno</label>
           <select name="turno" class="scpi-input"><option value="">Não definido</option><option value="Matutino" ${aluno.turno === 'Matutino' ? 'selected' : ''}>Matutino</option><option value="Noturno" ${aluno.turno === 'Noturno' ? 'selected' : ''}>Noturno</option></select></div>
         <div class="flex gap-3 pt-2">
-          <button type="button" onclick="closeModal()" class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
+          <button type="button" data-close-modal class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
           <button type="submit" id="edit-btn" class="flex-1 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Salvar</button>
         </div>
       </form>
@@ -271,12 +270,11 @@ function showEditModal(aluno, container) {
 }
 
 function showCreatedModal(email) {
-  window.closeModal = closeModal;
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
         <div><h3 class="font-black text-lg">Aluno Criado</h3><p class="text-gray-500 text-xs font-bold mt-0.5">Credenciais enviadas por email</p></div>
-        <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <div class="bg-[#0C0C12] rounded-2xl p-4 border border-white/5 mb-3">
         <p class="text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Email</p>
@@ -285,7 +283,7 @@ function showCreatedModal(email) {
       <p class="text-blue-300 text-xs font-bold bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
         Senha temporária enviada para o email acima. O aluno definirá uma nova senha no primeiro acesso.
       </p>
-      <button onclick="closeModal()" class="w-full mt-4 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Fechar</button>
+      <button data-close-modal class="w-full mt-4 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Fechar</button>
     </div>`);
 }
 
@@ -321,7 +319,6 @@ async function handleCreate(form, container) {
 }
 
 function showImportResultModal(res) {
-  window.closeModal = closeModal;
   const card = (valor, rotulo) => `
     <div class="flex-1 bg-[#0C0C12] rounded-2xl p-3 border border-white/5 text-center">
       <p class="font-black text-white text-xl">${valor ?? 0}</p>
@@ -331,7 +328,7 @@ function showImportResultModal(res) {
     <div class="p-6">
       <div class="flex items-center justify-between mb-5">
         <div><h3 class="font-black text-lg">Importação concluída</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${res.erros.length} linha(s) com erro</p></div>
-        <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <div class="flex gap-2 mb-3">
         ${card(res.importados, 'Criados')}
@@ -342,7 +339,7 @@ function showImportResultModal(res) {
       <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
         ${res.erros.map(e => `<p class="text-red-400 text-xs font-bold bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">${escapeHtml(e)}</p>`).join('')}
       </div>
-      <button onclick="closeModal()" class="w-full mt-4 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Fechar</button>
+      <button data-close-modal class="w-full mt-4 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Fechar</button>
     </div>`);
 }
 
@@ -419,12 +416,11 @@ export async function mount(container) {
   ));
 
   setCreate(() => {
-    window.closeModal = closeModal;
     openModal(`
       <div class="p-6">
         <div class="flex items-center justify-between mb-5">
           <h3 class="font-black text-lg">Novo Aluno</h3>
-          <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+          <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
         </div>
         ${formHTML()}
       </div>`);

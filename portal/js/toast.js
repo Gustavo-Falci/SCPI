@@ -31,10 +31,13 @@ export const toast = {
         <p class="${title ? 'text-xs opacity-80' : 'font-bold text-sm'}">${escapeHtml(message)}</p>
         <div class="toast-progress mt-2 h-0.5 rounded-full bg-current opacity-30 origin-left" style="animation: toast-shrink ${duration}ms linear forwards"></div>
       </div>
-      <button class="flex-shrink-0 opacity-50 hover:opacity-100 transition-opacity" onclick="document.getElementById('${id}')?.remove()">
+      <button class="toast-close flex-shrink-0 opacity-50 hover:opacity-100 transition-opacity">
         ${icon('x', 14)}
       </button>
     `;
+    // Listener em vez de onclick: o CSP do portal (script-src 'self') bloqueia
+    // handler inline. Fecha por referência ao próprio nó, sem consultar o id.
+    el.querySelector('.toast-close').addEventListener('click', () => el.remove());
     container.appendChild(el);
     setTimeout(() => el.remove(), duration + 300);
   },
