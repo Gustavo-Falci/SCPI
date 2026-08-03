@@ -1,0 +1,21 @@
+[Unit]
+Description=SCPI - consulta receipts de push e poda tokens mortos
+Documentation=file:/opt/scpi/ops/receipts/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/scpi/BackEnd
+# HC_URL vem de arquivo, não inline: quem tem a URL de ping consegue mascarar
+# falha do job. Mesma regra do backup (ops/backup/scpi-backup.env.example).
+# systemd lê o EnvironmentFile como root, ANTES de virar `ubuntu`, então o
+# arquivo pode e deve ser root:root 600.
+EnvironmentFile=/etc/scpi-receipts.env
+# Forma de módulo (-m) e não caminho de arquivo: o script faz
+# `from repositories...`, que só resolve com BackEnd/ na raiz do pacote.
+ExecStart=/opt/scpi/venv/bin/python -m scripts.verificar_receipts
+ExecStopPost=/bin/sh -c 'if [ "$SERVICE_RESULT" = "success" ]; then curl -fsS -m 10 --retry 3 "$HC_URL"; else curl -fsS -m 10 --retry 3 "$HC_URL/fail"; fi'
+StandardOutput=journal
+StandardError=journal
