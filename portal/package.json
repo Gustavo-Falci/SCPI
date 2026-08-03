@@ -1,0 +1,13 @@
+{
+  "name": "scpi-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build do CSS do portal admin. Node é dependência apenas de DESENVOLVIMENTO: o CSS compilado (css/tailwind.css) vai versionado, e o deploy segue git pull + nginx, sem Node na VM.",
+  "scripts": {
+    "build": "tailwindcss -i src/input.css -o css/tailwind.css --minify",
+    "watch": "tailwindcss -i src/input.css -o css/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

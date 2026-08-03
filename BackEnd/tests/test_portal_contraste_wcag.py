@@ -17,7 +17,9 @@ import pytest
 
 RAIZ = Path(__file__).resolve().parents[2]
 PORTAL = RAIZ / "portal"
-CONFIG = PORTAL / "js" / "tailwind-config.js"
+# Config do Tailwind CLI. Era js/tailwind-config.js, que só existia para o build
+# de browser (setava `tailwind.config` numa global) e saiu junto com ele.
+CONFIG = PORTAL / "tailwind.config.js"
 
 # Mínimo da WCAG 2.1 AA para texto normal (1.4.3).
 AA_TEXTO_PEQUENO = 4.5
@@ -63,12 +65,14 @@ def _fundos() -> dict[str, str]:
 def _arquivos_portal():
     """Arquivos que APLICAM classes.
 
-    `tailwind-config.js` fica de fora: ele declara as cores e o comentário dele
+    `tailwind.config.js` fica de fora: ele declara as cores e o comentário dele
     cita os `text-gray-*` que foram substituídos — a varredura é textual e leria
-    a documentação como uso.
+    a documentação como uso. `node_modules/` e o CSS gerado idem: são artefato
+    de build, não fonte.
     """
-    arquivos = [p for p in PORTAL.rglob("*.js") if "vendor" not in p.parts]
-    arquivos += list(PORTAL.rglob("*.html"))
+    ignorar = {"node_modules", "vendor", "css"}
+    arquivos = [p for p in PORTAL.rglob("*.js") if not ignorar & set(p.parts)]
+    arquivos += [p for p in PORTAL.rglob("*.html") if not ignorar & set(p.parts)]
     return [p for p in arquivos if p != CONFIG]
 
 

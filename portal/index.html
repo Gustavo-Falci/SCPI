@@ -5,8 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://api.scpi.me; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>SCPI — Admin Portal</title>
-  <script src="vendor/tailwind-3.4.17.js"></script>
-  <script src="js/tailwind-config.js"></script>
+  <!-- CSS compilado pelo Tailwind CLI e versionado no repo (portal/css/tailwind.css).
+       Antes eram dois <script>: o build de browser do Tailwind (~120 KB de JS que
+       gerava as regras em runtime, e que o próprio Tailwind desaconselha em
+       produção) mais a config numa global. Ao mexer em classe do portal, rodar
+       `npm run build` em portal/ — o CI recompila e falha se o arquivo versionado
+       divergir da fonte.
+       Vem ANTES de app.css: as regras próprias precisam vencer as utilitárias. -->
+  <link rel="stylesheet" href="css/tailwind.css">
   <script src="js/boot-sidebar.js"></script>
   <link rel="stylesheet" href="css/app.css">
   <script src="js/env.js"></script>
