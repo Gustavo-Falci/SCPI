@@ -50,11 +50,17 @@ def emitir_token(sala: str, descricao: str | None = None) -> str:
     return token_plain
 
 
-def listar_tokens() -> list:
-    """Metadados dos tokens. Nunca devolve o token nem o hash."""
+def listar_tokens():
+    """Metadados dos tokens, ou DB_INDISPONIVEL se o banco não respondeu.
+
+    Nunca devolve o token nem o hash. A sentinela existe porque lista vazia
+    também é resposta legítima: achatar as duas fazia o CLI anunciar "Nenhum
+    token emitido" com o banco fora, e quem lê isso emite um token duplicado
+    para uma sala que já tinha o dela.
+    """
     with get_db_cursor() as cur:
         if not cur:
-            return []
+            return DB_INDISPONIVEL
         cur.execute(
             "SELECT id, sala, descricao, criado_em, ultimo_uso_em, revogado_em "
             "FROM camera_tokens ORDER BY sala, id"
@@ -62,10 +68,18 @@ def listar_tokens() -> list:
         return list(cur.fetchall())
 
 
-def revogar_token(token_id: int) -> bool:
+def revogar_token(token_id: int):
+    """True se revogou, False se não existe/já estava revogado, DB_INDISPONIVEL
+    se o banco não respondeu.
+
+    A distinção é de segurança, não de estética: com `False` para banco fora, o
+    CLI dizia "não encontrado ou já revogado" — e quem está revogando um token
+    comprometido lê isso como "já está seguro" e para de agir, com o token ainda
+    válido no banco.
+    """
     with get_db_cursor(commit=True) as cur:
         if not cur:
-            return False
+            return DB_INDISPONIVEL
         cur.execute(
             "UPDATE camera_tokens SET revogado_em = NOW() "
             "WHERE id = %s AND revogado_em IS NULL RETURNING id",
