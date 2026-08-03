@@ -96,6 +96,13 @@ jobs:
 
       - name: Upload SBOM artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # O gate de segurança é o `pip-audit --strict` acima; o SBOM é
+        # inventário de conveniência. Em 2026-08-03 um flake do storage do
+        # GitHub ("Failed to FinalizeArtifact ... 404 artifact not found",
+        # depois de os bytes já terem subido) marcou o Security Scan inteiro
+        # como falho com zero CVE — e numa run agendada isso abre issue à toa
+        # pelo job notify-failure.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: sbom-backend

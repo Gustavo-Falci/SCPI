@@ -1,15 +1,23 @@
 name: Tests
 
+# `portal/**` está aqui porque test_portal_csp_sem_inline_handlers.py mora em
+# BackEnd/tests mas lê arquivos do portal: sem esta entrada, PR que só mexe no
+# portal (justamente a que reintroduziria handler inline) não dispararia o
+# guarda. `app/**` entra pelo job frontend.
 on:
   push:
     branches: [main]
     paths:
       - "BackEnd/**"
+      - "portal/**"
+      - "app/**"
       - ".github/workflows/tests.yml"
   pull_request:
     branches: [main]
     paths:
       - "BackEnd/**"
+      - "portal/**"
+      - "app/**"
       - ".github/workflows/tests.yml"
 
 permissions:
@@ -64,3 +72,43 @@ jobs:
       - name: Run tests
         working-directory: BackEnd
         run: python -m pytest tests -v
+
+  # ---------------------------------------------------------------------------
+  # Tipos e lint do app. Não há suíte de testes no app (sem jest — os pacotes
+  # são gerenciados pelo Expo SDK), então tsc e eslint são a única rede aqui.
+  #
+  # Roda também em PR que só toca BackEnd ou portal: os `paths` acima são a
+  # união dos três alvos e o filtro é por workflow, não por job. Custa ~1min de
+  # runner; separar exigiria um job de detecção de mudanças como o de
+  # security.yml, complexidade que não se paga num workflow deste tamanho.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: tsc + eslint (app)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies (no scripts)
+        working-directory: app
+        # --ignore-scripts pelo mesmo motivo do npm audit em security.yml:
+        # postinstall de dependência não roda em CI.
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        working-directory: app
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: app
+        # Bloqueia em erro, não em warning. O app tem 19 warnings de
+        # react-hooks/exhaustive-deps hoje, vários deliberados (listener que
+        # não pode re-registrar a cada render). Apertar para `--max-warnings 0`
+        # é decisão à parte, depois de triar os 19 — não pode entrar de carona
+        # aqui ou o CI nasce vermelho.
+        run: npm run lint
