@@ -15,12 +15,36 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
+from infra.database import DB_INDISPONIVEL, get_db_cursor
 from infra.migrations import ensure_camera_tokens_table
 from repositories.camera_tokens import emitir_token, listar_tokens, revogar_token
 
 
-def _emitir(args):
+def _erro(mensagem: str):
+    """Sai com mensagem em stderr e código 1 — nunca com sucesso silencioso."""
+    print(f"erro: {mensagem}", file=sys.stderr)
+    sys.exit(1)
+
+
+def _preparar():
+    """Confirma o banco e garante a tabela, nesta ordem.
+
+    A checagem explícita existe porque `ensure_camera_tokens_table()` chama
+    `cur.execute` sem testar o cursor: com o pool sem conexão ela estoura
+    `AttributeError: 'NoneType' object has no attribute 'execute'`, que não diz
+    a um operador que o problema é o banco estar fora.
+    """
+    with get_db_cursor() as cur:
+        if not cur:
+            _erro(
+                "banco indisponível (verifique DB_HOST/DB_PORT no .env e se o "
+                "Postgres está no ar). Nenhuma alteração foi feita."
+            )
     ensure_camera_tokens_table()
+
+
+def _emitir(args):
+    _preparar()
     token = emitir_token(args.sala, args.descricao)
     print(f"Sala:  {args.sala}")
     print(f"Token: {token}")
@@ -30,8 +54,10 @@ def _emitir(args):
 
 
 def _listar(_args):
-    ensure_camera_tokens_table()
+    _preparar()
     linhas = listar_tokens()
+    if linhas is DB_INDISPONIVEL:
+        _erro("banco indisponível — a lista abaixo seria falsa, então não vai nenhuma.")
     if not linhas:
         print("Nenhum token emitido.")
         return
@@ -43,7 +69,12 @@ def _listar(_args):
 
 
 def _revogar(args):
-    if revogar_token(args.id):
+    resultado = revogar_token(args.id)
+    if resultado is DB_INDISPONIVEL:
+        # Não pode virar "não encontrado ou já revogado": quem revoga token
+        # comprometido leria isso como missão cumprida.
+        _erro(f"banco indisponível — o token {args.id} NÃO foi revogado. Tente de novo.")
+    if resultado:
         print(f"Token {args.id} revogado.")
     else:
         print(f"Token {args.id} não encontrado ou já revogado.", file=sys.stderr)
@@ -66,7 +97,15 @@ def main():
     p_revogar.set_defaults(func=_revogar)
 
     args = parser.parse_args()
-    args.func(args)
+    try:
+        args.func(args)
+    except SystemExit:
+        raise  # _erro() e o argparse já disseram o que precisava
+    except Exception as e:
+        # Banco fora derruba `ensure_camera_tokens_table()` e `emitir_token()`
+        # com exceção. Traceback cru de psycopg2 num script de operação não
+        # ajuda ninguém a decidir o que fazer; a mensagem, sim.
+        _erro(f"{type(e).__name__}: {e}")
 
 
 if __name__ == "__main__":
