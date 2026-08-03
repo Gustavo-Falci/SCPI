@@ -1,0 +1,6 @@
+/* Entrada do build do Tailwind. Saída: css/tailwind.css (versionado).
+   O CSS próprio do portal continua em css/app.css, carregado depois — as
+   regras de lá precisam vencer as utilitárias em caso de empate. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

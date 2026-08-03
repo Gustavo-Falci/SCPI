@@ -111,3 +111,40 @@ jobs:
         # react-hooks/exhaustive-deps que existiam foram triados e corrigidos;
         # o zero é o que impede que voltem um a um.
         run: npm run lint
+
+  # ---------------------------------------------------------------------------
+  # O CSS do portal é compilado pelo Tailwind CLI e VERSIONADO (portal/css/
+  # tailwind.css), para o deploy seguir `git pull` + nginx sem Node na VM.
+  #
+  # O preço disso é o arquivo poder ficar defasado da fonte: quem adiciona uma
+  # classe e esquece de rodar `npm run build` sobe elemento sem estilo, calado.
+  # Este job recompila e falha se o resultado diferir do que está commitado.
+  # ---------------------------------------------------------------------------
+  portal-css:
+    name: portal css (build atualizado)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: portal/package-lock.json
+
+      - name: Install dependencies (no scripts)
+        working-directory: portal
+        run: npm ci --ignore-scripts
+
+      - name: Rebuild CSS
+        working-directory: portal
+        run: npm run build
+
+      - name: CSS versionado tem de bater com a fonte
+        run: |
+          if ! git diff --quiet -- portal/css/tailwind.css; then
+            echo "::error::portal/css/tailwind.css está defasado. Rode 'npm run build' em portal/ e commite o resultado."
+            git diff --stat -- portal/css/tailwind.css
+            exit 1
+          fi
+          echo "CSS versionado confere com a fonte."

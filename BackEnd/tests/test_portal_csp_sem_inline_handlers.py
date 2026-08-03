@@ -21,9 +21,16 @@ PORTAL = Path(__file__).resolve().parents[2] / "portal"
 INLINE_HANDLER = re.compile(r"""\son[a-z]+\s*=\s*["']""")
 
 # `onload`/`onerror` em <img> e afins seguiriam bloqueados igual; nada é isento.
+#
+# `node_modules/` fora: são as devDependencies do build do Tailwind, milhares de
+# arquivos que nunca chegam ao browser. `tailwind.config.js` também não é
+# servido. Varrê-los custaria segundos e acusaria handler inline em código de
+# terceiro que não roda no portal.
+_IGNORAR = {"node_modules", "vendor"}
 ARQUIVOS = sorted(
-    [p for p in PORTAL.rglob("*.js") if "vendor" not in p.parts]
-    + list(PORTAL.rglob("*.html"))
+    p
+    for p in [*PORTAL.rglob("*.js"), *PORTAL.rglob("*.html")]
+    if not _IGNORAR & set(p.parts) and p.name != "tailwind.config.js"
 )
 
 
