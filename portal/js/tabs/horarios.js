@@ -75,12 +75,11 @@ function showAddModal(diaIdx, container) {
   const turmas = (state.cache.turmas || []).filter(t => t.turno === state.turno && (state.semestre === 'Todos' || String(t.semestre) === String(state.semestre)));
   const slots = state.turno === 'Noturno' ? SLOTS_NOTURNO : SLOTS_MATUTINO;
 
-  window.closeModal = closeModal;
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
         <div><h3 class="font-black text-lg">Adicionar Aula</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${DIAS_SEMANA[diaIdx]}</p></div>
-        <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <form id="horario-form" class="space-y-4">
         <div>
@@ -111,7 +110,7 @@ function showAddModal(diaIdx, container) {
           <input name="sala" type="text" placeholder="Lab 01" class="scpi-input" required>
         </div>
         <div class="flex gap-3 pt-2">
-          <button type="button" onclick="closeModal()" class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
+          <button type="button" data-close-modal class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
           <button type="submit" id="horario-save-btn" class="flex-1 py-3 rounded-2xl bg-accent hover:bg-accent-dark text-white font-black text-sm transition-colors">Adicionar</button>
         </div>
       </form>

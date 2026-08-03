@@ -159,13 +159,12 @@ async function deleteTurma(id, container) {
 }
 
 function showProfModal(turma, container) {
-  window.closeModal = closeModal;
   const opts = [{ professor_id: null, nome: 'Sem professor' }, ...professores];
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
         <div><h3 class="font-black text-lg">Atribuir Professor</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${escapeHtml(turma.nome_disciplina)}</p></div>
-        <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <div class="space-y-2 max-h-72 overflow-y-auto mb-6">
         ${opts.map(p => `
@@ -176,7 +175,7 @@ function showProfModal(turma, container) {
         `).join('')}
       </div>
       <div class="flex gap-3">
-        <button onclick="closeModal()" class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
+        <button data-close-modal class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
         <button id="prof-assign-btn" class="flex-1 py-3 rounded-2xl bg-accent hover:bg-accent-dark text-white font-black text-sm transition-colors">Salvar</button>
       </div>
     </div>
@@ -199,7 +198,6 @@ function showProfModal(turma, container) {
 
 async function showMatriculaModal(turmaId, container) {
   const turma = turmas.find(t => String(t.turma_id) === String(turmaId));
-  window.closeModal = closeModal;
 
   openModal(`<div class="p-8 flex items-center justify-center"><div class="spin opacity-50">${icon('loader', 28)}</div></div>`, 'max-w-xl');
 
@@ -257,7 +255,7 @@ async function showMatriculaModal(turmaId, container) {
     document.getElementById('modal-box').innerHTML = `
       <div class="flex items-center justify-between p-6 border-b border-white/5 flex-shrink-0">
         <div><h3 class="font-black text-lg">Alunos da Turma</h3><p class="text-gray-500 text-xs font-bold mt-0.5">${escapeHtml(turma.nome_disciplina)} · ${escapeHtml(turma.turno)}</p></div>
-        <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <div class="p-4 border-b border-white/5 flex-shrink-0 flex gap-2">
         ${tabBtn('matricular', 'Matricular')}
@@ -285,7 +283,7 @@ async function showMatriculaModal(turmaId, container) {
       </div>
       ${total > 1 ? `<div class="px-4 py-3 border-t border-white/5 flex-shrink-0 flex items-center justify-between"><span class="text-xs text-gray-600 font-black">${count} ${isRemover ? 'matriculados' : 'elegíveis'}</span><div class="flex items-center gap-1"><button id="mat-prev" ${st.page <= 1 ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-gray-500 disabled:opacity-30">${icon('chevron-left', 13)}</button><span class="text-xs font-black text-gray-500 px-2">${st.page}/${total}</span><button id="mat-next" ${st.page >= total ? 'disabled' : ''} class="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-gray-500 disabled:opacity-30">${icon('chevron-right', 13)}</button></div></div>` : ''}
       <div class="p-4 border-t border-white/5 flex gap-3 flex-shrink-0">
-        <button onclick="closeModal()" class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
+        <button data-close-modal class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
         <button id="mat-submit" ${!selCount ? 'disabled' : ''} class="flex-1 py-3 rounded-2xl ${actionColor} disabled:opacity-40 text-white font-black text-sm transition-colors">${actionLabel} ${selCount > 0 ? `(${selCount})` : ''}</button>
       </div>
     `;
@@ -451,12 +449,11 @@ export async function mount(container) {
   container.querySelector('#turmas-search').addEventListener('input', debounce(e => { search = e.target.value; page = 1; saveTab('turmas', { search, page }); renderList(container); }, 200));
 
   setCreate(() => {
-    window.closeModal = closeModal;
     openModal(`
       <div class="p-6">
         <div class="flex items-center justify-between mb-5">
           <h3 class="font-black text-lg">Nova Turma</h3>
-          <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+          <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
         </div>
         <form id="turma-form-modal" class="space-y-4">
           <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Disciplina *</label><input name="nome_disciplina" class="scpi-input" placeholder="Engenharia de Software" required></div>

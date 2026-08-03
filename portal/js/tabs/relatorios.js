@@ -213,7 +213,7 @@ function abrirModalFrequencia(turmaId, codigoTurma) {
         </label>
       </div>
       <div class="flex gap-2 justify-end">
-        <button onclick="closeModal()" class="px-4 py-2 rounded-xl border border-white/10 text-sm font-black text-gray-400">Cancelar</button>
+        <button data-close-modal class="px-4 py-2 rounded-xl border border-white/10 text-sm font-black text-gray-400">Cancelar</button>
         <button id="freq-gerar" class="px-4 py-2 rounded-xl bg-accent text-sm font-black text-white">Gerar PDF</button>
       </div>
     </div>
@@ -235,7 +235,6 @@ function abrirModalFrequencia(turmaId, codigoTurma) {
 }
 
 async function openDetalhe(chamadaId) {
-  window.closeModal = closeModal;
   openModal(`<div class="p-8 flex items-center justify-center"><div class="spin opacity-50">${icon('loader', 28)}</div></div>`, 'max-w-3xl');
   try {
     const d = await api.get(`/admin/relatorios/chamadas/${chamadaId}`);
@@ -260,7 +259,7 @@ async function openDetalhe(chamadaId) {
         <div class="flex items-center gap-2 flex-shrink-0">
           <button id="btn-pdf-freq" title="Frequência por aluno da turma" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 hover:text-accent transition-colors">${icon('users', 16)}</button>
           <button id="btn-pdf-ata" title="Exportar ata em PDF" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500 hover:text-accent transition-colors">${icon('download', 16)}</button>
-          <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+          <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
         </div>
       </div>
       <div class="p-6 overflow-y-auto">
@@ -305,7 +304,7 @@ async function openDetalhe(chamadaId) {
       abrirModalFrequencia(d.turma_id, d.codigo_turma)
     );
   } catch (err) {
-    document.getElementById('modal-box').innerHTML = `<div class="p-8 text-red-400 font-black text-center">${escapeHtml(extractError(err))}<br><button onclick="closeModal()" class="mt-4 px-4 py-2 rounded-xl border border-white/10 text-white text-sm">Fechar</button></div>`;
+    document.getElementById('modal-box').innerHTML = `<div class="p-8 text-red-400 font-black text-center">${escapeHtml(extractError(err))}<br><button data-close-modal class="mt-4 px-4 py-2 rounded-xl border border-white/10 text-white text-sm">Fechar</button></div>`;
   }
 }
 

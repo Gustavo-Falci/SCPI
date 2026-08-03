@@ -292,8 +292,14 @@ async function init() {
   document.getElementById('hamburger').addEventListener('click', openSidebar);
   initSidebarToggle();
   document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
+  // Um listener só, no overlay, que é estático — o conteúdo de #modal-box é
+  // trocado por innerHTML a cada modal, então listener preso no botão morreria
+  // junto. Cobre os dois caminhos de fechar: clique no fundo e qualquer
+  // [data-close-modal] (o X e o Cancelar de todas as tabs). Eram `onclick=`
+  // inline, que o CSP `script-src 'self'` bloqueia sem fazer barulho.
   document.getElementById('modal-overlay').addEventListener('click', e => {
-    if (e.target === document.getElementById('modal-overlay')) closeModal();
+    if (e.target === document.getElementById('modal-overlay')) return closeModal();
+    if (e.target.closest('[data-close-modal]')) closeModal();
   });
   const logoutBtn = document.getElementById('logout-btn');
   logoutBtn.dataset.label = 'Sair';

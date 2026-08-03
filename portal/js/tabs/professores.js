@@ -81,18 +81,17 @@ async function deleteProfessor(id, container) {
 }
 
 function showEditModal(prof, container) {
-  window.closeModal = closeModal;
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">${avatar(prof.nome, 40)}<div><h3 class="font-black text-lg">Editar Professor</h3><p class="text-gray-500 text-xs font-bold">${escapeHtml(prof.email || '')}</p></div></div>
-        <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <form id="edit-prof-form" class="space-y-4">
         <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Nome</label><input name="nome" type="text" value="${escapeHtml(prof.nome || '')}" class="scpi-input" required></div>
         <div><label class="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 block">Email</label><input name="email" type="email" value="${escapeHtml(prof.email || '')}" class="scpi-input" required></div>
         <div class="flex gap-3 pt-2">
-          <button type="button" onclick="closeModal()" class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
+          <button type="button" data-close-modal class="flex-1 py-3 rounded-2xl border border-white/10 font-black text-sm hover:bg-white/5 transition-colors">Cancelar</button>
           <button type="submit" id="edit-prof-btn" class="flex-1 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Salvar</button>
         </div>
       </form>
@@ -113,12 +112,11 @@ function showEditModal(prof, container) {
 }
 
 function showCreatedModal(email) {
-  window.closeModal = closeModal;
   openModal(`
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
         <div><h3 class="font-black text-lg">Professor Criado</h3><p class="text-gray-500 text-xs font-bold mt-0.5">Credenciais enviadas por email</p></div>
-        <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+        <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
       </div>
       <div class="bg-[#0C0C12] rounded-2xl p-4 border border-white/5 mb-3">
         <p class="text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Email</p>
@@ -127,7 +125,7 @@ function showCreatedModal(email) {
       <p class="text-blue-300 text-xs font-bold bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
         Senha temporária enviada para o email acima. O professor definirá uma nova senha no primeiro acesso.
       </p>
-      <button onclick="closeModal()" class="w-full mt-4 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Fechar</button>
+      <button data-close-modal class="w-full mt-4 py-3 rounded-2xl bg-accent text-white font-black text-sm transition-colors">Fechar</button>
     </div>`);
 }
 
@@ -216,12 +214,11 @@ export async function mount(container) {
 
   // Registra FAB mobile → abre modal com o formulário
   setCreate(() => {
-    window.closeModal = closeModal;
     openModal(`
       <div class="p-6">
         <div class="flex items-center justify-between mb-5">
           <h3 class="font-black text-lg">Novo Professor</h3>
-          <button onclick="closeModal()" class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
+          <button data-close-modal class="w-8 h-8 rounded-xl hover:bg-white/5 flex items-center justify-center text-gray-500">${icon('x', 16)}</button>
         </div>
         ${formHTML()}
       </div>`);
