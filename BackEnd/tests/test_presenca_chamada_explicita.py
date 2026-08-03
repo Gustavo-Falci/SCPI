@@ -4,7 +4,7 @@ O caso que motivou: com duas turmas em aula ao mesmo tempo, o backend resolvia
 "a chamada aberta mais recente do sistema inteiro" e gravava a presença na aula
 de outra sala. Estes testes travam a resolução explícita por chamada_id.
 """
-import datetime
+from core.tempo import agora_utc
 from contextlib import contextmanager
 
 from infra.database import get_db_cursor
@@ -32,7 +32,7 @@ def _fechar_chamada(chamada_id):
 
 def _cadastrar_rosto(aluno_id, revogado=False):
     """Cria o vínculo biométrico do aluno com ExternalImageId = aluno_id."""
-    revogado_em = datetime.datetime.utcnow() if revogado else None
+    revogado_em = agora_utc() if revogado else None
     with get_db_cursor(commit=True) as cur:
         cur.execute(
             "INSERT INTO Colecao_Rostos (aluno_id, external_image_id, "

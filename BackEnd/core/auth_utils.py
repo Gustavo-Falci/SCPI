@@ -12,6 +12,8 @@ import hmac
 import requests
 from dotenv import load_dotenv, find_dotenv
 
+from core.tempo import agora_utc
+
 load_dotenv(find_dotenv())
 
 logger = logging.getLogger(__name__)
@@ -129,9 +131,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Cria um token JWT de acesso (curta duração)."""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = agora_utc() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = agora_utc() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode.update({"exp": expire, "type": "access", "iss": JWT_ISSUER, "aud": JWT_AUDIENCE})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -145,7 +147,7 @@ def create_refresh_token() -> tuple[str, str, datetime]:
     """
     token_plain = secrets.token_urlsafe(48)
     token_hash = hashlib.sha256(token_plain.encode("utf-8")).hexdigest()
-    expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    expires_at = agora_utc() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     return token_plain, token_hash, expires_at
 
 def hash_refresh_token(token_plain: str) -> str:

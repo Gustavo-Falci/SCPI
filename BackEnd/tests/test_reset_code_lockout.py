@@ -1,8 +1,9 @@
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
+from core.tempo import agora_utc
 from infra.database import get_db_cursor
 from infra.migrations import ensure_reset_codes_table
 from repositories.tokens import registrar_tentativa_codigo_invalida
@@ -33,7 +34,7 @@ def reset_codes():
         cur.execute(
             "INSERT INTO PasswordResetCodes (email, code, expires_at, used) "
             "VALUES (%s, %s, %s, FALSE)",
-            ("z@x.com", "hash-fake", datetime.utcnow() + timedelta(minutes=15)),
+            ("z@x.com", "hash-fake", agora_utc() + timedelta(minutes=15)),
         )
     yield
     with get_db_cursor(commit=True) as cur:

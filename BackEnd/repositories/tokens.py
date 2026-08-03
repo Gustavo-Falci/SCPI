@@ -1,3 +1,4 @@
+from core.tempo import agora_utc
 from infra.database import get_db_cursor
 
 
@@ -46,8 +47,8 @@ def rotacionar_refresh_token(token_hash_antigo, token_hash_novo, expires_at_novo
             )
             return {"_status": "reuse", "usuario_id": row["usuario_id"]}
 
-        import datetime as _dt
-        if row["expires_at"] < _dt.datetime.utcnow():
+        # expires_at vem de coluna TIMESTAMP (naive); agora_utc() também é naive.
+        if row["expires_at"] < agora_utc():
             return {"_status": "expired"}
 
         cur.execute(
