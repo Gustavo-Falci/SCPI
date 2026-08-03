@@ -299,6 +299,20 @@ def fechar_chamadas_expiradas(agora=None):
 
 def listar_relatorios_chamadas(professor_id=None, turma_id=None, limit=200, offset=0,
                                data_inicio=None, data_fim=None, turno=None, semestre=None):
+    """Chamadas fechadas do recorte, com os contadores que montam cada card.
+
+    Os quatro números por turma (total de alunos + presentes/ausentes/parciais)
+    saem de um único LATERAL, não de quatro subselects correlacionados. Os três
+    subselects antigos repetiam o MESMO join de Turma_Alunos contra o agregado
+    de Presencas, mudando só o predicado do COALESCE — quatro varreduras por
+    linha, até 800 subplanos numa página de limit=200.
+
+    `presentes` continua subselect separado de propósito: ele conta linhas de
+    Presencas da chamada INCLUSIVE de aluno que já saiu de Turma_Alunos, e o
+    LATERAL parte de Turma_Alunos. Trazê-lo para dentro (SUM(pc.cnt)) mudaria
+    silenciosamente o denominador de `resumo_presenca` para turma com aluno
+    desmatriculado depois da aula.
+    """
     sql = """
         SELECT
             c.chamada_id, c.turma_id,
@@ -308,24 +322,36 @@ def listar_relatorios_chamadas(professor_id=None, turma_id=None, limit=200, offs
             to_char(c.horario_inicio, 'HH24:MI')    AS horario_inicio,
             to_char(c.horario_fim,    'HH24:MI')    AS horario_fim,
             c.total_aulas,
-            (SELECT COUNT(*) FROM Turma_Alunos ta WHERE ta.turma_id = c.turma_id) AS total_alunos,
+            ag.total_alunos,
             (SELECT COUNT(*) FROM Presencas p  WHERE p.chamada_id  = c.chamada_id) AS presentes,
-            (SELECT COUNT(*)
-             FROM Turma_Alunos ta
-             LEFT JOIN (SELECT aluno_id, COUNT(*) AS cnt FROM Presencas WHERE chamada_id = c.chamada_id GROUP BY aluno_id) pc ON pc.aluno_id = ta.aluno_id
-             WHERE ta.turma_id = c.turma_id AND COALESCE(pc.cnt, 0) = c.total_aulas) AS presentes_alunos,
-            (SELECT COUNT(*)
-             FROM Turma_Alunos ta
-             LEFT JOIN (SELECT aluno_id, COUNT(*) AS cnt FROM Presencas WHERE chamada_id = c.chamada_id GROUP BY aluno_id) pc ON pc.aluno_id = ta.aluno_id
-             WHERE ta.turma_id = c.turma_id AND COALESCE(pc.cnt, 0) = 0) AS ausentes_alunos,
-            (SELECT COUNT(*)
-             FROM Turma_Alunos ta
-             LEFT JOIN (SELECT aluno_id, COUNT(*) AS cnt FROM Presencas WHERE chamada_id = c.chamada_id GROUP BY aluno_id) pc ON pc.aluno_id = ta.aluno_id
-             WHERE ta.turma_id = c.turma_id AND COALESCE(pc.cnt, 0) > 0 AND COALESCE(pc.cnt, 0) < c.total_aulas) AS parciais_alunos
+            ag.presentes_alunos,
+            ag.ausentes_alunos,
+            ag.parciais_alunos
         FROM Chamadas c
         JOIN Turmas     t  ON t.turma_id     = c.turma_id
         JOIN Professores pr ON pr.professor_id = c.professor_id
         JOIN Usuarios    u  ON u.usuario_id   = pr.usuario_id
+        LEFT JOIN LATERAL (
+            SELECT
+                COUNT(*) AS total_alunos,
+                COUNT(*) FILTER (
+                    WHERE COALESCE(pc.cnt, 0) = c.total_aulas
+                ) AS presentes_alunos,
+                COUNT(*) FILTER (
+                    WHERE COALESCE(pc.cnt, 0) = 0
+                ) AS ausentes_alunos,
+                COUNT(*) FILTER (
+                    WHERE COALESCE(pc.cnt, 0) > 0 AND COALESCE(pc.cnt, 0) < c.total_aulas
+                ) AS parciais_alunos
+            FROM Turma_Alunos ta
+            LEFT JOIN (
+                SELECT aluno_id, COUNT(*) AS cnt
+                FROM Presencas
+                WHERE chamada_id = c.chamada_id
+                GROUP BY aluno_id
+            ) pc ON pc.aluno_id = ta.aluno_id
+            WHERE ta.turma_id = c.turma_id
+        ) ag ON true
         WHERE c.status = 'Fechada'
     """
     params = []
