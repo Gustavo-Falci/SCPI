@@ -33,7 +33,17 @@ email-validator==2.3.0
 # Autenticação
 PyJWT==2.13.0
 passlib==1.7.4
-cryptography==49.0.0
+# GHSA-g6cj-pr64-35w5 / CVE-2026-69247 (CVSS 8.2): oráculo de Bleichenbacher na
+# decifragem de PKCS#7 EnvelopedData — mensagens de erro e tempo distinguíveis
+# permitiam recuperar a chave de conteúdo. Afeta 44.0.0 até 49.x, corrigido em
+# 50.0.0. O SCPI não chama pkcs7_decrypt_*, então não estava exposto; a subida é
+# higiene de dependência.
+#
+# Só está aqui por causa do PyJWT, e apenas para algoritmos ASSIMÉTRICOS. O SCPI
+# assina em HS256, que o PyJWT resolve com hmac/hashlib da stdlib — nenhum
+# módulo do projeto importa `cryptography` e `pip show` reporta Required-by
+# vazio. Remover o pin é candidato a item próprio; ver comentário no topo.
+cryptography==50.0.0
 
 # AWS
 boto3==1.43.56
