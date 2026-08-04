@@ -28,7 +28,7 @@ def ensure_base_schema():
                 email varchar(255) NOT NULL UNIQUE,
                 senha varchar(255) NOT NULL,
                 tipo_usuario varchar(50) NOT NULL,
-                data_cadastro timestamp DEFAULT CURRENT_TIMESTAMP
+                data_cadastro timestamptz DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -77,7 +77,7 @@ def ensure_base_schema():
                     REFERENCES Turmas(turma_id) ON DELETE CASCADE,
                 aluno_id uuid NOT NULL
                     REFERENCES Alunos(aluno_id) ON DELETE CASCADE,
-                data_associacao timestamp DEFAULT CURRENT_TIMESTAMP,
+                data_associacao timestamptz DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE (turma_id, aluno_id)
             )
             """
@@ -106,7 +106,7 @@ def ensure_base_schema():
                 horario_inicio time NOT NULL,
                 horario_fim time,
                 status varchar(50) DEFAULT 'Aberta',
-                data_criacao timestamp DEFAULT CURRENT_TIMESTAMP
+                data_criacao timestamptz DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -118,7 +118,7 @@ def ensure_base_schema():
                     REFERENCES Chamadas(chamada_id) ON DELETE CASCADE,
                 aluno_id uuid NOT NULL
                     REFERENCES Alunos(aluno_id) ON DELETE CASCADE,
-                hora_registro timestamp DEFAULT CURRENT_TIMESTAMP,
+                hora_registro timestamptz DEFAULT CURRENT_TIMESTAMP,
                 tipo_registro varchar(50) DEFAULT 'Reconhecimento'
             )
             """
@@ -132,7 +132,7 @@ def ensure_base_schema():
                 external_image_id varchar(255) NOT NULL,
                 face_id_rekognition varchar(255),
                 s3_path_cadastro varchar(500),
-                data_indexacao timestamp DEFAULT CURRENT_TIMESTAMP
+                data_indexacao timestamptz DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -175,13 +175,13 @@ def ensure_lgpd_columns():
         cur.execute(
             """
             ALTER TABLE Colecao_Rostos
-            ADD COLUMN IF NOT EXISTS consentimento_data TIMESTAMP NULL
+            ADD COLUMN IF NOT EXISTS consentimento_data TIMESTAMPTZ NULL
             """
         )
         cur.execute(
             """
             ALTER TABLE Colecao_Rostos
-            ADD COLUMN IF NOT EXISTS revogado_em TIMESTAMP NULL
+            ADD COLUMN IF NOT EXISTS revogado_em TIMESTAMPTZ NULL
             """
         )
 
@@ -201,7 +201,7 @@ def ensure_consentimentos_table():
                 aluno_id         UUID NOT NULL REFERENCES Alunos(aluno_id),
                 evento           VARCHAR(20) NOT NULL,
                 politica_versao  VARCHAR(20) NOT NULL,
-                registrado_em    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                registrado_em    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 ip               VARCHAR(45),
                 user_agent       TEXT,
                 origem           VARCHAR(20) NOT NULL
@@ -254,7 +254,7 @@ def ensure_push_tokens_table():
             CREATE TABLE IF NOT EXISTS PushTokens (
                 usuario_id VARCHAR(64) PRIMARY KEY,
                 expo_token TEXT NOT NULL,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -267,7 +267,7 @@ def ensure_push_receipts_table():
             CREATE TABLE IF NOT EXISTS PushReceiptsPendentes (
                 ticket_id  TEXT PRIMARY KEY,
                 expo_token TEXT NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -558,6 +558,60 @@ def ensure_timestamptz_tokens():
             )
 
 
+def ensure_timestamptz_restante():
+    """Converte as demais colunas de data do schema para TIMESTAMPTZ.
+
+    Complementa `ensure_timestamptz_tokens`, que tratou só as tabelas de token.
+    Aqui a conversão é mais simples porque a semântica NÃO estava mista: todas
+    estas colunas são escritas exclusivamente por `NOW()`/`CURRENT_TIMESTAMP`
+    (verificado caso a caso — inclusive `data_associacao`, que passa `NOW()` no
+    template do execute_values, e `consentimento_data`/`revogado_em`, que saem
+    de CURRENT_TIMESTAMP em repositories/rostos.py). Fonte única significa que
+    todas guardam hora de PAREDE da sessão, e todas usam a mesma cláusula.
+
+    Usar `AT TIME ZONE 'UTC'` aqui, como nas colunas de token, deslocaria tudo
+    pelo offset do fuso do banco — que em produção é America/Sao_Paulo, não UTC.
+
+    Efeito visível: `consentimento_data`, `revogado_em` e `registrado_em` saem
+    para o cliente via `.isoformat()` e passam a levar offset. Os dois
+    consumidores no app fazem `new Date(...).toLocaleString('pt-BR')`, que hoje
+    acerta por coincidência (string naive lida como hora local, device no mesmo
+    fuso) e passa a acertar de fato, inclusive fora do Brasil.
+
+    Mesma guarda por `information_schema` do outro: `ALTER COLUMN ... TYPE`
+    reescreve a tabela sob ACCESS EXCLUSIVE, e sem ela todo boot travaria
+    Usuarios, Presencas e Colecao_Rostos.
+    """
+    colunas = [
+        ("usuarios", "data_cadastro"),
+        ("turma_alunos", "data_associacao"),
+        ("chamadas", "data_criacao"),
+        ("presencas", "hora_registro"),
+        ("colecao_rostos", "data_indexacao"),
+        ("colecao_rostos", "consentimento_data"),
+        ("colecao_rostos", "revogado_em"),
+        ("consentimentoslgpd", "registrado_em"),
+        ("pushtokens", "updated_at"),
+        ("pushreceiptspendentes", "created_at"),
+    ]
+    with get_db_cursor(commit=True) as cur:
+        for tabela, coluna in colunas:
+            cur.execute(
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_name = %s AND column_name = %s
+                """,
+                (tabela, coluna),
+            )
+            row = cur.fetchone()
+            if not row or row["data_type"] != "timestamp without time zone":
+                continue  # já convertida, ou coluna/tabela ainda não existe
+            cur.execute(
+                f"ALTER TABLE {tabela} ALTER COLUMN {coluna} "
+                f"TYPE timestamptz USING {coluna} AT TIME ZONE current_setting('TimeZone')"
+            )
+
+
 _ETAPAS = [
     "ensure_base_schema",
     "ensure_professor_departamento_dropped",
@@ -580,6 +634,8 @@ _ETAPAS = [
     "ensure_indices_filtros_alunos",
     "ensure_indices_performance",
     "ensure_consentimentos_table",
+    # Por último: depende de todas as tabelas e colunas acima já existirem.
+    "ensure_timestamptz_restante",
 ]
 
 
