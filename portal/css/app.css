@@ -199,8 +199,10 @@ select.scpi-input option { background: #151718; color: #fff; }
 button:disabled { cursor: not-allowed; }
 
 /* ── cursor-pointer em cards e itens clicáveis ── */
+/* `[onclick]` saiu daqui: virou letra morta quando os handlers inline foram
+   removidos por causa do CSP. Quem fecha modal agora é [data-close-modal]. */
 [data-tab], .nav-item, .bnav-item, .rel-item, .group-row, .turma-card,
-.anim-item button, [onclick] { cursor: pointer; }
+.anim-item button, [data-close-modal] { cursor: pointer; }
 
 /* ── Focus rings acessíveis ── */
 :focus-visible {
@@ -330,3 +332,71 @@ button:not(:disabled):active { transform: scale(0.97); }
 @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
 #modal-overlay:not(.hidden) { animation: overlay-in 0.2s ease forwards; }
 #confirm-overlay:not(.hidden) { animation: overlay-in 0.2s ease forwards; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Classes que substituem atributos `style=` inline
+   ═══════════════════════════════════════════════════════════════════
+   O CSP do portal fixa `style-src 'self'` — sem 'unsafe-inline', atributo
+   `style=` é BLOQUEADO, pela mesma regra que bloqueia `onclick=` (hash e
+   nonce não valem para atributo). O sintoma é mudo: o estilo simplesmente
+   não aplica.
+
+   Valor genuinamente contínuo (largura da barra de frequência, duração do
+   toast) continua sendo definido por JS via `el.style`, que o CSP não
+   bloqueia — só a marcação é filtrada, não a CSSOM. */
+
+/* ── Avatar: 8 cores da paleta × 2 tamanhos (ver js/utils.js) ── */
+.avatar {
+  width: 38px; height: 38px; border-radius: 11px; font-size: 14px;
+  flex-shrink: 0; display: inline-flex; align-items: center;
+  justify-content: center; font-weight: 900; border: 1.5px solid;
+}
+.avatar-lg { width: 40px; height: 40px; font-size: 15px; }
+.av-0 { background: #4B39EF22; border-color: #4B39EF55; color: #4B39EF; }
+.av-1 { background: #10B98122; border-color: #10B98155; color: #10B981; }
+.av-2 { background: #F59E0B22; border-color: #F59E0B55; color: #F59E0B; }
+.av-3 { background: #EF444422; border-color: #EF444455; color: #EF4444; }
+.av-4 { background: #8B5CF622; border-color: #8B5CF655; color: #8B5CF6; }
+.av-5 { background: #EC489922; border-color: #EC489955; color: #EC4899; }
+.av-6 { background: #06B6D422; border-color: #06B6D455; color: #06B6D4; }
+.av-7 { background: #F9731622; border-color: #F9731655; color: #F97316; }
+
+/* ── Escalonamento de lista ──
+   Era `style="animation-delay:${i*45}ms"` em cada item. Como os itens são
+   sempre os únicos filhos do container (`list.innerHTML = items.map(...)`),
+   nth-child dá o mesmo resultado sem tocar no atributo. Passo unificado em
+   45ms: as listas usavam 45/55/60/70ms, diferença imperceptível. */
+.stagger > *:nth-child(1)  { animation-delay: 0ms;   }
+.stagger > *:nth-child(2)  { animation-delay: 45ms;  }
+.stagger > *:nth-child(3)  { animation-delay: 90ms;  }
+.stagger > *:nth-child(4)  { animation-delay: 135ms; }
+.stagger > *:nth-child(5)  { animation-delay: 180ms; }
+.stagger > *:nth-child(6)  { animation-delay: 225ms; }
+.stagger > *:nth-child(7)  { animation-delay: 270ms; }
+.stagger > *:nth-child(8)  { animation-delay: 315ms; }
+.stagger > *:nth-child(9)  { animation-delay: 360ms; }
+.stagger > *:nth-child(10) { animation-delay: 405ms; }
+.stagger > *:nth-child(11) { animation-delay: 450ms; }
+/* Teto: sem isto, uma página de 200 itens terminaria de animar em 9s. */
+.stagger > *:nth-child(n+12) { animation-delay: 495ms; }
+
+/* ── Barra de frequência: a largura vem do JS, a cor é discreta ── */
+.prog-bar-fill.freq-alta   { background: #4ade80; }
+.prog-bar-fill.freq-media  { background: #facc15; }
+.prog-bar-fill.freq-baixa  { background: #f87171; }
+
+/* ── Utilitários que eram inline ── */
+.sem-scrollbar { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.sem-scrollbar::-webkit-scrollbar { display: none; }
+
+.grid-semana { grid-template-columns: repeat(7, minmax(140px, 1fr)); }
+.grid-relatorio { grid-template-columns: 1fr auto auto auto; }
+
+.barra-topo {
+  background: rgba(21, 23, 24, 0.97);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  height: 56px;
+}
+
+.gradiente-accent { background: linear-gradient(135deg, #6257FF, #4B39EF); }

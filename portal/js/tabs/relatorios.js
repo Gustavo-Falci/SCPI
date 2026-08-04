@@ -139,11 +139,15 @@ function renderList(container) {
     const colorBadge = isNight ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-500';
     const colorSem = isNight ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-500';
 
-    list.innerHTML = items.map((r, i) => {
+    list.classList.add('stagger');
+    list.innerHTML = items.map((r) => {
       const freq = r.percentual ?? 0;
       const freqColor = freq >= 75 ? 'text-green-400' : 'text-red-400';
+      // Faixa da barra vira classe (app.css); a LARGURA é contínua e não cabe
+      // em classe, então sai daqui e é aplicada por CSSOM logo abaixo.
+      const faixa = freq >= 75 ? 'freq-alta' : freq >= 50 ? 'freq-media' : 'freq-baixa';
       return `
-        <button data-id="${r.chamada_id}" class="anim-item group rel-item w-full bg-[#151718] hover:bg-[#1A1C1E] px-5 py-3 rounded-2xl border border-white/5 flex items-center justify-between gap-4 transition-all hover:border-accent/20 text-left flex-shrink-0" style="animation-delay:${i * 55}ms">
+        <button data-id="${r.chamada_id}" class="anim-item group rel-item w-full bg-[#151718] hover:bg-[#1A1C1E] px-5 py-3 rounded-2xl border border-white/5 flex items-center justify-between gap-4 transition-all hover:border-accent/20 text-left flex-shrink-0">
           <div class="flex items-center gap-4 min-w-0">
             <div class="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg flex-shrink-0 ${colorSem}">${r.semestre}º</div>
             <div class="min-w-0">
@@ -169,7 +173,7 @@ function renderList(container) {
             <div class="text-center min-w-[54px]">
               <p class="text-base font-black ${freqColor}">${freq}%</p>
               <div class="mt-1 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                <div class="prog-bar-fill h-full rounded-full" style="width:${freq}%;background:${freq >= 75 ? '#4ade80' : freq >= 50 ? '#facc15' : '#f87171'}"></div>
+                <div class="prog-bar-fill ${faixa} h-full rounded-full" data-largura="${freq}"></div>
               </div>
             </div>
             <span class="text-faint group-hover:text-accent transition-colors">${icon('chevron-right', 16)}</span>
@@ -177,6 +181,13 @@ function renderList(container) {
         </button>
       `;
     }).join('');
+
+    // Largura da barra por CSSOM: valor contínuo (0-100) não cabe em classe, e
+    // o CSP bloquearia `style="width:..."` na marcação. Escrever em .style é
+    // permitido — a política filtra o atributo, não a API.
+    list.querySelectorAll('.prog-bar-fill[data-largura]').forEach(barra => {
+      barra.style.width = `${barra.dataset.largura}%`;
+    });
 
     list.querySelectorAll('.rel-item').forEach(btn => btn.addEventListener('click', () => openDetalhe(btn.dataset.id)));
   }
@@ -273,7 +284,7 @@ async function openDetalhe(chamadaId) {
         </div>
         <!-- Alunos table -->
         <div class="bg-[#0C0C12] rounded-2xl border border-white/5 overflow-hidden">
-          <div class="grid text-xs font-black text-faint uppercase tracking-widest px-4 py-3 border-b border-white/5" style="grid-template-columns: 1fr auto auto auto">
+          <div class="grid grid-relatorio text-xs font-black text-faint uppercase tracking-widest px-4 py-3 border-b border-white/5">
             <span>Aluno</span><span class="text-center">Aulas</span><span class="text-center mx-4">Tipo</span><span class="text-center">Status</span>
           </div>
           ${(d.alunos || []).map(a => {
@@ -282,7 +293,7 @@ async function openDetalhe(chamadaId) {
               : a.aulas_presentes_count >= d.total_aulas ? { label: 'Presente', cls: 'bg-green-500/10 text-green-400' }
               : { label: 'Parcial', cls: 'bg-yellow-500/10 text-yellow-400' };
             return `
-              <div class="grid items-center px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors" style="grid-template-columns: 1fr auto auto auto">
+              <div class="grid grid-relatorio items-center px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
                 <div><p class="font-black text-sm text-white">${escapeHtml(a.nome)}</p><p class="text-xs text-faint font-bold">${a.ra !== '—' ? `RA/CPF: ${escapeHtml(a.ra)}` : ''}</p></div>
                 <span class="text-center font-black text-sm text-white">${a.aulas_presentes_count}/${d.total_aulas}</span>
                 <span class="text-center font-bold text-xs text-muted mx-4">${a.tipo_registro !== '—' ? escapeHtml(a.tipo_registro) : '—'}</span>

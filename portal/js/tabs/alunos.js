@@ -179,8 +179,9 @@ function renderList(container) {
       </div>`;
     document.getElementById('cta-create-aluno')?.addEventListener('click', () => document.querySelector('#aluno-form [name=nome]')?.focus());
   } else {
-    list.innerHTML = items.map((a, i) => `
-      <div data-aluno-id="${a.aluno_id}" class="anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-4 sm:px-5 py-4 rounded-2xl border border-white/5 flex items-center gap-3 sm:gap-4 transition-all hover:border-white/10" style="animation-delay:${i * 45}ms">
+    list.classList.add('stagger');
+    list.innerHTML = items.map((a) => `
+      <div data-aluno-id="${a.aluno_id}" class="anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-4 sm:px-5 py-4 rounded-2xl border border-white/5 flex items-center gap-3 sm:gap-4 transition-all hover:border-white/10">
         ${avatar(a.nome, 38)}
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 mb-0.5">
