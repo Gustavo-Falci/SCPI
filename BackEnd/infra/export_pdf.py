@@ -1,5 +1,6 @@
 """Geração de PDF legível para o export LGPD Art. 18."""
 import io
+from datetime import datetime
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -12,6 +13,25 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
+
+
+def _data_humana(valor) -> str:
+    """ISO 8601 → `dd/mm/aaaa HH:MM`. Devolve o original se não parsear.
+
+    O JSON do export mantém ISO (é o formato de máquina); só o PDF, que é o
+    documento que o titular lê, ganha a versão legível.
+
+    Ficou necessário quando as colunas viraram TIMESTAMPTZ: antes o
+    `.isoformat()` produzia `2026-08-04T12:00:00`, agora sai
+    `2026-08-04T12:00:00-03:00`. Nenhum dos dois é aceitável num documento de
+    resposta a titular, e o segundo é pior.
+    """
+    if not valor:
+        return "—"
+    try:
+        return datetime.fromisoformat(str(valor)).strftime("%d/%m/%Y %H:%M")
+    except (TypeError, ValueError):
+        return str(valor)
 
 
 def _estilos():
@@ -83,8 +103,8 @@ def _secao_biometria(bio: dict, estilos) -> list:
         )
         return elementos
     angulos = ", ".join(bio.get("angulos_cadastrados", [])) or "—"
-    consent = bio.get("consentimento_data") or "—"
-    revog = bio.get("revogado_em") or "—"
+    consent = _data_humana(bio.get("consentimento_data"))
+    revog = _data_humana(bio.get("revogado_em"))
     linhas = [
         ["Status", "Registrada"],
         ["Ângulos cadastrados", angulos],
@@ -173,7 +193,7 @@ def _secao_consentimentos(trilha: list, estilos) -> list:
         [
             "Aceite" if c.get("evento") == "aceite" else "Revogação",
             c.get("politica_versao", "—"),
-            c.get("registrado_em", "—"),
+            _data_humana(c.get("registrado_em")),
             c.get("ip") or "—",
             c.get("origem", "—"),
         ]
