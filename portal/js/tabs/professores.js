@@ -44,8 +44,11 @@ function renderList(container) {
       document.querySelector('#prof-form [name=nome]')?.focus();
     });
   } else {
-    list.innerHTML = items.map((p, i) => `
-      <div data-prof-id="${p.professor_id}" class="anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-5 py-4 rounded-2xl border border-white/5 flex items-center gap-4 transition-all hover:border-white/10" style="animation-delay:${i * 45}ms">
+    // `.stagger` escalona a animação por nth-child (app.css). Era
+    // `style="animation-delay:${i*45}ms"` em cada item, que o CSP bloqueia.
+    list.classList.add('stagger');
+    list.innerHTML = items.map((p) => `
+      <div data-prof-id="${p.professor_id}" class="anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-5 py-4 rounded-2xl border border-white/5 flex items-center gap-4 transition-all hover:border-white/10">
         ${avatar(p.nome, 38)}
         <div class="min-w-0 flex-1">
           <p class="font-black text-white text-sm truncate">${escapeHtml(p.nome)}</p>

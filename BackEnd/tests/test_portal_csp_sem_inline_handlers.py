@@ -20,6 +20,21 @@ PORTAL = Path(__file__).resolve().parents[2] / "portal"
 # Espaço antes evita casar com substring de outro atributo (ex.: `data-on=`).
 INLINE_HANDLER = re.compile(r"""\son[a-z]+\s*=\s*["']""")
 
+# `style="` na marcação e abertura de bloco <style>. `el.style.x = ...` em JS
+# não casa — e não deve: CSSOM é o caminho permitido para valor contínuo.
+ESTILO_INLINE = re.compile(r"""\sstyle\s*=\s*["']|<style[\s>]""")
+
+
+def _e_comentario(linha: str) -> bool:
+    """Linha de comentário JS/CSS/HTML.
+
+    Os guardas textuais deste projeto já falharam três vezes acusando a própria
+    documentação do padrão proibido. Filtrar comentário resolve isso sem isentar
+    arquivos inteiros — o que enfraqueceria o guarda sobre código real.
+    """
+    s = linha.strip()
+    return s.startswith(("//", "/*", "*", "<!--"))
+
 # `onload`/`onerror` em <img> e afins seguiriam bloqueados igual; nada é isento.
 #
 # `node_modules/` fora: são as devDependencies do build do Tailwind, milhares de
@@ -54,11 +69,36 @@ def test_arquivo_do_portal_nao_tem_handler_inline(arquivo):
     )
 
 
-def test_csp_do_portal_continua_sem_unsafe_inline_em_script_src():
-    """Se alguém 'resolver' o bug afrouxando o CSP, o guarda acima vira decorativo."""
-    html = (PORTAL / "index.html").read_text(encoding="utf-8")
+@pytest.mark.parametrize("arquivo", ARQUIVOS, ids=lambda p: p.name)
+def test_arquivo_do_portal_nao_tem_estilo_inline(arquivo):
+    """`style="..."` e `<style>` são bloqueados pelo mesmo `style-src 'self'`.
+
+    Atributo `style=` cai na mesma regra do `onclick=` — hash não vale para
+    atributo. Bloco `<style>` aceitaria hash, mas o portal não usa nonce nem
+    hash, então também é bloqueado.
+
+    Valor contínuo (largura de barra, duração de toast) deve ser escrito por
+    CSSOM: `el.style.width = ...` NÃO é bloqueado, a política filtra a marcação.
+    """
+    achados = [
+        f"linha {n}: {linha.strip()[:120]}"
+        for n, linha in enumerate(arquivo.read_text(encoding="utf-8").splitlines(), 1)
+        if not _e_comentario(linha) and ESTILO_INLINE.search(linha)
+    ]
+    assert not achados, (
+        f"{arquivo.relative_to(PORTAL.parent)} tem estilo inline, que o CSP bloqueia.\n"
+        "Use classe em css/app.css, ou el.style.<prop> quando o valor for contínuo:\n  "
+        + "\n  ".join(achados)
+    )
+
+
+@pytest.mark.parametrize("pagina", ["index.html", "privacy.html"])
+@pytest.mark.parametrize("diretiva", ["script-src", "style-src"])
+def test_csp_do_portal_continua_sem_unsafe_inline(pagina, diretiva):
+    """Se alguém 'resolver' o bug afrouxando o CSP, os guardas acima viram decorativos."""
+    html = (PORTAL / pagina).read_text(encoding="utf-8")
     csp = re.search(r"Content-Security-Policy\"\s+content=\"([^\"]+)\"", html)
-    assert csp, "meta do CSP sumiu de portal/index.html"
-    script_src = next(d for d in csp.group(1).split(";") if d.strip().startswith("script-src"))
-    assert "'unsafe-inline'" not in script_src
-    assert "'unsafe-hashes'" not in script_src
+    assert csp, f"meta do CSP sumiu de portal/{pagina}"
+    alvo = next(d for d in csp.group(1).split(";") if d.strip().startswith(diretiva))
+    assert "'unsafe-inline'" not in alvo, f"{pagina}: {diretiva} afrouxado"
+    assert "'unsafe-hashes'" not in alvo, f"{pagina}: {diretiva} afrouxado"

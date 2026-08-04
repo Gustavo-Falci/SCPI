@@ -54,8 +54,9 @@ function renderList(container) {
     // opacity-0 escondia visualmente mas mantinha os ~168px no fluxo (o que
     // truncava o texto cedo demais no celular) e os botões seguiam clicáveis —
     // incluindo Excluir, invisível e sujeito a toque acidental.
-    list.innerHTML = items.map((t, i) => `
-      <div data-turma-id="${t.turma_id}" class="turma-card anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-4 sm:px-5 py-4 rounded-2xl border border-white/5 flex items-center justify-between gap-3 sm:gap-4 transition-all hover:border-white/10" style="animation-delay:${i * 45}ms">
+    list.classList.add('stagger');
+    list.innerHTML = items.map((t) => `
+      <div data-turma-id="${t.turma_id}" class="turma-card anim-item group bg-[#151718] hover:bg-[#1A1C1E] px-4 sm:px-5 py-4 rounded-2xl border border-white/5 flex items-center justify-between gap-3 sm:gap-4 transition-all hover:border-white/10">
         <div class="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
           <div class="w-10 h-10 rounded-2xl flex items-center justify-center font-black text-base flex-shrink-0 ${colorBadge}">${t.semestre}º</div>
           <div class="min-w-0">
