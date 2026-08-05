@@ -12,6 +12,8 @@ venv_new/
 venv/
 .openclaude/
 .claude
+# MemWiki: repo é PÚBLICO e a wiki tem paths de prod, IPs e dívida de segurança
+.memory/
 .devcontainer
 node_modules/
 admin-portal/dist/
