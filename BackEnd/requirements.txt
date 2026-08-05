@@ -31,19 +31,16 @@ pydantic_core==2.46.4
 email-validator==2.3.0
 
 # Autenticação
+# PyJWT sem o extra [crypto]: `cryptography` só serve aos algoritmos ASSIMÉTRICOS
+# (RS*/ES*/PS*), e o SCPI assina em HS256, que o PyJWT resolve com hmac/hashlib da
+# stdlib — `jwt/utils.py` embrulha o import dela em try/except ModuleNotFoundError.
+# Removida em 2026-08-05 com a suíte inteira (700 testes) rodando com o import
+# bloqueado, junto de cffi e pycparser, que só existiam como transitivas dela.
+# Motivo: era pura superfície de advisory (já custou a PR #107, CVE-2026-69247).
+# Se `core.auth_utils.ALGORITHM` deixar de ser HS*, ela precisa voltar —
+# test_jwt_algoritmo_simetrico.py cobra isso.
 PyJWT==2.13.0
 passlib==1.7.4
-# GHSA-g6cj-pr64-35w5 / CVE-2026-69247 (CVSS 8.2): oráculo de Bleichenbacher na
-# decifragem de PKCS#7 EnvelopedData — mensagens de erro e tempo distinguíveis
-# permitiam recuperar a chave de conteúdo. Afeta 44.0.0 até 49.x, corrigido em
-# 50.0.0. O SCPI não chama pkcs7_decrypt_*, então não estava exposto; a subida é
-# higiene de dependência.
-#
-# Só está aqui por causa do PyJWT, e apenas para algoritmos ASSIMÉTRICOS. O SCPI
-# assina em HS256, que o PyJWT resolve com hmac/hashlib da stdlib — nenhum
-# módulo do projeto importa `cryptography` e `pip show` reporta Required-by
-# vazio. Remover o pin é candidato a item próprio; ver comentário no topo.
-cryptography==50.0.0
 
 # AWS
 boto3==1.43.56
@@ -73,7 +70,6 @@ sentry-sdk==2.66.1
 annotated-types==0.8.0
 anyio==4.14.2
 certifi==2026.7.22
-cffi==2.1.0
 charset-normalizer==3.4.9
 click==8.4.2
 colorama==0.4.6
@@ -83,7 +79,6 @@ h11==0.16.0
 idna==3.18
 jmespath==1.1.0
 packaging==26.2
-pycparser==3.0
 python-dateutil==2.9.0.post0
 requests==2.34.2
 six==1.17.0
