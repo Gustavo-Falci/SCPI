@@ -11,28 +11,32 @@ antes de comprometer o design (ver conversa 2026-07-18):
      tamanho? Roda em cv2.dnn sem op não suportada?
 
 Uso:
-  # Etapa A — coletar amostras rotuladas (roda na máquina com câmera):
-  python scripts/_validar_liveness.py
+  # Etapa A — coletar bursts rotulados (roda na máquina COM a câmera da sala).
+  # Uma execução por célula da matriz; LIVENESS_COND identifica a célula.
+  LIVENESS_COND=2m-celular python scripts/_validar_liveness.py
      Teclas na janela:
-       r = salvar amostra ROSTO REAL (você na frente da câmera)
-       p = salvar amostra FOTO em PAPEL (mostre foto impressa)
-       t = salvar amostra FOTO em TELA  (mostre foto no celular/tablet)
+       r = ROSTO REAL      p = FOTO em PAPEL
+       t = FOTO em TELA    v = VÍDEO em TELA (replay — o ataque desta rodada)
        q = sair (imprime estatísticas de tamanho do rosto)
-     Colete ~15-20 de cada, na distância/posição REAL de uso.
+     Cada tecla grava um BURST de 5 frames em 2s, espelhando BURST_FRAMES /
+     BURST_DURACAO_S do produto. Frame solto subestimaria o atacante: o gate
+     decide por MAX do burst, então UM frame sortudo já registra presença.
+     Colete >= 6 bursts por célula, na distância/posição REAL de uso.
 
   # Etapa B — rodar um modelo ONNX nas amostras coletadas:
-  python scripts/_validar_liveness.py --test caminho/modelo.onnx
-  python scripts/_validar_liveness.py --test modelo.onnx --preproc minivision
+  python scripts/_validar_liveness.py --test scripts/models/best_model.onnx
 
-Amostras vão para o scratchpad (não sujam o repo):
-  cada amostra = frame inteiro (.jpg) + bbox do YuNet (.txt: "x y w h").
+Amostras: .liveness_samples/<label>/<cond>/burst_NNN/frame_M.{jpg,txt}
+  cada frame = frame inteiro (.jpg) + bbox do YuNet (.txt: "x y w h").
   Guardar o frame bruto deixa qualquer preproc (margem/scale) ser testado depois.
+  Diretório é git-ignored: são rostos de pessoas reais e o repo é público.
 """
 import pathlib
 import os
 import argparse
 import glob
 import math
+import time
 
 import cv2
 import numpy as np
@@ -45,6 +49,15 @@ _SAMPLES_DIR = pathlib.Path(
     or (_AQUI.parent.parent / ".liveness_samples")
 )
 _LABELS = {"r": "real", "p": "papel", "t": "tela", "v": "video"}
+
+# Cadência espelhada do produto (reconhecimento_tempo_real.py): o gate decide
+# por MAX de BURST_FRAMES frames em BURST_DURACAO_S. Medir frame solto
+# subestima o atacante — basta UM frame acima do limiar para registrar presença.
+_BURST_FRAMES = 5
+_BURST_DURACAO_S = 2.0
+
+# Célula da matriz de coleta. Setar por execução: LIVENESS_COND=2m-celular
+_COND = (os.getenv("LIVENESS_COND") or "").strip() or "sem_cond"
 
 
 def _resolver_yunet() -> str:
@@ -120,13 +133,60 @@ def _descobrir_bursts(raiz, label):
     return achados
 
 
+def _proximo_indice_burst(raiz, label, cond):
+    """Continua a numeração entre execuções; nunca sobrescreve burst salvo."""
+    existentes = [d for c, d in _descobrir_bursts(raiz, label) if c == cond]
+    return len(existentes)
+
+
 # ---------------------------------------------------------------------------
 # Etapa A — coleta
 # ---------------------------------------------------------------------------
-def coletar():
-    for lbl in _LABELS.values():
-        (_SAMPLES_DIR / lbl).mkdir(parents=True, exist_ok=True)
+def _gravar_burst(cap, detector, raiz, label, cond):
+    """Grava _BURST_FRAMES frames ao longo de _BURST_DURACAO_S.
 
+    Cada frame vira <burst>/frame_M.jpg (frame INTEIRO) + frame_M.txt (bbox do
+    YuNet "x y w h"). Guardar o frame inteiro mantém a liberdade de testar
+    qualquer margem/scale depois. Frame sem rosto é pulado, não aborta o burst.
+    """
+    n = _proximo_indice_burst(raiz, label, cond)
+    destino = pathlib.Path(raiz) / label / cond / f"burst_{n:03d}"
+    destino.mkdir(parents=True, exist_ok=True)
+
+    intervalo = _BURST_DURACAO_S / _BURST_FRAMES
+    salvos = 0
+    for i in range(_BURST_FRAMES):
+        ok, frame = cap.read()
+        if not ok:
+            print("  (falha ao ler frame — pulado)")
+            time.sleep(intervalo)
+            continue
+        h_img, w_img = frame.shape[:2]
+        detector.setInputSize((w_img, h_img))
+        _, faces = detector.detect(frame)
+        box = _maior_rosto(faces)
+        if not box:
+            print(f"  frame {i}: sem rosto — pulado")
+            time.sleep(intervalo)
+            continue
+        base = destino / f"frame_{i}"
+        cv2.imwrite(str(base) + ".jpg", frame)
+        with open(str(base) + ".txt", "w") as fh:
+            fh.write("{} {} {} {}".format(*box))
+        salvos += 1
+        print(f"  frame {i}: rosto {box[2]}x{box[3]}px")
+        # waitKey mantém a janela viva durante os 2 s do burst.
+        cv2.waitKey(max(1, int(intervalo * 1000)))
+
+    if salvos == 0:
+        destino.rmdir()
+        print(f"  ⚠️  burst descartado: nenhum frame com rosto.")
+    else:
+        print(f"  ✅ {label}/{cond}/burst_{n:03d}: {salvos}/{_BURST_FRAMES} frames.")
+    return salvos
+
+
+def coletar():
     detector = cv2.FaceDetectorYN.create(_resolver_yunet(), "", (320, 320), 0.6)
     cam_index = int(os.getenv("CAMERA_INDEX", "0"))
     cap = cv2.VideoCapture(cam_index, cv2.CAP_DSHOW)
@@ -135,9 +195,20 @@ def coletar():
     if not cap.isOpened():
         raise SystemExit(f"Não abriu câmera índice {cam_index}. Ajuste CAMERA_INDEX.")
 
-    contagem = {lbl: len(glob.glob(str(_SAMPLES_DIR / lbl / "*.jpg"))) for lbl in _LABELS.values()}
-    print("Coleta iniciada. Posicione na DISTÂNCIA REAL de uso.")
-    print("Teclas: [r]eal  [p]apel  [t]ela  [q]sair")
+    if _COND == "sem_cond":
+        print("⚠️  LIVENESS_COND não definida — o relatório não vai conseguir "
+              "quebrar por distância/aparelho. Ex.: LIVENESS_COND=2m-celular")
+    print(f"Coleta iniciada. Condição: {_COND}")
+    print(f"Cada tecla grava {_BURST_FRAMES} frames em {_BURST_DURACAO_S}s.")
+    print("Teclas: [r]eal  [p]apel  [t]ela(foto)  [v]ideo  [q]sair")
+
+    # Contagem lida do disco UMA vez e incrementada em memória. Chamar
+    # _descobrir_bursts a cada frame do preview seria uma varredura de
+    # diretório a 30 fps.
+    contagem = {
+        lbl: len([1 for c, _ in _descobrir_bursts(_SAMPLES_DIR, lbl) if c == _COND])
+        for lbl in _LABELS.values()
+    }
 
     try:
         while True:
@@ -156,8 +227,8 @@ def coletar():
                 cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 cv2.putText(vis, f"{w}x{h}px", (x, max(0, y - 8)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            hud = " ".join(f"{l}:{contagem[l]}" for l in _LABELS.values())
-            cv2.putText(vis, f"[r]eal [p]apel [t]ela [q]sair  {hud}",
+            hud = " ".join(f"{lbl}:{contagem[lbl]}" for lbl in _LABELS.values())
+            cv2.putText(vis, f"[r][p][t][v] [q]sair  cond={_COND}  {hud}",
                         (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
             cv2.imshow("Fase 0 - coleta liveness", vis)
 
@@ -167,16 +238,11 @@ def coletar():
                 break
             if tecla in _LABELS:
                 if not box:
-                    print("  (nenhum rosto detectado — não salvo)")
+                    print("  (nenhum rosto no frame de gatilho — burst não iniciado)")
                     continue
-                lbl = _LABELS[tecla]
-                n = contagem[lbl]
-                base = _SAMPLES_DIR / lbl / f"{lbl}_{n:03d}"
-                cv2.imwrite(str(base) + ".jpg", frame)
-                with open(str(base) + ".txt", "w") as fh:
-                    fh.write("{} {} {} {}".format(*box))
-                contagem[lbl] += 1
-                print(f"  salvo {lbl}_{n:03d}  rosto={box[2]}x{box[3]}px")
+                print(f"Burst {_LABELS[tecla]} / {_COND}…")
+                if _gravar_burst(cap, detector, _SAMPLES_DIR, _LABELS[tecla], _COND):
+                    contagem[_LABELS[tecla]] += 1
     finally:
         cap.release()
         cv2.destroyAllWindows()
@@ -188,16 +254,16 @@ def _estatisticas_tamanho():
     print("\n=== Tamanho do rosto (lado menor do bbox, px) ===")
     for lbl in _LABELS.values():
         lados = []
-        for txt in glob.glob(str(_SAMPLES_DIR / lbl / "*.txt")):
-            with open(txt) as fh:
-                _bx, _by, w, h = (int(v) for v in fh.read().split())
-            lados.append(min(w, h))
+        for _cond, burst_dir in _descobrir_bursts(_SAMPLES_DIR, lbl):
+            for txt in sorted(burst_dir.glob("*.txt")):
+                _bx, _by, w, h = (int(v) for v in txt.read_text().split())
+                lados.append(min(w, h))
         if not lados:
             print(f"  {lbl:6s}: (sem amostras)")
             continue
         lados.sort()
         med = lados[len(lados) // 2]
-        print(f"  {lbl:6s}: n={len(lados):2d}  min={lados[0]:3d}  "
+        print(f"  {lbl:6s}: n={len(lados):3d}  min={lados[0]:3d}  "
               f"mediana={med:3d}  max={lados[-1]:3d}")
     print("\nRegra prática: MiniFASNet espera ~80px. Se a mediana do 'real' vier "
           "bem abaixo (ex.: <60px), o modelo provavelmente degrada na distância "
