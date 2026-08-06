@@ -13,7 +13,8 @@ antes de comprometer o design (ver conversa 2026-07-18):
 Uso:
   # Etapa A — coletar bursts rotulados (roda na máquina COM a câmera da sala).
   # Uma execução por célula da matriz; LIVENESS_COND identifica a célula.
-  LIVENESS_COND=2m-celular python scripts/_validar_liveness.py
+  # Sintaxe PowerShell (esta ferramenta é Windows-only, usa cv2.CAP_DSHOW):
+  $env:LIVENESS_COND="2m-celular"; python scripts/_validar_liveness.py
      Teclas na janela:
        r = ROSTO REAL      p = FOTO em PAPEL
        t = FOTO em TELA    v = VÍDEO em TELA (replay — o ataque desta rodada)
@@ -26,9 +27,12 @@ Uso:
   # Etapa B — rodar um modelo ONNX nas amostras coletadas:
   python scripts/_validar_liveness.py --test scripts/models/best_model.onnx
 
-Amostras: .liveness_samples/<label>/<cond>/burst_NNN/frame_M.{jpg,txt}
-  cada frame = frame inteiro (.jpg) + bbox do YuNet (.txt: "x y w h").
-  Guardar o frame bruto deixa qualquer preproc (margem/scale) ser testado depois.
+Amostras: .liveness_samples/<label>/<cond>/burst_NNN/frame_M.{png,txt}
+  cada frame = frame inteiro (.png, sem recompressão) + bbox do YuNet
+  (.txt: "x y w h"). PNG e não JPEG: o encode JPEG atenua o conteúdo de alta
+  frequência (moiré, grão de impressão) que o PAD de textura usa — pontuar
+  em cima disso manufaturaria margem que não existe. Guardar o frame bruto
+  deixa qualquer preproc (margem/scale) ser testado depois.
   Diretório é git-ignored: são rostos de pessoas reais e o repo é público.
 """
 import pathlib
@@ -57,6 +61,15 @@ _BURST_DURACAO_S = 2.0
 
 # Célula da matriz de coleta. Setar por execução: LIVENESS_COND=2m-celular
 _COND = (os.getenv("LIVENESS_COND") or "").strip() or "sem_cond"
+
+# Tolerância para "V é efetivamente zero". softmax sobre logits float32 quase
+# nunca devolve exatamente 0.0 — um fake saturado mede algo como 2e-09, não
+# 0.0 — então comparar `V == 0` é o teste errado; usar uma tolerância.
+_V_ZERO_TOL = 1e-6
+
+# Limiar em vigor em produção, mesma variável que reconhecimento_tempo_real.py
+# lê. A ferramenta nunca recomenda um valor abaixo deste (ver _recomendacao).
+_TEXTURE_LIVENESS_MIN_ATUAL = float(os.getenv("TEXTURE_LIVENESS_MIN", "0.08"))
 
 
 def _resolver_yunet() -> str:
@@ -114,16 +127,27 @@ def _meio_geometrico(R, V):
 
 
 def _limiar_sugerido(R, V):
-    """Limiar a recomendar. Com V=0 a separação é perfeita e o meio geométrico
-    colapsaria em 0 — que o gate lê como 'passa tudo'. Metade do pior burst real
-    é a escolha conservadora e continua muito acima de qualquer ataque medido."""
-    if V == 0:
+    """Limiar a recomendar. Com V~0 a separação é perfeita e o meio geométrico
+    colapsaria perto de 0 — que o gate lê como 'passa tudo'. Metade do pior
+    burst real é a escolha conservadora e continua muito acima de qualquer
+    ataque medido."""
+    if V < _V_ZERO_TOL:
         return R / 2
     return _meio_geometrico(R, V)
 
 
+def _recomendacao(R, V, limiar_atual):
+    """(valor_recomendado, subir). Nunca recomenda afrouxar o gate: se a
+    sugestão fica abaixo do limiar em vigor, a recomendação é MANTER o que
+    está lá — ele já foi calibrado contra foto e protege mais."""
+    sugerido = _limiar_sugerido(R, V)
+    if sugerido <= limiar_atual:
+        return limiar_atual, False
+    return sugerido, True
+
+
 # ---------------------------------------------------------------------------
-# Layout no disco: <raiz>/<label>/<cond>/burst_NNN/frame_M.{jpg,txt}
+# Layout no disco: <raiz>/<label>/<cond>/burst_NNN/frame_M.{png,txt}
 # `cond` = célula da matriz de coleta (ex.: "2m-celular"), vem de LIVENESS_COND.
 # ---------------------------------------------------------------------------
 def _descobrir_bursts(raiz, label):
@@ -142,21 +166,56 @@ def _descobrir_bursts(raiz, label):
 
 
 def _proximo_indice_burst(raiz, label, cond):
-    """Continua a numeração entre execuções; nunca sobrescreve burst salvo."""
+    """Continua a numeração entre execuções; nunca sobrescreve burst salvo.
+
+    Deriva do MAIOR índice existente + 1, não de len(): apagar um burst do
+    meio (ex.: burst_002 de um lote 000..004) não pode fazer o próximo take
+    mirar burst_002 de novo — isso mesclaria dois takes no mesmo diretório e
+    contaminaria o max-por-burst com frames de sessões diferentes.
+    """
     existentes = [d for c, d in _descobrir_bursts(raiz, label) if c == cond]
-    return len(existentes)
+    indices = []
+    for d in existentes:
+        _prefixo, _sep, sufixo = d.name.partition("_")
+        try:
+            indices.append(int(sufixo))
+        except ValueError:
+            continue  # nome de diretório que não é burst_<int> — ignora
+    return max(indices, default=-1) + 1
 
 
 # ---------------------------------------------------------------------------
 # Etapa A — coleta
 # ---------------------------------------------------------------------------
+def _drenar(cap, intervalo):
+    """Consome frames pelo resto do intervalo, em vez de dormir.
+
+    Um cap.read() logo após um gap (waitKey/sleep) devolve o que o backend
+    DirectShow tinha enfileirado, não um frame fresco — então o próximo frame
+    "capturado" pode ser velho, e o burst deixa de amostrar 2 s reais.
+    Ler e descartar continuamente mantém o buffer da câmera quente. O
+    cv2.waitKey(1) dentro do laço mantém a janela de preview bombeando o
+    event loop (sem isso a GUI trava até 2 s enquanto o operador mira o
+    aparelho).
+    """
+    alvo = time.monotonic() + intervalo
+    while time.monotonic() < alvo:
+        cap.read()
+        cv2.waitKey(1)
+
+
 def _gravar_burst(cap, detector, raiz, label, cond):
     """Grava _BURST_FRAMES frames ao longo de _BURST_DURACAO_S.
 
-    Cada frame vira <burst>/frame_M.jpg (frame INTEIRO) + frame_M.txt (bbox do
-    YuNet "x y w h"). Guardar o frame inteiro mantém a liberdade de testar
-    qualquer margem/scale depois. Frame sem rosto é pulado, não aborta o burst.
+    Cada frame vira <burst>/frame_M.png (frame INTEIRO, sem recompressão) +
+    frame_M.txt (bbox do YuNet "x y w h"). Guardar o frame inteiro mantém a
+    liberdade de testar qualquer margem/scale depois. Frame sem rosto é
+    pulado, não aborta o burst. PNG (sem perdas) em vez de JPEG: o encode
+    JPEG atenua justo o conteúdo de alta frequência (moiré, grão de
+    impressão) que o PAD de textura usa — recomprimir manufaturaria margem
+    que não existe.
     """
+    inicio = time.monotonic()
     n = _proximo_indice_burst(raiz, label, cond)
     destino = pathlib.Path(raiz) / label / cond / f"burst_{n:03d}"
     destino.mkdir(parents=True, exist_ok=True)
@@ -167,7 +226,7 @@ def _gravar_burst(cap, detector, raiz, label, cond):
         ok, frame = cap.read()
         if not ok:
             print("  (falha ao ler frame — pulado)")
-            time.sleep(intervalo)
+            _drenar(cap, intervalo)
             continue
         h_img, w_img = frame.shape[:2]
         detector.setInputSize((w_img, h_img))
@@ -175,22 +234,23 @@ def _gravar_burst(cap, detector, raiz, label, cond):
         box = _maior_rosto(faces)
         if not box:
             print(f"  frame {i}: sem rosto — pulado")
-            time.sleep(intervalo)
+            _drenar(cap, intervalo)
             continue
         base = destino / f"frame_{i}"
-        cv2.imwrite(str(base) + ".jpg", frame)
+        cv2.imwrite(str(base) + ".png", frame)
         with open(str(base) + ".txt", "w") as fh:
             fh.write("{} {} {} {}".format(*box))
         salvos += 1
         print(f"  frame {i}: rosto {box[2]}x{box[3]}px")
-        # waitKey mantém a janela viva durante os 2 s do burst.
-        cv2.waitKey(max(1, int(intervalo * 1000)))
+        _drenar(cap, intervalo)
 
+    duracao = time.monotonic() - inicio
     if salvos == 0:
         destino.rmdir()
-        print(f"  ⚠️  burst descartado: nenhum frame com rosto.")
+        print(f"  ⚠️  burst descartado: nenhum frame com rosto (span={duracao:.2f}s).")
     else:
-        print(f"  ✅ {label}/{cond}/burst_{n:03d}: {salvos}/{_BURST_FRAMES} frames.")
+        print(f"  ✅ {label}/{cond}/burst_{n:03d}: {salvos}/{_BURST_FRAMES} frames, "
+              f"span={duracao:.2f}s.")
     return salvos
 
 
@@ -328,7 +388,7 @@ def _scores_do_burst(net, burst_dir, preproc):
     """Liveness score de cada frame do burst. Frame ilegível é pulado."""
     scores = []
     for txt in sorted(pathlib.Path(burst_dir).glob("*.txt")):
-        frame = cv2.imread(str(txt.with_suffix(".jpg")))
+        frame = cv2.imread(str(txt.with_suffix(".png")))
         if frame is None:
             continue
         box = tuple(int(v) for v in txt.read_text().split())
@@ -370,7 +430,7 @@ def _debug_saida_crua(net, preproc):
         if not txts:
             print(f"  {lbl:6s}: (sem amostras)")
             continue
-        frame = cv2.imread(str(txts[0].with_suffix(".jpg")))
+        frame = cv2.imread(str(txts[0].with_suffix(".png")))
         if frame is None:
             continue
         box = tuple(int(v) for v in txts[0].read_text().split())
@@ -416,10 +476,10 @@ def testar(modelo_path, preproc):
 
     reais = [v for m in resumo.get("real", {}).values() for v in m]
     videos = [v for m in resumo.get("video", {}).values() for v in m]
-    _imprimir_desfecho(reais, videos, resumo.get("video", {}))
+    _imprimir_desfecho(reais, videos, resumo.get("video", {}), _TEXTURE_LIVENESS_MIN_ATUAL)
 
 
-def _imprimir_desfecho(reais, videos, video_por_cond):
+def _imprimir_desfecho(reais, videos, video_por_cond, limiar_atual):
     """Tabela de desfecho da spec 2026-08-05."""
     R, V, folga = _separacao(reais, videos)
     if R is None:
@@ -428,14 +488,30 @@ def _imprimir_desfecho(reais, videos, video_por_cond):
         return
 
     print(f"\n=== Desfecho ===\n  R = min(max_burst(real))  = {R:.4f}"
-          f"\n  V = max(max_burst(video)) = {V:.4f}\n  folga = R/V = {folga:.2f}x")
+          f"\n  V = max(max_burst(video)) = {V:.4f}\n  folga = R/V = {folga:.2f}x"
+          f"\n  limiar em vigor (TEXTURE_LIVENESS_MIN) = {limiar_atual:.6g}")
     if R > V and folga >= 2.0:
-        print(f"  ✅ SEPARADO com folga. Subir TEXTURE_LIVENESS_MIN para "
-              f"{_limiar_sugerido(R, V):.4f}. Nenhum código novo no loop.")
+        valor, subir = _recomendacao(R, V, limiar_atual)
+        if subir:
+            print(f"  ✅ SEPARADO com folga. Subir TEXTURE_LIVENESS_MIN para "
+                  f"{valor:.6g}. Nenhum código novo no loop.")
+        else:
+            print(f"  ✅ SEPARADO com folga, mas a sugestão ({_limiar_sugerido(R, V):.6g}) "
+                  f"fica ABAIXO do limiar em vigor ({limiar_atual:.6g}). MANTER "
+                  f"TEXTURE_LIVENESS_MIN em {valor:.6g} — ele já foi calibrado contra "
+                  f"foto e protege mais que o que este vídeo exigiria.")
     elif R > V:
-        print(f"  ⚠️  SEPARADO, folga fina (<2x). Limiar sugerido "
-              f"{_limiar_sugerido(R, V):.4f} MAIS camada anti-replay "
-              f"(bezel/moiré) nas condições que encostam.")
+        valor, subir = _recomendacao(R, V, limiar_atual)
+        if subir:
+            print(f"  ⚠️  SEPARADO, folga fina (<2x). Limiar sugerido "
+                  f"{valor:.6g} MAIS camada anti-replay "
+                  f"(bezel/moiré) nas condições que encostam.")
+        else:
+            print(f"  ⚠️  SEPARADO, folga fina (<2x), mas a sugestão "
+                  f"({_limiar_sugerido(R, V):.6g}) fica ABAIXO do limiar em vigor "
+                  f"({limiar_atual:.6g}). MANTER TEXTURE_LIVENESS_MIN em {valor:.6g} "
+                  f"— ele já protege mais que a sugestão — MAIS camada anti-replay "
+                  f"(bezel/moiré) nas condições que encostam.")
     else:
         print("  ❌ SOBREPOSTO — não há limiar que separe. Camada anti-replay "
               "é obrigatória.")
@@ -443,7 +519,7 @@ def _imprimir_desfecho(reais, videos, video_por_cond):
     if video_por_cond:
         pior = max(video_por_cond.items(), key=lambda kv: max(kv[1], default=0.0))
         print(f"  Condição de ataque mais forte: {pior[0]} "
-              f"(max={max(pior[1], default=0.0):.4f})")
+              f"(max={max(pior[1], default=0.0):.6g})")
 
 
 def main():
