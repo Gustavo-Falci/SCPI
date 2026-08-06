@@ -44,7 +44,7 @@ _SAMPLES_DIR = pathlib.Path(
     os.getenv("LIVENESS_SAMPLES_DIR", "")
     or (_AQUI.parent.parent / ".liveness_samples")
 )
-_LABELS = {"r": "real", "p": "papel", "t": "tela"}
+_LABELS = {"r": "real", "p": "papel", "t": "tela", "v": "video"}
 
 
 def _resolver_yunet() -> str:
@@ -99,6 +99,25 @@ def _separacao(max_real, max_fake):
 def _meio_geometrico(R, V):
     """Limiar sugerido quando há separação: equidistante em escala log."""
     return math.sqrt(R * V)
+
+
+# ---------------------------------------------------------------------------
+# Layout no disco: <raiz>/<label>/<cond>/burst_NNN/frame_M.{jpg,txt}
+# `cond` = célula da matriz de coleta (ex.: "2m-celular"), vem de LIVENESS_COND.
+# ---------------------------------------------------------------------------
+def _descobrir_bursts(raiz, label):
+    """[(cond, dir_do_burst)] ordenado. Amostra do layout antigo (frame solto
+    direto em <label>/) é ignorada: a spec exige recoletar `real` na mesma
+    sessão, então misturar iluminação de julho com a de hoje falsearia R."""
+    base = pathlib.Path(raiz) / label
+    if not base.is_dir():
+        return []
+    achados = []
+    for cond_dir in sorted(p for p in base.iterdir() if p.is_dir()):
+        for burst_dir in sorted(p for p in cond_dir.iterdir()
+                                if p.is_dir() and p.name.startswith("burst_")):
+            achados.append((cond_dir.name, burst_dir))
+    return achados
 
 
 # ---------------------------------------------------------------------------
