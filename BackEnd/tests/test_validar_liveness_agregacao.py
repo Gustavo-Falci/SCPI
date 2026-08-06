@@ -7,7 +7,7 @@ por frame: um único frame de vídeo acima do limiar já registra presença.
 import math
 import pathlib
 
-from scripts._validar_liveness import _max_por_burst, _meio_geometrico, _separacao, _LABELS, _descobrir_bursts
+from scripts._validar_liveness import _max_por_burst, _meio_geometrico, _limiar_sugerido, _separacao, _LABELS, _descobrir_bursts
 
 
 def test_max_por_burst_pega_o_maior_de_cada_burst():
@@ -41,6 +41,22 @@ def test_separacao_com_fake_zerado_nao_divide_por_zero():
 
 def test_meio_geometrico():
     assert _meio_geometrico(0.32, 0.02) == 0.08
+
+
+def test_limiar_sugerido_com_fake_positivo_usa_meio_geometrico():
+    assert _limiar_sugerido(0.32, 0.02) == 0.08
+
+
+def test_limiar_sugerido_com_fake_zerado_usa_metade_do_real():
+    # V=0 (foto/vídeo saturado em 0.000) faria o meio geométrico colapsar em 0,
+    # que o gate de produção (texture_max >= limiar) lê como "passa tudo".
+    assert _limiar_sugerido(0.30, 0.0) == 0.15
+
+
+def test_limiar_sugerido_com_fake_zerado_e_real_positivo_nunca_e_fail_open():
+    # A propriedade que importa: com R>0 e V=0, o limiar nunca pode ser 0 —
+    # 0 é o valor fail-open (passa qualquer score, inclusive ataque).
+    assert _limiar_sugerido(0.30, 0.0) > 0.0
 
 
 def test_label_de_video_existe_e_e_separado_de_foto_em_tela():
