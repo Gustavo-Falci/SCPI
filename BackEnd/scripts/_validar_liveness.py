@@ -34,7 +34,6 @@ Amostras: .liveness_samples/<label>/<cond>/burst_NNN/frame_M.{jpg,txt}
 import pathlib
 import os
 import argparse
-import glob
 import math
 import time
 
@@ -316,21 +315,56 @@ def _preproc_blob(frame, box, preproc):
     return cv2.dnn.blobFromImage(crop, 1 / 255.0, (128, 128), swapRB=True)
 
 
-def _debug_saida_crua(net, preproc):
-    """Imprime shape + valores crus do modelo p/ 1 amostra de cada label.
-    Revela a interpretação correta do output (índice da classe 'live')."""
-    print("\n--- DEBUG saída crua (1 amostra por label) ---")
+def _scores_do_burst(net, burst_dir, preproc):
+    """Liveness score de cada frame do burst. Frame ilegível é pulado."""
+    scores = []
+    for txt in sorted(pathlib.Path(burst_dir).glob("*.txt")):
+        frame = cv2.imread(str(txt.with_suffix(".jpg")))
+        if frame is None:
+            continue
+        box = tuple(int(v) for v in txt.read_text().split())
+        try:
+            scores.append(_liveness_score(net, frame, box, preproc))
+        except cv2.error as e:
+            raise SystemExit(f"Falha na inferência ({txt}):\n  {e}")
+    return scores
+
+
+def _avisar_layout_antigo():
+    """Amostra de 2026-07-19 ficava solta em <label>/*.jpg. É ignorada — mas em
+    silêncio o operador pensaria que ela entrou na conta."""
     for lbl in _LABELS.values():
-        txts = sorted(glob.glob(str(_SAMPLES_DIR / lbl / "*.txt")))
+        base = _SAMPLES_DIR / lbl
+        if base.is_dir() and any(base.glob("*.jpg")):
+            print(f"⚠️  {base} tem amostra do layout antigo (frame solto). "
+                  "IGNORADA: a spec exige recoletar 'real' na mesma sessão.")
+
+
+def _scores_por_label(net, preproc):
+    """{label: {cond: [max_por_burst]}} — a grandeza que o gate compara."""
+    resumo = {}
+    for lbl in _LABELS.values():
+        por_cond = {}
+        for cond, burst_dir in _descobrir_bursts(_SAMPLES_DIR, lbl):
+            por_cond.setdefault(cond, []).append(_scores_do_burst(net, burst_dir, preproc))
+        resumo[lbl] = {cond: _max_por_burst(bursts) for cond, bursts in por_cond.items()}
+    return resumo
+
+
+def _debug_saida_crua(net, preproc):
+    """Imprime shape + valores crus do modelo p/ 1 frame de cada label.
+    Revela a interpretação correta do output (índice da classe 'live')."""
+    print("\n--- DEBUG saída crua (1 frame por label) ---")
+    for lbl in _LABELS.values():
+        achados = _descobrir_bursts(_SAMPLES_DIR, lbl)
+        txts = sorted(achados[0][1].glob("*.txt")) if achados else []
         if not txts:
             print(f"  {lbl:6s}: (sem amostras)")
             continue
-        jpg = txts[0][:-4] + ".jpg"
-        frame = cv2.imread(jpg)
+        frame = cv2.imread(str(txts[0].with_suffix(".jpg")))
         if frame is None:
             continue
-        with open(txts[0]) as fh:
-            box = tuple(int(v) for v in fh.read().split())
+        box = tuple(int(v) for v in txts[0].read_text().split())
         blob = _preproc_blob(frame, box, preproc)
         net.setInput(blob)
         out = net.forward()
@@ -348,46 +382,59 @@ def testar(modelo_path, preproc):
     except cv2.error as e:
         raise SystemExit(
             f"cv2.dnn NÃO carregou o ONNX (possível op não suportada):\n  {e}\n"
-            "=> este modelo exigiria onnxruntime (dep nova). Ponto #2 do advisor."
+            "=> este modelo exigiria onnxruntime (dep nova)."
         )
     print(f"Modelo carregado em cv2.dnn OK. preproc={preproc}")
-    _estatisticas_tamanho()  # px do rosto (risco distância)
+    _avisar_layout_antigo()
+    _estatisticas_tamanho()
     _debug_saida_crua(net, preproc)
 
-    resumo = {}
-    for lbl in _LABELS.values():
-        scores = []
-        for txt in sorted(glob.glob(str(_SAMPLES_DIR / lbl / "*.txt"))):
-            jpg = txt[:-4] + ".jpg"
-            frame = cv2.imread(jpg)
-            if frame is None:
-                continue
-            with open(txt) as fh:
-                box = tuple(int(v) for v in fh.read().split())
-            try:
-                scores.append(_liveness_score(net, frame, box, preproc))
-            except cv2.error as e:
-                raise SystemExit(f"Falha na inferência ({jpg}):\n  {e}")
-        resumo[lbl] = scores
+    resumo = _scores_por_label(net, preproc)
 
-    print("\n=== Liveness score (0=fake .. 1=real) ===")
-    for lbl, scores in resumo.items():
-        if not scores:
-            print(f"  {lbl:6s}: (sem amostras)")
+    print("=== max-por-burst (0=fake .. 1=real) — a grandeza que o gate usa ===")
+    for lbl, por_cond in resumo.items():
+        if not por_cond:
+            print(f"  {lbl}: (sem amostras)")
             continue
-        scores.sort()
-        med = scores[len(scores) // 2]
-        print(f"  {lbl:6s}: n={len(scores):2d}  min={scores[0]:.3f}  "
-              f"mediana={med:.3f}  max={scores[-1]:.3f}")
-    reais = resumo.get("real", [])
-    fakes = resumo.get("papel", []) + resumo.get("tela", [])
-    if reais and fakes:
-        print(f"\nSeparação: min(real)={min(reais):.3f} vs max(fake)={max(fakes):.3f}")
-        if min(reais) > max(fakes):
-            print("  ✅ Separável — existe limiar que separa real de foto nesta distância.")
-        else:
-            print("  ⚠️  Sobreposto — não há limiar limpo. Modelo fraco nesta distância; "
-                  "considerar fallback (endurecer pose) OU aproximar/melhorar câmera.")
+        print(f"  {lbl}:")
+        for cond in sorted(por_cond):
+            m = sorted(por_cond[cond])
+            if not m:
+                print(f"    {cond:16s}: (nenhum burst com rosto)")
+                continue
+            print(f"    {cond:16s}: n={len(m):2d}  min={m[0]:.3f}  "
+                  f"mediana={m[len(m) // 2]:.3f}  max={m[-1]:.3f}")
+
+    reais = [v for m in resumo.get("real", {}).values() for v in m]
+    videos = [v for m in resumo.get("video", {}).values() for v in m]
+    _imprimir_desfecho(reais, videos, resumo.get("video", {}))
+
+
+def _imprimir_desfecho(reais, videos, video_por_cond):
+    """Tabela de desfecho da spec 2026-08-05."""
+    R, V, folga = _separacao(reais, videos)
+    if R is None:
+        print("\n⚠️  Sem amostra de 'real' ou de 'video' — nada a concluir. "
+              "Colete os dois na MESMA sessão (spec: iluminação desloca o score).")
+        return
+
+    print(f"\n=== Desfecho ===\n  R = min(max_burst(real))  = {R:.4f}"
+          f"\n  V = max(max_burst(video)) = {V:.4f}\n  folga = R/V = {folga:.2f}x")
+    if R > V and folga >= 2.0:
+        print(f"  ✅ SEPARADO com folga. Subir TEXTURE_LIVENESS_MIN para "
+              f"{_meio_geometrico(R, V):.4f}. Nenhum código novo no loop.")
+    elif R > V:
+        print(f"  ⚠️  SEPARADO, folga fina (<2x). Limiar sugerido "
+              f"{_meio_geometrico(R, V):.4f} MAIS camada anti-replay "
+              f"(bezel/moiré) nas condições que encostam.")
+    else:
+        print("  ❌ SOBREPOSTO — não há limiar que separe. Camada anti-replay "
+              "é obrigatória.")
+
+    if video_por_cond:
+        pior = max(video_por_cond.items(), key=lambda kv: max(kv[1], default=0.0))
+        print(f"  Condição de ataque mais forte: {pior[0]} "
+              f"(max={max(pior[1], default=0.0):.4f})")
 
 
 def main():
