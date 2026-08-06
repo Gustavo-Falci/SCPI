@@ -5,9 +5,16 @@ avaliar_detalhado). Logo a estatística que importa é max-por-burst, não
 por frame: um único frame de vídeo acima do limiar já registra presença.
 """
 import math
-import pathlib
 
-from scripts._validar_liveness import _max_por_burst, _meio_geometrico, _limiar_sugerido, _separacao, _LABELS, _descobrir_bursts
+from scripts._validar_liveness import (
+    _LABELS,
+    _descobrir_bursts,
+    _limiar_sugerido,
+    _max_por_burst,
+    _meio_geometrico,
+    _recomendacao,
+    _separacao,
+)
 
 
 def test_max_por_burst_pega_o_maior_de_cada_burst():
@@ -57,6 +64,49 @@ def test_limiar_sugerido_com_fake_zerado_e_real_positivo_nunca_e_fail_open():
     # A propriedade que importa: com R>0 e V=0, o limiar nunca pode ser 0 —
     # 0 é o valor fail-open (passa qualquer score, inclusive ataque).
     assert _limiar_sugerido(0.30, 0.0) > 0.0
+
+
+def test_limiar_sugerido_com_fake_saturado_mas_nao_exato_usa_metade_do_real():
+    # softmax nunca devolve exatamente 0.0 — um fake saturado mede algo como
+    # 2e-09, não 0.0. A comparação exata `V == 0` deixaria esse caso cair no
+    # meio geométrico, que aqui daria ~0.0000077 e imprimiria "0.0000" — uma
+    # recomendação fail-open disfarçada de conclusão.
+    assert _limiar_sugerido(0.30, 2e-09) == 0.15
+
+
+def test_limiar_sugerido_com_fake_normal_ainda_delega_pro_meio_geometrico():
+    # V acima da tolerância continua usando o meio geométrico normalmente.
+    assert _limiar_sugerido(0.32, 0.02) == _meio_geometrico(0.32, 0.02)
+
+
+def test_recomendacao_nunca_afrouxa_o_gate():
+    # Números reais de julho: sqrt(0.16 * 0.003) ≈ 0.0219, bem abaixo do
+    # limiar em vigor (0.08). Recomendar 0.0219 verbatim enfraqueceria o
+    # gate ~3.6x sob um "✅ Subir" — exatamente o achado 2.
+    valor, subir = _recomendacao(0.16, 0.003, 0.08)
+    assert valor == 0.08
+    assert subir is False
+
+
+def test_recomendacao_sobe_quando_sugestao_supera_o_limiar_atual():
+    valor, subir = _recomendacao(0.5, 0.1, 0.08)
+    assert valor == _meio_geometrico(0.5, 0.1)
+    assert subir is True
+
+
+def test_recomendacao_nunca_fica_abaixo_do_limiar_atual_nem_zero():
+    # A propriedade que importa, não um valor específico.
+    casos = [
+        (0.16, 0.003, 0.08),
+        (0.5, 0.1, 0.08),
+        (0.30, 0.0, 0.08),
+        (0.30, 2e-09, 0.001),
+        (0.01, 0.5, 0.08),  # sobreposto — nem faz sentido subir, mas nunca zera
+    ]
+    for R, V, limiar_atual in casos:
+        valor, _subir = _recomendacao(R, V, limiar_atual)
+        assert valor >= limiar_atual
+        assert valor > 0.0
 
 
 def test_label_de_video_existe_e_e_separado_de_foto_em_tela():
