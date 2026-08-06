@@ -113,6 +113,15 @@ def _meio_geometrico(R, V):
     return math.sqrt(R * V)
 
 
+def _limiar_sugerido(R, V):
+    """Limiar a recomendar. Com V=0 a separação é perfeita e o meio geométrico
+    colapsaria em 0 — que o gate lê como 'passa tudo'. Metade do pior burst real
+    é a escolha conservadora e continua muito acima de qualquer ataque medido."""
+    if V == 0:
+        return R / 2
+    return _meio_geometrico(R, V)
+
+
 # ---------------------------------------------------------------------------
 # Layout no disco: <raiz>/<label>/<cond>/burst_NNN/frame_M.{jpg,txt}
 # `cond` = célula da matriz de coleta (ex.: "2m-celular"), vem de LIVENESS_COND.
@@ -422,10 +431,10 @@ def _imprimir_desfecho(reais, videos, video_por_cond):
           f"\n  V = max(max_burst(video)) = {V:.4f}\n  folga = R/V = {folga:.2f}x")
     if R > V and folga >= 2.0:
         print(f"  ✅ SEPARADO com folga. Subir TEXTURE_LIVENESS_MIN para "
-              f"{_meio_geometrico(R, V):.4f}. Nenhum código novo no loop.")
+              f"{_limiar_sugerido(R, V):.4f}. Nenhum código novo no loop.")
     elif R > V:
         print(f"  ⚠️  SEPARADO, folga fina (<2x). Limiar sugerido "
-              f"{_meio_geometrico(R, V):.4f} MAIS camada anti-replay "
+              f"{_limiar_sugerido(R, V):.4f} MAIS camada anti-replay "
               f"(bezel/moiré) nas condições que encostam.")
     else:
         print("  ❌ SOBREPOSTO — não há limiar que separe. Camada anti-replay "
