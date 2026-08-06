@@ -36,6 +36,11 @@ _ENABLE_TEXTURE = (os.getenv("ENABLE_TEXTURE", "1").strip().lower()
 # 0.08 calibrado em campo no frame RAW (foto ~0.003, rosto real ~0.16-0.69).
 # No JPEG a separação era mais folgada (0.20); o raw derruba o score do rosto.
 _TEXTURE_LIVENESS_MIN = float(os.getenv("TEXTURE_LIVENESS_MIN", "0.08"))
+# Piso de tamanho de rosto (lado menor do bbox, px) para o gate de textura
+# opinar. Vem da spec do MiniFASNet (~80px), NÃO das amostras: abaixo disso o
+# modelo devolve ~1.0 para qualquer coisa e o "vivo" é ruído. Ver spec
+# 2026-08-06. Abaixo do piso a textura é None => PENDENTE (fail-closed).
+_TEXTURE_FACE_MIN_PX = int(os.getenv("TEXTURE_FACE_MIN_PX", "80"))
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -90,10 +95,26 @@ class SistemaReconhecimento:
                     "facenox best_model.onnx NÃO-quantizado (1.9 MB) ou defina "
                     "TEXTURE_MODEL_PATH. Para rodar sem textura: ENABLE_TEXTURE=0."
                 )
-            self.detector_textura = DetectorTextura(texture_path, _TEXTURE_LIVENESS_MIN)
-            logger.info(f"🧬 Anti-spoofing de textura ativo (limiar={_TEXTURE_LIVENESS_MIN}).")
+            self.detector_textura = DetectorTextura(
+                texture_path, _TEXTURE_LIVENESS_MIN, _TEXTURE_FACE_MIN_PX
+            )
+            logger.info(
+                f"🧬 Anti-spoofing de textura ativo (limiar={_TEXTURE_LIVENESS_MIN}, "
+                f"rosto_min={_TEXTURE_FACE_MIN_PX}px)."
+            )
+            if _TEXTURE_FACE_MIN_PX <= 0:
+                logger.warning(
+                    "⚠️  TEXTURE_FACE_MIN_PX=0 — piso desligado. O gate volta a "
+                    "pontuar rosto pequeno, onde foto em tela mede ~1.0 (spec "
+                    "2026-08-06). Só faz sentido para depuração."
+                )
         else:
-            logger.warning("⚠️  ENABLE_TEXTURE=0 — sem gate de textura; fallback para pose (paliativo).")
+            logger.warning(
+                "⚠️  ENABLE_TEXTURE=0 — sem gate de textura. O fallback de pose é "
+                "BYPASSÁVEL: medido em 2026-08-06, foto em tela segurada na mão deu "
+                "magnitude=2.98 contra pose_limiar=2.0 e REGISTROU PRESENÇA. Isto "
+                "não é um paliativo, é um gate aberto."
+            )
 
     def _sincronizar_chamada(self):
         try:
