@@ -32,6 +32,7 @@ import pathlib
 import os
 import argparse
 import glob
+import math
 
 import cv2
 import numpy as np
@@ -69,6 +70,35 @@ def _maior_rosto(faces):
         if w * h > area:
             melhor, area = (x, y, w, h), w * h
     return melhor
+
+
+# ---------------------------------------------------------------------------
+# Agregação — a conta que define o limiar
+# ---------------------------------------------------------------------------
+def _max_por_burst(scores_por_burst):
+    """MAX de cada burst. Burst sem nenhum score (nenhum rosto detectado) é
+    descartado, não vira 0 — 0 mentiria dizendo 'fake perfeito'."""
+    return [max(scores) for scores in scores_por_burst if scores]
+
+
+def _separacao(max_real, max_fake):
+    """(R, V, folga) sobre max-por-burst.
+
+    R = min(real): o pior burst de rosto real, o que define falso positivo.
+    V = max(fake): o melhor burst de ataque, o que define falso negativo.
+    folga = R / V. Devolve (None, None, None) se faltar amostra de um lado.
+    """
+    if not max_real or not max_fake:
+        return None, None, None
+    R = min(max_real)
+    V = max(max_fake)
+    folga = R / V if V > 0 else math.inf
+    return R, V, folga
+
+
+def _meio_geometrico(R, V):
+    """Limiar sugerido quando há separação: equidistante em escala log."""
+    return math.sqrt(R * V)
 
 
 # ---------------------------------------------------------------------------
