@@ -62,6 +62,36 @@ def test_sem_textura_em_nenhum_frame_fica_pendente_failclosed():
     assert _conf().avaliar(r) == {"a": Decisao.PENDENTE}
 
 
+# ---- Tamanho do rosto: só observabilidade, NÃO decide ----
+
+def test_lados_sao_expostos_na_ordem_dos_frames():
+    # Existe para calibrar TEXTURE_FACE_MIN_PX em campo: sem isto, um burst com
+    # texture_max=None não diz se o rosto tinha 79px ou 20px.
+    r = [ResultadoFrame(external_id="a", textura=0.9, lado=lado)
+         for lado in (104, 113, 95)]
+    assert _conf().avaliar_detalhado(r)["a"].lados == (104, 113, 95)
+
+
+def test_lado_ausente_nao_vira_zero():
+    # Zero mentiria dizendo "rosto de 0px". Frame sem tamanho some da lista.
+    r = [ResultadoFrame(external_id="a", textura=0.9, lado=104),
+         ResultadoFrame(external_id="a", textura=0.9, lado=None),
+         ResultadoFrame(external_id="a", textura=0.9, lado=95)]
+    assert _conf().avaliar_detalhado(r)["a"].lados == (104, 95)
+
+
+def test_lados_vazio_quando_nenhum_frame_traz_tamanho():
+    r = _frames("a", [(0, 0, 0.9), (0, 0, 0.9), (0, 0, 0.9)])
+    assert _conf().avaliar_detalhado(r)["a"].lados == ()
+
+
+def test_lado_nao_influencia_a_decisao():
+    # Rosto minúsculo com textura alta REGISTRA: quem barra rosto pequeno é o
+    # piso em anti_spoofing (textura vira None), não esta classe.
+    r = [ResultadoFrame(external_id="a", textura=0.9, lado=3) for _ in range(3)]
+    assert _conf().avaliar(r) == {"a": Decisao.REGISTRAR}
+
+
 def test_limiar_no_exato_registra():
     r = _frames("a", [(0, 0, 0.20), (0, 0, 0.20), (0, 0, 0.20)])
     assert _conf(texture_min=0.20).avaliar(r) == {"a": Decisao.REGISTRAR}

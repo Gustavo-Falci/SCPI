@@ -30,6 +30,7 @@ class ResultadoFrame:
     yaw: float | None = None
     pitch: float | None = None
     textura: float | None = None  # score de vida 0..1 do detector de textura
+    lado: int | None = None       # lado MENOR do bbox em px — só observabilidade
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,10 @@ class Avaliacao:
     std_yaw: float | None       # None = <2 amostras no eixo
     std_pitch: float | None
     magnitude: float | None     # hypot(std_yaw, std_pitch) — ADVISORY, não decide
+    # Tamanhos dos rostos que entraram no burst, na ordem dos frames. NÃO decide
+    # nada: existe para calibrar TEXTURE_FACE_MIN_PX em campo. Sem isto, um
+    # burst com texture_max=None não diz se o rosto tinha 79px ou 20px.
+    lados: tuple[int, ...] = ()
 
 
 class ConfirmadorBurst:
@@ -94,6 +99,7 @@ class ConfirmadorBurst:
             avaliacoes[external_id] = Avaliacao(
                 decisao=decisao, matches=len(frames), texture_max=texture_max,
                 std_yaw=std_yaw, std_pitch=std_pitch, magnitude=magnitude,
+                lados=tuple(f.lado for f in frames if f.lado is not None),
             )
         return avaliacoes
 

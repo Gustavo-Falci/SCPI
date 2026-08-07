@@ -46,6 +46,24 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+def _metricas_log(av) -> str:
+    """Métricas de calibração de um burst, em uma linha.
+
+    `rostos_px` e `abaixo_do_piso` existem porque um burst com
+    texture_max=None não dizia se o rosto tinha 79px ou 20px — sem isso,
+    calibrar TEXTURE_FACE_MIN_PX é tentativa e erro às cegas.
+    """
+    lados = list(av.lados)
+    if lados:
+        abaixo = sum(1 for l in lados if l < _TEXTURE_FACE_MIN_PX)
+        rostos = (f"rostos_px={lados}, rosto_menor={min(lados)}, "
+                  f"abaixo_do_piso={abaixo}/{len(lados)}, piso={_TEXTURE_FACE_MIN_PX}")
+    else:
+        rostos = "rostos_px=(nao coletado)"
+    return (f"texture_max={av.texture_max}, tex_limiar={_TEXTURE_LIVENESS_MIN}, "
+            f"{rostos}, magnitude={av.magnitude}, pose_limiar={_LIVENESS_POSE_STD_MIN}")
+
+
 class SistemaReconhecimento:
     def __init__(self):
         if not _SERVICE_TOKEN:
@@ -198,9 +216,12 @@ class SistemaReconhecimento:
                         external_image_id, chamada_id, self.chamada_id_atual,
                     )
 
-    def _analisar_crop(self, face_bytes, chamada_id_referencia, textura=None):
+    def _analisar_crop(self, face_bytes, chamada_id_referencia, textura=None, lado=None):
         """SearchFaces + (se match novo) DetectFaces p/ pose. Retorna ResultadoFrame|None.
-        `textura` = score de vida do crop (calculado local antes do envio)."""
+        `textura` = score de vida do crop (calculado local antes do envio).
+        `lado` = lado menor do bbox em px; só observabilidade, para calibrar o
+        piso em campo (o external_id só existe depois da AWS, então o tamanho
+        precisa viajar junto para poder ser logado por aluno)."""
         try:
             response = rekognition_client.search_faces_by_image(
                 CollectionId=COLLECTION_ID,
@@ -235,7 +256,8 @@ class SistemaReconhecimento:
                 # se nenhum frame do burst tiver pose (fail-safe, não fail-open).
                 logger.debug(f"DetectFaces falhou (segue sem pose): {e}")
 
-            return ResultadoFrame(external_id=external_id, yaw=yaw, pitch=pitch, textura=textura)
+            return ResultadoFrame(external_id=external_id, yaw=yaw, pitch=pitch,
+                                  textura=textura, lado=lado)
 
         except botocore.exceptions.ClientError as e:
             code = e.response["Error"]["Code"]
@@ -309,8 +331,10 @@ class SistemaReconhecimento:
                                 tex = self.detector_textura.score(frame_i, bbox)
                             except Exception as e:
                                 logger.debug(f"Score de textura falhou (segue None): {e}")
+                        lado = min(bbox[2], bbox[3])
                         futures.append(
-                            self._aws_pool.submit(self._analisar_crop, crop, chamada_atual, tex)
+                            self._aws_pool.submit(self._analisar_crop, crop, chamada_atual,
+                                                  tex, lado)
                         )
                     time.sleep(intervalo)
 
@@ -333,26 +357,26 @@ class SistemaReconhecimento:
                             # quando o servidor responder.
                             if not self.tracker.reivindicar(external_id):
                                 continue
-                        # Loga textura (gate) + magnitude (advisory) p/ calibração.
+                        # Loga textura (gate) + tamanho de rosto + magnitude (advisory).
                         gate = self.confirmador.gate
                         logger.info(
                             f"🎯 Confirmado ({gate}): {external_id} "
-                            f"[matches={av.matches}, texture_max={av.texture_max}, "
-                            f"tex_limiar={_TEXTURE_LIVENESS_MIN}, magnitude={av.magnitude}, "
-                            f"pose_limiar={_LIVENESS_POSE_STD_MIN}]"
+                            f"[matches={av.matches}, {_metricas_log(av)}]"
                         )
                         self._api_pool.submit(
                             self._registrar_presenca, external_id, chamada_atual
                         )
                     elif av.decisao is Decisao.PENDENTE:
                         gate = self.confirmador.gate
-                        motivo = "textura baixa — possível foto" if gate == "textura" \
-                            else "magnitude baixa — possível foto ou pessoa parada"
+                        if gate == "textura" and av.texture_max is None:
+                            motivo = "nenhum rosto grande o bastante p/ pontuar"
+                        elif gate == "textura":
+                            motivo = "textura baixa — possível foto"
+                        else:
+                            motivo = "magnitude baixa — possível foto ou pessoa parada"
                         logger.info(
                             f"⏳ Pendente (consenso ok, {motivo}): {external_id} "
-                            f"[matches={av.matches}, texture_max={av.texture_max}, "
-                            f"tex_limiar={_TEXTURE_LIVENESS_MIN}, magnitude={av.magnitude}, "
-                            f"pose_limiar={_LIVENESS_POSE_STD_MIN}]"
+                            f"[matches={av.matches}, {_metricas_log(av)}]"
                         )
                     else:
                         logger.info(
