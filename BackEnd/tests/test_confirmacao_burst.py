@@ -8,9 +8,9 @@ import pytest
 from scripts.confirmacao_burst import ConfirmadorBurst, Decisao, ResultadoFrame, Avaliacao
 
 
-def _conf(min_matches=3, pose_std_min=3.0, texture_min=0.2):
+def _conf(min_matches=3, pose_std_min=3.0, texture_min=0.2, tela_min_frames=2):
     return ConfirmadorBurst(min_matches=min_matches, pose_std_min=pose_std_min,
-                            texture_min=texture_min)
+                            texture_min=texture_min, tela_min_frames=tela_min_frames)
 
 
 def _frames(eid, specs):
@@ -60,6 +60,77 @@ def test_todos_frames_abaixo_do_limiar_fica_pendente():
 def test_sem_textura_em_nenhum_frame_fica_pendente_failclosed():
     r = _frames("a", [(0, 0, None), (0, 0, None), (0, 0, None)])
     assert _conf().avaliar(r) == {"a": Decisao.PENDENTE}
+
+
+# ---- Tamanho do rosto: só observabilidade, NÃO decide ----
+
+def test_lados_sao_expostos_na_ordem_dos_frames():
+    # Existe para calibrar TEXTURE_FACE_MIN_PX em campo: sem isto, um burst com
+    # texture_max=None não diz se o rosto tinha 79px ou 20px.
+    r = [ResultadoFrame(external_id="a", textura=0.9, lado=lado)
+         for lado in (104, 113, 95)]
+    assert _conf().avaliar_detalhado(r)["a"].lados == (104, 113, 95)
+
+
+def test_lado_ausente_nao_vira_zero():
+    # Zero mentiria dizendo "rosto de 0px". Frame sem tamanho some da lista.
+    r = [ResultadoFrame(external_id="a", textura=0.9, lado=104),
+         ResultadoFrame(external_id="a", textura=0.9, lado=None),
+         ResultadoFrame(external_id="a", textura=0.9, lado=95)]
+    assert _conf().avaliar_detalhado(r)["a"].lados == (104, 95)
+
+
+def test_lados_vazio_quando_nenhum_frame_traz_tamanho():
+    r = _frames("a", [(0, 0, 0.9), (0, 0, 0.9), (0, 0, 0.9)])
+    assert _conf().avaliar_detalhado(r)["a"].lados == ()
+
+
+# ---- Veto de TELA: precedência sobre a textura ----
+
+def test_tela_em_2_frames_veta_mesmo_com_textura_perfeita():
+    # O caso medido: vídeo em tela na porta dá textura 0.22-0.88 E região
+    # emissiva em 5/5 frames. Sem o veto, registrava presença.
+    r = [ResultadoFrame(external_id="a", textura=0.999, tela=True) for _ in range(5)]
+    assert _conf().avaliar(r) == {"a": Decisao.PENDENTE}
+
+
+def test_um_frame_de_tela_nao_basta():
+    # Corroboração exigida: um brilho espúrio não pode custar a presença de um
+    # aluno. Nos dados de campo todo ataque marcou 5/5, então 2 é folgado.
+    r = ([ResultadoFrame(external_id="a", textura=0.999, tela=True)]
+         + [ResultadoFrame(external_id="a", textura=0.999, tela=False) for _ in range(4)])
+    assert _conf().avaliar(r) == {"a": Decisao.REGISTRAR}
+
+
+def test_tela_min_frames_configuravel():
+    r = ([ResultadoFrame(external_id="a", textura=0.999, tela=True)]
+         + [ResultadoFrame(external_id="a", textura=0.999, tela=False) for _ in range(4)])
+    assert _conf(tela_min_frames=1).avaliar(r) == {"a": Decisao.PENDENTE}
+
+
+def test_veto_de_tela_nao_resgata_consenso_insuficiente():
+    # Precedência: sem consenso continua DESCARTAR, não PENDENTE.
+    r = [ResultadoFrame(external_id="a", textura=0.999, tela=True) for _ in range(2)]
+    assert _conf().avaliar(r) == {"a": Decisao.DESCARTAR}
+
+
+def test_sem_deteccao_de_tela_o_gate_segue_o_de_antes():
+    # tela=None (detector desligado) não pode alterar decisão nenhuma.
+    r = _frames("a", [(0, 0, 0.9), (0, 0, 0.9), (0, 0, 0.9)])
+    assert _conf().avaliar(r) == {"a": Decisao.REGISTRAR}
+
+
+def test_telas_expostas_na_avaliacao_para_log():
+    r = ([ResultadoFrame(external_id="a", textura=0.5, tela=True) for _ in range(3)]
+         + [ResultadoFrame(external_id="a", textura=0.5, tela=False)])
+    assert _conf().avaliar_detalhado(r)["a"].telas == 3
+
+
+def test_lado_nao_influencia_a_decisao():
+    # Rosto minúsculo com textura alta REGISTRA: quem barra rosto pequeno é o
+    # piso em anti_spoofing (textura vira None), não esta classe.
+    r = [ResultadoFrame(external_id="a", textura=0.9, lado=3) for _ in range(3)]
+    assert _conf().avaliar(r) == {"a": Decisao.REGISTRAR}
 
 
 def test_limiar_no_exato_registra():

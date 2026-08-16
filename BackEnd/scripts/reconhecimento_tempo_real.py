@@ -15,6 +15,7 @@ from core.config import COLLECTION_ID, FACE_MATCH_THRESHOLD_SALA
 from infra.aws_clientes import rekognition_client
 from scripts.confirmacao_burst import ConfirmadorBurst, Decisao, ResultadoFrame
 from scripts.anti_spoofing import DetectorTextura
+from scripts.deteccao_tela import regiao_emissiva
 from scripts.registro_tracker import RegistroPresencaTracker
 
 load_dotenv(find_dotenv())
@@ -42,8 +43,41 @@ _TEXTURE_LIVENESS_MIN = float(os.getenv("TEXTURE_LIVENESS_MIN", "0.08"))
 # 2026-08-06. Abaixo do piso a textura é None => PENDENTE (fail-closed).
 _TEXTURE_FACE_MIN_PX = int(os.getenv("TEXTURE_FACE_MIN_PX", "80"))
 
+# --- Camada anti-replay por REGIÃO EMISSIVA — ver scripts/deteccao_tela.py ---
+# Rosto dentro de área que emite luz é tela. VETA, com precedência sobre a
+# textura. Medido na porta em 2026-08-16: vídeo 7/7 bursts vetados (5/5 frames
+# em todos), rosto real 0/6. A textura, no mesmo dado, deixava passar 7/7.
+_ENABLE_TELA = (os.getenv("ENABLE_TELA", "1").strip().lower()
+                not in ("0", "false", "no", ""))
+_TELA_PERCENTIL = float(os.getenv("TELA_PERCENTIL", "96"))
+# 2 e não 1: corroboração. Todo ataque medido marcou 5/5 frames e todo rosto
+# real 0/5, então 2 é folgado dos dois lados — e um brilho espúrio isolado não
+# pode virar falta silenciosa de aluno legítimo.
+_TELA_MIN_FRAMES = int(os.getenv("TELA_MIN_FRAMES", "2"))
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def _metricas_log(av) -> str:
+    """Métricas de calibração de um burst, em uma linha.
+
+    `rostos_px` e `abaixo_do_piso` existem porque um burst com
+    texture_max=None não dizia se o rosto tinha 79px ou 20px — sem isso,
+    calibrar TEXTURE_FACE_MIN_PX é tentativa e erro às cegas.
+    """
+    lados = list(av.lados)
+    if lados:
+        abaixo = sum(1 for l in lados if l < _TEXTURE_FACE_MIN_PX)
+        rostos = (f"rostos_px={lados}, rosto_menor={min(lados)}, "
+                  f"abaixo_do_piso={abaixo}/{len(lados)}, piso={_TEXTURE_FACE_MIN_PX}")
+    else:
+        rostos = "rostos_px=(nao coletado)"
+    tela = (f"tela_frames={av.telas}/{av.matches}, tela_min={_TELA_MIN_FRAMES}"
+            if _ENABLE_TELA else "tela=off")
+    return (f"texture_max={av.texture_max}, tex_limiar={_TEXTURE_LIVENESS_MIN}, "
+            f"{rostos}, {tela}, magnitude={av.magnitude}, "
+            f"pose_limiar={_LIVENESS_POSE_STD_MIN}")
 
 
 class SistemaReconhecimento:
@@ -60,6 +94,8 @@ class SistemaReconhecimento:
             pose_std_min=_LIVENESS_POSE_STD_MIN,
             texture_min=_TEXTURE_LIVENESS_MIN,
             gate="textura" if _ENABLE_TEXTURE else "pose",
+            # Detector desligado => nenhum frame marca tela => veto nunca dispara.
+            tela_min_frames=_TELA_MIN_FRAMES,
         )
         self.CAM_INDEX = _CAMERA_INDEX
 
@@ -102,6 +138,18 @@ class SistemaReconhecimento:
                 f"🧬 Anti-spoofing de textura ativo (limiar={_TEXTURE_LIVENESS_MIN}, "
                 f"rosto_min={_TEXTURE_FACE_MIN_PX}px)."
             )
+            if _ENABLE_TELA:
+                logger.info(
+                    f"📺 Anti-replay por região emissiva ativo "
+                    f"(percentil={_TELA_PERCENTIL:g}, min_frames={_TELA_MIN_FRAMES}). "
+                    f"Veta com precedência sobre a textura."
+                )
+            else:
+                logger.warning(
+                    "⚠️  ENABLE_TELA=0 — sem camada anti-replay. Replay de vídeo em "
+                    "tela REGISTRA PRESENÇA: medido em 2026-08-16, 7/7 bursts de "
+                    "vídeo passaram só com a textura."
+                )
             if _TEXTURE_FACE_MIN_PX <= 0:
                 logger.warning(
                     "⚠️  TEXTURE_FACE_MIN_PX=0 — piso desligado. O gate volta a "
@@ -198,9 +246,13 @@ class SistemaReconhecimento:
                         external_image_id, chamada_id, self.chamada_id_atual,
                     )
 
-    def _analisar_crop(self, face_bytes, chamada_id_referencia, textura=None):
+    def _analisar_crop(self, face_bytes, chamada_id_referencia, textura=None, lado=None,
+                       tela=None):
         """SearchFaces + (se match novo) DetectFaces p/ pose. Retorna ResultadoFrame|None.
-        `textura` = score de vida do crop (calculado local antes do envio)."""
+        `textura` = score de vida do crop (calculado local antes do envio).
+        `lado` = lado menor do bbox em px; só observabilidade, para calibrar o
+        piso em campo (o external_id só existe depois da AWS, então o tamanho
+        precisa viajar junto para poder ser logado por aluno)."""
         try:
             response = rekognition_client.search_faces_by_image(
                 CollectionId=COLLECTION_ID,
@@ -235,7 +287,8 @@ class SistemaReconhecimento:
                 # se nenhum frame do burst tiver pose (fail-safe, não fail-open).
                 logger.debug(f"DetectFaces falhou (segue sem pose): {e}")
 
-            return ResultadoFrame(external_id=external_id, yaw=yaw, pitch=pitch, textura=textura)
+            return ResultadoFrame(external_id=external_id, yaw=yaw, pitch=pitch,
+                                  textura=textura, lado=lado, tela=tela)
 
         except botocore.exceptions.ClientError as e:
             code = e.response["Error"]["Code"]
@@ -309,8 +362,19 @@ class SistemaReconhecimento:
                                 tex = self.detector_textura.score(frame_i, bbox)
                             except Exception as e:
                                 logger.debug(f"Score de textura falhou (segue None): {e}")
+                        lado = min(bbox[2], bbox[3])
+                        # Camada anti-replay: rosto dentro de área que emite luz.
+                        # Falha vira None (não veta) — detector quebrado não pode
+                        # derrubar presença de aluno.
+                        tela = None
+                        if _ENABLE_TELA:
+                            try:
+                                tela = regiao_emissiva(frame_i, bbox, _TELA_PERCENTIL)[0]
+                            except Exception as e:
+                                logger.debug(f"Detecção de tela falhou (segue None): {e}")
                         futures.append(
-                            self._aws_pool.submit(self._analisar_crop, crop, chamada_atual, tex)
+                            self._aws_pool.submit(self._analisar_crop, crop, chamada_atual,
+                                                  tex, lado, tela)
                         )
                     time.sleep(intervalo)
 
@@ -333,26 +397,28 @@ class SistemaReconhecimento:
                             # quando o servidor responder.
                             if not self.tracker.reivindicar(external_id):
                                 continue
-                        # Loga textura (gate) + magnitude (advisory) p/ calibração.
+                        # Loga textura (gate) + tamanho de rosto + magnitude (advisory).
                         gate = self.confirmador.gate
                         logger.info(
                             f"🎯 Confirmado ({gate}): {external_id} "
-                            f"[matches={av.matches}, texture_max={av.texture_max}, "
-                            f"tex_limiar={_TEXTURE_LIVENESS_MIN}, magnitude={av.magnitude}, "
-                            f"pose_limiar={_LIVENESS_POSE_STD_MIN}]"
+                            f"[matches={av.matches}, {_metricas_log(av)}]"
                         )
                         self._api_pool.submit(
                             self._registrar_presenca, external_id, chamada_atual
                         )
                     elif av.decisao is Decisao.PENDENTE:
                         gate = self.confirmador.gate
-                        motivo = "textura baixa — possível foto" if gate == "textura" \
-                            else "magnitude baixa — possível foto ou pessoa parada"
+                        if av.telas >= _TELA_MIN_FRAMES:
+                            motivo = "REGIÃO EMISSIVA — rosto dentro de uma tela"
+                        elif gate == "textura" and av.texture_max is None:
+                            motivo = "nenhum rosto grande o bastante p/ pontuar"
+                        elif gate == "textura":
+                            motivo = "textura baixa — possível foto"
+                        else:
+                            motivo = "magnitude baixa — possível foto ou pessoa parada"
                         logger.info(
                             f"⏳ Pendente (consenso ok, {motivo}): {external_id} "
-                            f"[matches={av.matches}, texture_max={av.texture_max}, "
-                            f"tex_limiar={_TEXTURE_LIVENESS_MIN}, magnitude={av.magnitude}, "
-                            f"pose_limiar={_LIVENESS_POSE_STD_MIN}]"
+                            f"[matches={av.matches}, {_metricas_log(av)}]"
                         )
                     else:
                         logger.info(
