@@ -2,24 +2,41 @@
 
 *Contexto imediato. Atualizar ao fim de toda sessão.*
 
-**Última atualização: 2026-08-06.**
+**Última atualização: 2026-08-16.**
 
-## 🔴 Aberto e grave: liveness furado em produção (2026-08-06)
+## ✅ Liveness: o bypass foi FECHADO — mas com um teste faltando
 
-Celular exibindo **foto de aluno** na frente da câmera da sala **registra presença**, pelo
-caminho normal da chamada. `texture_max=0.854` contra limiar `0.08` (passou por 10,7×) e
-`magnitude=2.98` contra `pose_std_min=2.0` — **os dois gates falham no mesmo ataque**, então
-`ENABLE_TEXTURE=0` não é mitigação.
+**Tudo mergeado na `main`.** PR #112 (veto anti-replay por região emissiva + log de tamanho de
+rosto) e PR #113 (ferramenta de medição). Nenhuma branch de liveness em aberto; a única branch
+remota viva é a do Dependabot (#111).
 
-A medição de replay que a branch `feat/validacao-replay-video` existia para produzir deu
-`R=0.0017 < V=0.638` → **SOBREPOSTO**: não existe valor de `TEXTURE_LIVENESS_MIN` que separe.
-Não mexer no limiar.
+**O ataque:** celular exibindo foto/vídeo de aluno registrava presença pelo caminho normal da
+chamada. `texture_max=0.854` contra limiar `0.08` **e** `magnitude=2.98` contra
+`pose_std_min=2.0` — os dois gates falhavam no mesmo ataque, então `ENABLE_TEXTURE=0` nunca foi
+mitigação. Textura sozinha deixava passar **7/7** bursts de vídeo na porta.
 
-**Correção parcial já empurrada:** branch `fix/piso-tamanho-rosto-textura` — **3 commits, todos
-empurrados, SEM PR e não mergeada** (verificado em 2026-08-16). Abaixo de `TEXTURE_FACE_MIN_PX` a
-textura devolve `None` ("não sei") e o fail-closed que já existia manda para PENDENTE. O 3º
-commit faz o log imprimir `rostos_px` / `rosto_menor` / `abaixo_do_piso` — é o instrumento sem o
-qual não dá para calibrar o piso, e é ele que já está gerando o dado da retomada.
+**A correção, em duas camadas:**
+
+1. **Piso de tamanho** (`TEXTURE_FACE_MIN_PX`): abaixo dele a textura devolve `None` ("não sei")
+   e o fail-closed que já existia manda para PENDENTE. Fecha o uso do modelo fora da faixa dele.
+2. **Veto por região emissiva** (`scripts/deteccao_tela.py`): o rosto está dentro de uma área que
+   emite luz? Rosto real não emite; rosto exibido está sempre dentro de uma tela acesa. Veta com
+   precedência sobre a textura, exige ≥2 frames do burst, e é **fail-open** de propósito (erro no
+   detector não veta — falta silenciosa de aluno é pior desfecho que ataque que passa).
+
+Medido na porta: **vídeo 7/7 vetados (5/5 frames em todos), rosto real 0/6.** Confirmado em
+produção: 3/3 bursts de ataque barrados, e um deles tinha `texture_max=0.2314` contra
+`tex_limiar=0.22` — **teria registrado presença** sem o veto.
+
+### ⚠️ O que ainda NÃO foi testado — não tratar como encerrado
+
+- **O caso difícil do rosto real.** O `0/6` de falso positivo foi medido com rosto de
+  **161–358px** (parado, perto da câmera). Em produção o aluno passa andando e aparece a
+  **60–75px**. Se o veto acusar nessa condição, vira **falta silenciosa** de aluno legítimo.
+  É o único risco sério que sobrou.
+- **Porta com sol direto ou janela no quadro.** O limiar é percentil **da cena**, medido em uma
+  iluminação só.
+- **Tablet.** Está no threat model e nunca foi coletado.
 
 **⚠️ Duas conclusões minhas foram falsificadas pelo log de produção no mesmo dia.** Os números
 reais da porta estão em [[biometria-camera.md]] — leia a seção "Números REAIS" antes de
@@ -38,10 +55,8 @@ Estado dos envs na máquina do Gustavo neste momento: `TEXTURE_FACE_MIN_PX=50`,
 `TEXTURE_LIVENESS_MIN=0.22`, `LIVENESS_POSE_STD_MIN=4.0` (esta última não faz nada com
 `ENABLE_TEXTURE=1` — pose é advisory).
 
-**Não considerar fechado.** O ataque de vídeo ainda registra presença.
-
-Decisão pendente com o Gustavo: o que fazer no interino (supervisão do professor / camera-sala
-deixar de auto-registrar / aceitar e divulgar).
+A decisão de interino (supervisão do professor / camera-sala deixar de auto-registrar) **deixou
+de ser necessária** — o ataque está barrado em produção desde 2026-08-16.
 
 ## Estado atual
 
@@ -54,36 +69,27 @@ Fechado em 2026-08-05: smoke test do app em device Android (as 12 telas da PR #1
 loop de render), correção do `.env` local que apontava para `scpi_db`/`postgres`, e remoção
 do pin de `cryptography` (mergeado e em prod).
 
-Em aberto desde 2026-08-05: branch `feat/validacao-replay-video` empurrada, **sem PR ainda**.
-Instrumenta `_validar_liveness.py` para medir replay de vídeo. Detalhe em [[biometria-camera.md]].
+Em 2026-08-16 as branches de liveness foram todas mergeadas e apagadas (#112, #113), junto com
+quatro antigas que já tinham PR mergeada (#106, #107, #108, #109). **Só `main` existe agora**,
+com 761 testes verdes; a única remota viva é a do Dependabot (#111, aberta).
+
+`.memory/wiki/` passou a ser **versionado na `main`** (o repo é PRIVADO — a crença de que era
+público estava errada). Branch criada antes disso ignora `.memory/` e **apaga o wiki do disco no
+checkout**; recuperar com `git archive main .memory/wiki | tar -x`.
 
 ## Próximos passos
 
-- [ ] **RETOMAR AQUI: coletar 20 bursts do log da porta.** Não precisa da ferramenta — o log
-      novo já traz `texture_max` + tamanhos por burst, no caminho real. ~10 passagens de pessoa
-      real **variadas** (rápido, devagar, de perfil, contra a luz — a variação é o ponto, porque
-      a causa raiz é nitidez) e ~10 do vídeo (variando distância e brilho). Com isso dá para
-      responder: existe limiar que separa? com que folga? quanto custa em falso-negativo?
-      Indício animador de n=1: real **0.7537** contra vídeo **0.2802**, fator 2,7× — um limiar
-      em ~0.45 separaria esse par. **Mas duas linhas de log não sustentam decisão** — foi
-      confiar em amostra pequena que produziu os dois erros do dia.
-      Se as distribuições se cruzarem, está respondido que parâmetro nenhum fecha, e vai para
-      camada B com dado da porta.
-- [ ] **Flag `--piso` em `_validar_liveness.py`** — Task 4 do mesmo plano, BLOQUEADA até o fix
-      mergear (importa `rosto_avaliavel`, que só passa a existir com ele). Vai para a
-      `feat/validacao-replay-video`.
-- [ ] **Camada B anti-replay** (bezel por Canny+Hough, moiré por FFT) — fecha o tablet colado
-      na câmera, que o piso não cobre. Sonda de 2026-08-06 mostrou sinal forte (mediana de
-      linhas longas: `real` 0, `tela` 2, `video` 1) **mas vetou 2 de 5 bursts reais**,
-      tropeçando em batente de porta e prateleira. O difícil não é achar o bezel, é não
-      confundir com parede — os discriminadores são quadrilátero FECHADO envolvendo o rosto,
-      razão de aspecto de aparelho, e **co-movimento com o rosto ao longo do burst** (moldura
-      acompanha, parede fica parada). Precisa da matriz refeita antes: calibrar contra 17
-      bursts de um corredor de apartamento é overfitar num batente. Falta a spec.
-- [ ] **Refazer a matriz na máquina da sala** — pré-requisito da camada B. A coleta de
-      2026-08-06 rodou em casa e sem `LIVENESS_COND` (17 bursts em `sem_cond`), então não diz
-      QUAL distância/aparelho quebra. 12 células, ≥6 bursts cada, **incluindo tablet, que nunca
-      foi coletado**. Runbook em `docs/superpowers/plans/2026-08-05-validacao-replay-video.md`.
+- [ ] **RETOMAR AQUI: passar pela porta do jeito DIFÍCIL, com o veto ligado.** É o único risco
+      sério que sobrou. Andando, na distância real de uso (rosto de ~60–75px, não colado na
+      câmera), de perfil, contra a luz. No log, `tela_frames` tem que dar **0**. Se der ≥2 numa
+      passagem legítima, o veto está tirando presença de aluno — nesse caso subir
+      `TELA_PERCENTIL` ou `TELA_MIN_FRAMES` e remedir, não deixar rodando.
+      Todas as medições do `0/6` de falso positivo foram com rosto de 161–358px, parado.
+- [ ] **Testar o veto com sol na porta / janela no quadro.** O limiar é percentil DA CENA e foi
+      medido em uma iluminação só. É o segundo caminho para falso positivo.
+- [ ] **Tablet** — está no threat model e **nunca foi coletado**. É o aparelho capaz de exibir
+      rosto grande, e com a moldura fora do quadro o veto emissivo fica cego (aí só a textura
+      segura). Coletar `v` com tablet, perto e longe.
 - [ ] **Gate da câmera da lousa** — ela ainda não existe em produção, mas quando existir o
       modelo de textura **não a atende** (rosto de 20–55px, zona de colapso). Precisa de gate
       geométrico, spec própria. Desenhar antes de subir a câmera, não depois.

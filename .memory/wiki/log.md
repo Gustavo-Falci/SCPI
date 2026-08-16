@@ -187,3 +187,30 @@ dizia "PAD local = futuro"); `CAMERA_SERVICE_TOKEN` ainda é o nome da env na m�
   diretório principal APAGA `.memory/wiki/` do disco (branches antigas o ignoram). Removido
   depois do commit; o commit sobrevive porque vive no objeto do repo, não no worktree. **Padrão
   a repetir** enquanto as branches divergirem no `.gitignore`: worktree em vez de checkout.
+- 2026-08-16: **veto anti-replay em produção, tudo mergeado, branches limpas.**
+  Implementado `scripts/deteccao_tela.py`: o rosto está dentro de uma região que emite luz?
+  Veta com precedência sobre a textura, exige ≥2 frames do burst, e é **fail-open** de propósito
+  (erro no detector não veta — falta silenciosa de aluno é pior que ataque que passa).
+  Medido na porta antes de subir: vídeo **7/7** bursts vetados (5/5 frames em todos), rosto real
+  **0/6**. Confirmado rodando em produção: 3/3 bursts de ataque barrados, e um tinha
+  `texture_max=0.2314` contra `tex_limiar=0.22` — **teria registrado presença** sem o veto.
+  A textura sozinha, no mesmo dado da porta, deixava passar 7/7 (0.221–0.880 contra rosto real
+  0.997–0.9996: folga de só 1.13×, que iluminação ruim derruba — no apartamento o real caiu a
+  0.002). Por isso o conserto NÃO foi mexer no limiar.
+  PRs #112 (veto + log de tamanho + wiki) e #113 (ferramenta) mergeadas com squash. Apagadas
+  também quatro branches antigas com PR já mergeada (#106, #107, #108, #109). Sobrou só `main`,
+  761 testes verdes; única remota viva é a do Dependabot (#111).
+  **Armadilha do squash confrontada:** `fix/piso-tamanho-rosto-textura` já estava mergeada (#109)
+  e tinha recebido commits novos. Simulação de merge (`git merge-tree`) acusou conflito em
+  `reconhecimento_tempo_real.py`. Solução: branch nova a partir da `main` levando só os 5
+  arquivos do trabalho novo, em vez de forçar a antiga.
+  **Bug pego por rodar o binário, não a suíte:** ao trocar as duplicatas da ferramenta pelos
+  módulos de produto, `_validar_liveness.py` quebrou com `ModuleNotFoundError` — e **761 testes
+  passaram assim mesmo**, porque o pytest resolve o `sys.path` e o script solto não. Só apareceu
+  no `--help`. Shim adicionado com o comentário explicando. Lição: para script executável,
+  suíte verde não prova que ele sobe.
+  Correção de fato: `.memory/wiki/` passou a ser versionado na `main` (repo é PRIVADO; a crença
+  de que era público estava errada e foi repetida o dia todo).
+  **Fica aberto e não é detalhe:** o `0/6` de falso positivo do veto foi medido com rosto de
+  161–358px, parado e perto. Em produção o aluno passa a 60–75px — condição NÃO testada. Falso
+  positivo ali vira falta silenciosa. Também não testados: porta com sol, e tablet.

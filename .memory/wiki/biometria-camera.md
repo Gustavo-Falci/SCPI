@@ -122,8 +122,7 @@ substituto.
 
 Testar sai de graça junto da coleta de 20 bursts na porta que já está pendente.
 
-**Instrumentado em 2026-08-16** — commit `3c5fd9cd` na `feat/validacao-replay-video` (7 commits
-na branch agora, ainda **sem PR**): `_validar_liveness.py` ganhou `_regiao_emissiva()` +
+**Instrumentado e MERGEADO** (PR #113, 2026-08-16): `_validar_liveness.py` ganhou `_regiao_emissiva()` +
 `_emissivo_do_burst()` com 6 testes puros, mais as flags `--piso PX` e `--percentil P`. O
 relatório do `--test` passa a imprimir a seção "Camada B candidata".
 
@@ -206,11 +205,11 @@ para vencer o **teto** ele precisa de rosto menor → e abaixo de ~40px o modelo
 para qualquer coisa. **O teto empurra o ataque para dentro do ponto cego.** Além disso o tamanho
 exibido é botão contínuo na mão do atacante, e o do aluno não é.
 
-### Correção parcial: piso de tamanho de rosto (branch aberta, 2026-08-06)
+### Piso de tamanho de rosto — MERGEADO (PR #109, 2026-08-06)
 
-Branch **`fix/piso-tamanho-rosto-textura`** empurrada, **3 commits, SEM PR e não mergeada**
-(verificado com `gh pr list` em 2026-08-16; registros anteriores diziam "PR aberto" — era
-suposição minha, não fato).
+Mergeado na `main`. O trabalho posterior da mesma branch (log de tamanho de rosto) foi para a
+PR #112 junto com o veto emissivo — a branch original já estava mergeada e receber commit novo
+nela dava conflito no merge seguinte (armadilha do squash).
 Spec: `docs/superpowers/specs/2026-08-06-piso-tamanho-rosto-porta-design.md`.
 
 **A ideia:** o gate errava porque respondia uma pergunta que não sabe responder. Abaixo de
