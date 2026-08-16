@@ -35,7 +35,16 @@ Amostras: .liveness_samples/<label>/<cond>/burst_NNN/frame_M.{png,txt}
   deixa qualquer preproc (margem/scale) ser testado depois.
   Diretório é git-ignored: são rostos de pessoas reais e o repo é público.
 """
+import sys
 import pathlib
+# Esta ferramenta roda como script solto (`python scripts/_validar_liveness.py`),
+# o que põe BackEnd/scripts/ no sys.path — e não BackEnd/, que é o que
+# `from scripts.` precisa. Sem este shim o import abaixo levanta
+# ModuleNotFoundError SÓ na execução real: nos testes o pytest já resolve o
+# path, então a suíte passa com o script quebrado. Mesmo shim de
+# reconhecimento_tempo_real.py:1-3.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
 import os
 import argparse
 import math
@@ -43,6 +52,9 @@ import time
 
 import cv2
 import numpy as np
+
+from scripts.anti_spoofing import rosto_avaliavel
+from scripts.deteccao_tela import regiao_emissiva
 
 _AQUI = pathlib.Path(__file__).resolve().parent
 
@@ -385,65 +397,10 @@ def _preproc_blob(frame, box, preproc):
 
 
 # ---------------------------------------------------------------------------
-# Camada B candidata — região emissiva (medição de 2026-08-06)
-#
-# Ideia: achar o aparelho e descartar todo rosto DENTRO dele. Ajustar o
-# retângulo por bordas FALHOU e não vale repetir: Canny devolve curva aberta
-# (área ~0, todo filtro de área mata), celular ocluído pela mão dá 7-22
-# vértices no approxPolyDP (nunca 4), e com o aparelho perto a moldura sai do
-# quadro — aí não existe retângulo na imagem.
-#
-# O que separou foi LUMINÂNCIA: rosto real não emite luz, rosto exibido está
-# sempre dentro de uma tela acesa. Sobre as 17 amostras de 2026-08-06:
-# 0/5 falso positivo em `real`, 4/6 de `tela` e 5/6 de `video` vetados.
-#
-# NÃO é gate de produto. É instrumento de medição: o limiar é percentil DA
-# CENA, então porta ensolarada ou corredor com janela podem produzir falso
-# positivo, e isso ainda não foi testado.
+# Camada B — região emissiva. A implementação canônica é do PRODUTO
+# (scripts/deteccao_tela.py): medição e gate TÊM que usar a mesma função,
+# senão o número medido deixa de descrever o que roda na câmera.
 # ---------------------------------------------------------------------------
-def _regiao_emissiva(frame, box, percentil=96.0):
-    """(contém, razão) — o rosto está dentro de uma região que emite luz?
-
-    `razão` = área do rosto / área da região, o discriminante de escala entre
-    tela de celular (rosto ocupa boa fração) e vão de porta iluminado (rosto é
-    fração minúscula). Devolve (False, 0.0) quando não há região que sirva.
-
-    A região precisa ser MAIOR que o rosto: reflexo pontual sobre a pele não é
-    aparelho, e uma tela sempre é maior que o rosto que exibe.
-    """
-    x, y, w, h = box
-    cx, cy = x + w / 2.0, y + h / 2.0
-    area_rosto = float(w * h)
-    if area_rosto <= 0:
-        return False, 0.0
-
-    g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    limite = float(np.percentile(g, percentil))
-    # `>=` e não `>`: quando a área acesa é maior que (100-percentil)% do
-    # quadro, o próprio percentil cai DENTRO dela e `>` zeraria a máscara.
-    # O preço é a cena uniforme virar uma máscara do quadro inteiro — barrado
-    # pela guarda de área logo abaixo, não por limiar.
-    mask = (g >= limite).astype(np.uint8) * 255
-    mask = cv2.morphologyEx(
-        mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
-    )
-    contornos, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Região que ocupa meio quadro não é aparelho: é a cena. Sem esta guarda,
-    # cena de brilho uniforme marca tudo como emissivo e veta rosto real.
-    area_max = frame.shape[0] * frame.shape[1] * 0.5
-
-    melhor = (False, 0.0)
-    for c in contornos:
-        area = cv2.contourArea(c)
-        if area <= area_rosto or area > area_max:
-            continue
-        if cv2.pointPolygonTest(c, (cx, cy), False) < 0:
-            continue
-        razao = area_rosto / area
-        if not melhor[0] or razao > melhor[1]:
-            melhor = (True, razao)
-    return melhor
 
 
 def _emissivo_do_burst(burst_dir, percentil=96.0):
@@ -455,22 +412,9 @@ def _emissivo_do_burst(burst_dir, percentil=96.0):
             continue
         box = tuple(int(v) for v in txt.read_text().split())
         total += 1
-        if _regiao_emissiva(frame, box, percentil)[0]:
+        if regiao_emissiva(frame, box, percentil)[0]:
             com += 1
     return com, total
-
-
-def _rosto_avaliavel(bbox, minimo):
-    """Lado MENOR do bbox contra o piso.
-
-    DUPLICATA TEMPORÁRIA de `anti_spoofing.rosto_avaliavel`, que vive na branch
-    `fix/piso-tamanho-rosto-textura` e ainda não mergeou. Assim que mergear,
-    trocar por `from scripts.anti_spoofing import rosto_avaliavel` — medição e
-    produto TÊM que usar o mesmo predicado, senão o número medido não descreve
-    o gate. A semântica está pinada por teste dos dois lados.
-    """
-    _x, _y, w, h = bbox
-    return min(w, h) >= minimo
 
 
 def _scores_do_burst(net, burst_dir, preproc, piso=0):
@@ -486,7 +430,7 @@ def _scores_do_burst(net, burst_dir, preproc, piso=0):
         if frame is None:
             continue
         box = tuple(int(v) for v in txt.read_text().split())
-        if not _rosto_avaliavel(box, piso):
+        if not rosto_avaliavel(box, piso):
             continue
         try:
             scores.append(_liveness_score(net, frame, box, preproc))
