@@ -384,14 +384,110 @@ def _preproc_blob(frame, box, preproc):
     return cv2.dnn.blobFromImage(crop, 1 / 255.0, (128, 128), swapRB=True)
 
 
-def _scores_do_burst(net, burst_dir, preproc):
-    """Liveness score de cada frame do burst. Frame ilegível é pulado."""
+# ---------------------------------------------------------------------------
+# Camada B candidata — região emissiva (medição de 2026-08-06)
+#
+# Ideia: achar o aparelho e descartar todo rosto DENTRO dele. Ajustar o
+# retângulo por bordas FALHOU e não vale repetir: Canny devolve curva aberta
+# (área ~0, todo filtro de área mata), celular ocluído pela mão dá 7-22
+# vértices no approxPolyDP (nunca 4), e com o aparelho perto a moldura sai do
+# quadro — aí não existe retângulo na imagem.
+#
+# O que separou foi LUMINÂNCIA: rosto real não emite luz, rosto exibido está
+# sempre dentro de uma tela acesa. Sobre as 17 amostras de 2026-08-06:
+# 0/5 falso positivo em `real`, 4/6 de `tela` e 5/6 de `video` vetados.
+#
+# NÃO é gate de produto. É instrumento de medição: o limiar é percentil DA
+# CENA, então porta ensolarada ou corredor com janela podem produzir falso
+# positivo, e isso ainda não foi testado.
+# ---------------------------------------------------------------------------
+def _regiao_emissiva(frame, box, percentil=96.0):
+    """(contém, razão) — o rosto está dentro de uma região que emite luz?
+
+    `razão` = área do rosto / área da região, o discriminante de escala entre
+    tela de celular (rosto ocupa boa fração) e vão de porta iluminado (rosto é
+    fração minúscula). Devolve (False, 0.0) quando não há região que sirva.
+
+    A região precisa ser MAIOR que o rosto: reflexo pontual sobre a pele não é
+    aparelho, e uma tela sempre é maior que o rosto que exibe.
+    """
+    x, y, w, h = box
+    cx, cy = x + w / 2.0, y + h / 2.0
+    area_rosto = float(w * h)
+    if area_rosto <= 0:
+        return False, 0.0
+
+    g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    limite = float(np.percentile(g, percentil))
+    # `>=` e não `>`: quando a área acesa é maior que (100-percentil)% do
+    # quadro, o próprio percentil cai DENTRO dela e `>` zeraria a máscara.
+    # O preço é a cena uniforme virar uma máscara do quadro inteiro — barrado
+    # pela guarda de área logo abaixo, não por limiar.
+    mask = (g >= limite).astype(np.uint8) * 255
+    mask = cv2.morphologyEx(
+        mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
+    )
+    contornos, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Região que ocupa meio quadro não é aparelho: é a cena. Sem esta guarda,
+    # cena de brilho uniforme marca tudo como emissivo e veta rosto real.
+    area_max = frame.shape[0] * frame.shape[1] * 0.5
+
+    melhor = (False, 0.0)
+    for c in contornos:
+        area = cv2.contourArea(c)
+        if area <= area_rosto or area > area_max:
+            continue
+        if cv2.pointPolygonTest(c, (cx, cy), False) < 0:
+            continue
+        razao = area_rosto / area
+        if not melhor[0] or razao > melhor[1]:
+            melhor = (True, razao)
+    return melhor
+
+
+def _emissivo_do_burst(burst_dir, percentil=96.0):
+    """(n_frames_com_regiao, n_frames_lidos) do burst."""
+    com = total = 0
+    for txt in sorted(pathlib.Path(burst_dir).glob("*.txt")):
+        frame = cv2.imread(str(txt.with_suffix(".png")))
+        if frame is None:
+            continue
+        box = tuple(int(v) for v in txt.read_text().split())
+        total += 1
+        if _regiao_emissiva(frame, box, percentil)[0]:
+            com += 1
+    return com, total
+
+
+def _rosto_avaliavel(bbox, minimo):
+    """Lado MENOR do bbox contra o piso.
+
+    DUPLICATA TEMPORÁRIA de `anti_spoofing.rosto_avaliavel`, que vive na branch
+    `fix/piso-tamanho-rosto-textura` e ainda não mergeou. Assim que mergear,
+    trocar por `from scripts.anti_spoofing import rosto_avaliavel` — medição e
+    produto TÊM que usar o mesmo predicado, senão o número medido não descreve
+    o gate. A semântica está pinada por teste dos dois lados.
+    """
+    _x, _y, w, h = bbox
+    return min(w, h) >= minimo
+
+
+def _scores_do_burst(net, burst_dir, preproc, piso=0):
+    """Liveness score de cada frame do burst. Frame ilegível é pulado.
+
+    Frame abaixo do `piso` não pontua — espelha o produto, onde a textura vira
+    None. Burst sem nenhum frame avaliável devolve [] (ausência de amostra),
+    NÃO score 0: zerar diria "fake perfeito" e inflaria a separação.
+    """
     scores = []
     for txt in sorted(pathlib.Path(burst_dir).glob("*.txt")):
         frame = cv2.imread(str(txt.with_suffix(".png")))
         if frame is None:
             continue
         box = tuple(int(v) for v in txt.read_text().split())
+        if not _rosto_avaliavel(box, piso):
+            continue
         try:
             scores.append(_liveness_score(net, frame, box, preproc))
         except cv2.error as e:
@@ -409,13 +505,14 @@ def _avisar_layout_antigo():
                   "IGNORADA: a spec exige recoletar 'real' na mesma sessão.")
 
 
-def _scores_por_label(net, preproc):
+def _scores_por_label(net, preproc, piso=0):
     """{label: {cond: [max_por_burst]}} — a grandeza que o gate compara."""
     resumo = {}
     for lbl in _LABELS.values():
         por_cond = {}
         for cond, burst_dir in _descobrir_bursts(_SAMPLES_DIR, lbl):
-            por_cond.setdefault(cond, []).append(_scores_do_burst(net, burst_dir, preproc))
+            por_cond.setdefault(cond, []).append(
+                _scores_do_burst(net, burst_dir, preproc, piso))
         resumo[lbl] = {cond: _max_por_burst(bursts) for cond, bursts in por_cond.items()}
     return resumo
 
@@ -443,7 +540,36 @@ def _debug_saida_crua(net, preproc):
     print("--- fim debug ---\n")
 
 
-def testar(modelo_path, preproc):
+def _relatorio_emissivo(percentil):
+    """Quanto a camada B candidata vetaria, por label e condição.
+
+    Veto = >=1 frame do burst com o rosto dentro de região emissiva. É o mesmo
+    critério de MAX do gate: um frame que denuncia a tela basta.
+    """
+    print(f"\n=== Camada B candidata: região emissiva (percentil {percentil:g}) ===")
+    print("  Veto = >=1 frame do burst com o rosto DENTRO de área que emite luz.")
+    for lbl in _LABELS.values():
+        bursts = _descobrir_bursts(_SAMPLES_DIR, lbl)
+        if not bursts:
+            print(f"  {lbl:6s}: (sem amostras)")
+            continue
+        por_cond = {}
+        for cond, bd in bursts:
+            com, tot = _emissivo_do_burst(bd, percentil)
+            por_cond.setdefault(cond, []).append((com, tot))
+        print(f"  {lbl}:")
+        for cond in sorted(por_cond):
+            v = por_cond[cond]
+            vet = sum(1 for com, _t in v if com >= 1)
+            print(f"    {cond:16s}: {vet}/{len(v)} bursts vetados  "
+                  f"(frames: {' '.join(f'{c}/{t}' for c, t in v)})")
+    print("  ⚠️  Em 'real' isto tem que dar ZERO. Qualquer veto aqui é aluno "
+          "legítimo perdendo presença.")
+    print("  ⚠️  O limiar é percentil DA CENA: porta ensolarada ou janela no "
+          "quadro podem inverter este resultado. É medição, não gate.")
+
+
+def testar(modelo_path, preproc, percentil=96.0, piso=0):
     if not os.path.exists(modelo_path):
         raise SystemExit(f"Modelo não encontrado: {modelo_path}")
     try:
@@ -454,11 +580,16 @@ def testar(modelo_path, preproc):
             "=> este modelo exigiria onnxruntime (dep nova)."
         )
     print(f"Modelo carregado em cv2.dnn OK. preproc={preproc}")
+    if piso:
+        print(f"Piso de rosto: {piso}px (lado menor). Frame abaixo NÃO pontua — "
+              "espelha TEXTURE_FACE_MIN_PX do produto.")
+    else:
+        print("Piso de rosto: 0 (desligado). Use --piso 80 para simular o gate atual.")
     _avisar_layout_antigo()
     _estatisticas_tamanho()
     _debug_saida_crua(net, preproc)
 
-    resumo = _scores_por_label(net, preproc)
+    resumo = _scores_por_label(net, preproc, piso)
 
     print("=== max-por-burst (0=fake .. 1=real) — a grandeza que o gate usa ===")
     for lbl, por_cond in resumo.items():
@@ -477,6 +608,7 @@ def testar(modelo_path, preproc):
     reais = [v for m in resumo.get("real", {}).values() for v in m]
     videos = [v for m in resumo.get("video", {}).values() for v in m]
     _imprimir_desfecho(reais, videos, resumo.get("video", {}), _TEXTURE_LIVENESS_MIN_ATUAL)
+    _relatorio_emissivo(percentil)
 
 
 def _imprimir_desfecho(reais, videos, video_por_cond, limiar_atual):
@@ -527,9 +659,15 @@ def main():
     ap.add_argument("--test", metavar="MODELO.onnx", help="roda modelo nas amostras coletadas")
     # facenox é o default: garciafido/minivision onnx testado veio quebrado.
     ap.add_argument("--preproc", choices=["minivision", "facenox"], default="facenox")
+    ap.add_argument("--piso", type=int, default=0, metavar="PX",
+                    help="descarta frames com rosto (lado menor) abaixo de PX, "
+                         "espelhando TEXTURE_FACE_MIN_PX do produto. 0 = desligado.")
+    ap.add_argument("--percentil", type=float, default=96.0, metavar="P",
+                    help="percentil de brilho da cena para a região emissiva "
+                         "da camada B candidata (default 96).")
     args = ap.parse_args()
     if args.test:
-        testar(args.test, args.preproc)
+        testar(args.test, args.preproc, args.percentil, args.piso)
     else:
         coletar()
 
