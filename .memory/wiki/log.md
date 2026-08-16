@@ -148,3 +148,42 @@ dizia "PAD local = futuro"); `CAMERA_SERVICE_TOKEN` ainda é o nome da env na m�
   distingue "nenhum rosto grande o bastante" de "textura baixa". Commitado e empurrado (3º
   commit da branch, que fecha com 3 no total).
   Retomada: 20 bursts do log da porta (10 real variados + 10 vídeo) para decidir com dado.
+- 2026-08-06 (4ª parte): **camada B — direção medida, e ela não é geometria.** Ideia do Gustavo:
+  achar o retângulo do aparelho e descartar todo rosto dentro dele. Estrutura certa; o método de
+  ACHAR o aparelho é que foi medido, em 3 implementações sobre as 17 amostras. Vencedora foi a
+  que NÃO ajusta retângulo: "o rosto está dentro de uma região que emite luz?" — 0/5 falso
+  positivo em `real`, 4/6 de `tela` e 5/6 de `video` vetados. Ajuste de retângulo bem feito
+  (Otsu + minAreaRect + retangularidade + aspecto) ficou PIOR que a heurística crua: 1/5 de falso
+  positivo e só 2/6 e 1/6 de detecção. Motivos documentados em [[biometria-camera.md]] para
+  ninguém repetir: Canny dá curva aberta (área ~0), celular ocluído pela mão dá 7–22 vértices
+  (nunca 4), e com o aparelho perto a moldura sai do quadro — aí não existe retângulo na imagem,
+  que é justamente a posição usada para vencer o piso.
+  Parei na 3ª tentativa por disciplina: 3 falhas do mesmo tipo é sinal de enquadramento errado,
+  não de parâmetro errado.
+  **Correção de fato: o repositório é PRIVADO**, não público. Passei o dia repetindo "repo é
+  público" (na spec e na wiki) como justificativa para não commitar amostras — premissa errada,
+  vinda de memória desatualizada. `gh repo view` confirma `visibility: PRIVATE`.
+  **Incidente de wiki:** `.memory/wiki/` sumiu do disco durante a sessão. Causa: a `main` passou
+  a VERSIONAR o wiki (commit b265ffe2) e a tirar `.memory/` do `.gitignore`, enquanto esta branch
+  saiu de um ponto anterior (734d87ce) onde ele era ignorado. Trocar de branch apaga os arquivos
+  do disco. Recuperado com `git archive main .memory/wiki | tar -x`. **O merge da branch é
+  seguro** — a base comum não tinha o wiki, então a adição da main prevalece. Mas editar o wiki
+  a partir desta branch é arriscado: aqui ele é git-ignored, a edição não é commitável e o
+  próximo checkout a destrói.
+- 2026-08-16: **instrumentada a medição da camada B.** Commit `3c5fd9cd` em
+  `feat/validacao-replay-video` (7 commits, sem PR): `_regiao_emissiva()` + `_emissivo_do_burst()` em
+  `_validar_liveness.py`, 6 testes puros com imagens sintéticas, mais flags `--piso PX` e
+  `--percentil P`, e uma seção nova no relatório do `--test`. Suíte 733 passed, 81 skipped.
+  Assim UMA coleta na porta responde de uma vez: limiar de textura, valor do piso e se a
+  camada B sobrevive com fundo e luz reais.
+  O teste sintético pegou um bug real da sonda original: `>` estrito sobre o percentil zera a
+  máscara quando a área acesa é maior que (100−percentil)% do quadro. Corrigido para `>=` mais
+  guarda de área (>50% do quadro = cena, não aparelho — o que também impede brilho uniforme
+  vetar rosto real). Efeito: `tela` subiu de 4/6 para **5/6** vetados mantendo 0/5 em `real`.
+  O número 4/6 registrado antes está corrigido para 5/6 em [[biometria-camera.md]].
+  Dívida deixada explícita: `_rosto_avaliavel` na ferramenta é duplicata temporária de
+  `anti_spoofing.rosto_avaliavel` (branch do fix, não mergeada) — virar import no merge.
+  Worktree criado em `C:/Users/itconsol/Documents/SCPI-wt-tool` porque trocar de branch no
+  diretório principal APAGA `.memory/wiki/` do disco (branches antigas o ignoram). Removido
+  depois do commit; o commit sobrevive porque vive no objeto do repo, não no worktree. **Padrão
+  a repetir** enquanto as branches divergirem no `.gitignore`: worktree em vez de checkout.

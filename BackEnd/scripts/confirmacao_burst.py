@@ -30,6 +30,8 @@ class ResultadoFrame:
     yaw: float | None = None
     pitch: float | None = None
     textura: float | None = None  # score de vida 0..1 do detector de textura
+    lado: int | None = None       # lado MENOR do bbox em px — só observabilidade
+    tela: bool | None = None      # rosto dentro de região emissiva (deteccao_tela)
 
 
 @dataclass(frozen=True)
@@ -41,11 +43,18 @@ class Avaliacao:
     std_yaw: float | None       # None = <2 amostras no eixo
     std_pitch: float | None
     magnitude: float | None     # hypot(std_yaw, std_pitch) — ADVISORY, não decide
+    # Tamanhos dos rostos que entraram no burst, na ordem dos frames. NÃO decide
+    # nada: existe para calibrar TEXTURE_FACE_MIN_PX em campo. Sem isto, um
+    # burst com texture_max=None não diz se o rosto tinha 79px ou 20px.
+    lados: tuple[int, ...] = ()
+    # Frames do burst com o rosto dentro de região emissiva. >= tela_min_frames
+    # VETA o registro, com precedência sobre a textura.
+    telas: int = 0
 
 
 class ConfirmadorBurst:
     def __init__(self, min_matches: int, pose_std_min: float, texture_min: float,
-                 gate: str = "textura"):
+                 gate: str = "textura", tela_min_frames: int = 2):
         if min_matches < 1:
             raise ValueError("min_matches deve ser >= 1")
         if pose_std_min < 0:
@@ -54,7 +63,10 @@ class ConfirmadorBurst:
             raise ValueError("texture_min deve estar em [0, 1]")
         if gate not in ("textura", "pose"):
             raise ValueError("gate deve ser 'textura' ou 'pose'")
+        if tela_min_frames < 1:
+            raise ValueError("tela_min_frames deve ser >= 1")
         self.min_matches = min_matches
+        self.tela_min_frames = tela_min_frames
         self.pose_std_min = pose_std_min
         self.texture_min = texture_min
         # gate="textura": textura decide, pose advisory (default, modelo presente).
@@ -82,10 +94,20 @@ class ConfirmadorBurst:
             std_pitch = pstdev(pitches) if len(pitches) >= 2 else None
             magnitude = self._magnitude(std_yaw, std_pitch)
 
+            telas = sum(1 for f in frames if f.tela)
+
             vivo = (self._vivo_textura(texture_max) if self.gate == "textura"
                     else self._vivo_pose(magnitude))
+            # Camada anti-replay: rosto dentro de região emissiva é tela, e isso
+            # VETA — com precedência sobre a textura. Medido em 2026-08-16 na
+            # porta: vídeo dava textura 0.221-0.880 (passava) com 5/5 frames
+            # emissivos; rosto real, 0/5. Exigir >=2 frames é corroboração: um
+            # brilho espúrio não pode virar falta silenciosa de aluno legítimo.
+            tela_vetou = telas >= self.tela_min_frames
             if len(frames) < self.min_matches:
                 decisao = Decisao.DESCARTAR
+            elif tela_vetou:
+                decisao = Decisao.PENDENTE
             elif vivo:
                 decisao = Decisao.REGISTRAR
             else:
@@ -94,6 +116,8 @@ class ConfirmadorBurst:
             avaliacoes[external_id] = Avaliacao(
                 decisao=decisao, matches=len(frames), texture_max=texture_max,
                 std_yaw=std_yaw, std_pitch=std_pitch, magnitude=magnitude,
+                lados=tuple(f.lado for f in frames if f.lado is not None),
+                telas=telas,
             )
         return avaliacoes
 

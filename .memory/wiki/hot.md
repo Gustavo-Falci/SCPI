@@ -15,8 +15,8 @@ A medição de replay que a branch `feat/validacao-replay-video` existia para pr
 `R=0.0017 < V=0.638` → **SOBREPOSTO**: não existe valor de `TEXTURE_LIVENESS_MIN` que separe.
 Não mexer no limiar.
 
-**Correção parcial já empurrada:** branch `fix/piso-tamanho-rosto-textura` (2 commits, PR
-aberto, **não mergeada**), **3 commits, todos empurrados**. Abaixo de `TEXTURE_FACE_MIN_PX` a
+**Correção parcial já empurrada:** branch `fix/piso-tamanho-rosto-textura` — **3 commits, todos
+empurrados, SEM PR e não mergeada** (verificado em 2026-08-16). Abaixo de `TEXTURE_FACE_MIN_PX` a
 textura devolve `None` ("não sei") e o fail-closed que já existia manda para PENDENTE. O 3º
 commit faz o log imprimir `rostos_px` / `rosto_menor` / `abaixo_do_piso` — é o instrumento sem o
 qual não dá para calibrar o piso, e é ele que já está gerando o dado da retomada.

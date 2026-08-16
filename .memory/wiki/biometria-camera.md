@@ -72,6 +72,77 @@ Teste de campo (2026-07-16): pessoa real REGISTRAR 100%, foto DESCARTAR 100% →
   código como **fallback paliativo** — a magnitude da variação decide, e sem amostras de pose
   o fail-safe continua valendo (não vivo).
 
+### 🧪 Camada B — direção MEDIDA (2026-08-06): luminância, não geometria
+
+Ideia do Gustavo: achar o retângulo do aparelho e **descartar todo rosto dentro dele**. A
+estrutura está certa e é complementar à textura. O que foi medido é o **método de achar o
+aparelho** — três implementações sobre as 17 amostras, e o resultado contraria a intuição:
+
+| tentativa | falso positivo em `real` | `tela` | `video` |
+|---|---|---|---|
+| 1. contar linhas retas soltas (`HoughLinesP`) | **2/5** ❌ | 5/6 | 6/6 |
+| 2. **região emissiva contendo o rosto** | **0/5** ✅ | **5/6** | **5/6** |
+| 3. ajuste de retângulo (Otsu escuro + brilho + Canny, `minAreaRect`) | **1/5** ❌ | 2/6 | 1/6 |
+
+**Vencedora: a 2, que não ajusta retângulo nenhum.** Só pergunta "o rosto está dentro de uma
+região que emite luz?" (topo ~4% de brilho da cena, contorno contendo o centro do rosto). Rosto
+real **nunca** cai dentro de uma região dessas — não emite luz; rosto exibido está sempre dentro
+de uma tela acesa.
+
+**Por que a geometria falha — não repetir sem dado novo:**
+
+- `findContours` sobre mapa do Canny não funciona: Canny devolve curvas **abertas**, área ~zero,
+  e qualquer filtro de área mata tudo (106 contornos, 0 aprovados).
+- Exigir 4 vértices do `approxPolyDP` nunca casa: celular **ocluído pela mão**, com um rosto
+  dentro da tela criando bordas internas, dá **7 a 22 vértices**.
+- Varrer o quadro inteiro faz batente de porta e prateleira competirem e vencerem.
+- Com as restrições "certas" (retangularidade ≥0.75, aspecto de aparelho, área mínima), os
+  ataques são descartados junto com o ruído — daí o 2/6 e 1/6 da tentativa 3.
+- **Limite real, não bug:** com o aparelho perto, a moldura **sai do quadro**. Não existe
+  retângulo completo na imagem. E essa é exatamente a posição que o atacante precisa usar para
+  vencer o piso de tamanho.
+
+Na tentativa 3, tanto o falso positivo em `real` quanto o único `video` detectado tinham o
+contorno **encostando na borda do quadro**. Descartando esses, o falso positivo some (0/5) mas o
+`video` cai para 0/6 — o único vídeo que a geometria pegava era o caso em que ela não é confiável.
+
+**Complementaridade com a textura, que é o motivo da camada B existir:**
+
+| | luminância/geometria | textura |
+|---|---|---|
+| aparelho **longe** (rosto pequeno) | **funciona** — aparelho inteiro no quadro | colapsa (~0.99 para tudo) |
+| aparelho **perto** (rosto grande) | cega — moldura fora do quadro | **funciona** (0.0001 em vídeo de 154–222px) |
+
+⚠️ **Ressalvas que impedem tratar como resolvido:** 5 bursts reais, uma sala, uma iluminação. O
+limiar de brilho é **percentil da cena** — numa porta com sol batendo, ou num corredor com
+janela/lâmpada no quadro, rosto real pode entrar no topo de brilho e virar falso positivo, e
+isso **não foi testado**. É derrubável pelo atacante baixando o brilho da tela, com o custo de
+degradar o match na Rekognition. E **falha aberto**: é veto **somado** à textura, nunca
+substituto.
+
+Testar sai de graça junto da coleta de 20 bursts na porta que já está pendente.
+
+**Instrumentado em 2026-08-16** — commit `3c5fd9cd` na `feat/validacao-replay-video` (7 commits
+na branch agora, ainda **sem PR**): `_validar_liveness.py` ganhou `_regiao_emissiva()` +
+`_emissivo_do_burst()` com 6 testes puros, mais as flags `--piso PX` e `--percentil P`. O
+relatório do `--test` passa a imprimir a seção "Camada B candidata".
+
+A implementação testada **diverge da sonda para melhor**: `tela` subiu de 4/6 para **5/6**
+vetados, sem perder o 0/5 de `real`. Causa: a sonda usava `>` estrito sobre o percentil, o que
+zera a máscara quando a área acesa é maior que (100−percentil)% do quadro; a versão final usa
+`>=` mais uma **guarda de área** (região que ocupa >50% do quadro não é aparelho, é a cena) —
+o que também impede cena de brilho uniforme vetar rosto real.
+
+Os dois ataques que ainda escapam são coerentes com a teoria: `tela/burst_005` (rosto de 11px,
+braço esticado) e `video/burst_004` (celular **perto**, moldura fora do quadro — o ponto cego
+estrutural, coberto pela textura).
+
+⚠️ `_rosto_avaliavel` na ferramenta é **duplicata temporária** de
+`anti_spoofing.rosto_avaliavel`, que está na `fix/piso-tamanho-rosto-textura` e ainda não
+mergeou. Trocar pelo import assim que mergear: medição e produto têm que usar o mesmo
+predicado, senão o número medido não descreve o gate. A semântica está pinada por teste dos
+dois lados.
+
 ### 🔬 Por que rosto REAL pontua baixo — causa raiz (2026-08-06)
 
 Sintoma: rosto real vivo pontua muito baixo com frequência, na porta, mesmo perto.
@@ -137,7 +208,9 @@ exibido é botão contínuo na mão do atacante, e o do aluno não é.
 
 ### Correção parcial: piso de tamanho de rosto (branch aberta, 2026-08-06)
 
-Branch **`fix/piso-tamanho-rosto-textura`** empurrada (2 commits, PR aberto, **não mergeada**).
+Branch **`fix/piso-tamanho-rosto-textura`** empurrada, **3 commits, SEM PR e não mergeada**
+(verificado com `gh pr list` em 2026-08-16; registros anteriores diziam "PR aberto" — era
+suposição minha, não fato).
 Spec: `docs/superpowers/specs/2026-08-06-piso-tamanho-rosto-porta-design.md`.
 
 **A ideia:** o gate errava porque respondia uma pergunta que não sabe responder. Abaixo de
