@@ -11,30 +11,50 @@ antes de comprometer o design (ver conversa 2026-07-18):
      tamanho? Roda em cv2.dnn sem op não suportada?
 
 Uso:
-  # Etapa A — coletar amostras rotuladas (roda na máquina com câmera):
-  python scripts/_validar_liveness.py
+  # Etapa A — coletar bursts rotulados (roda na máquina COM a câmera da sala).
+  # Uma execução por célula da matriz; LIVENESS_COND identifica a célula.
+  # Sintaxe PowerShell (esta ferramenta é Windows-only, usa cv2.CAP_DSHOW):
+  $env:LIVENESS_COND="2m-celular"; python scripts/_validar_liveness.py
      Teclas na janela:
-       r = salvar amostra ROSTO REAL (você na frente da câmera)
-       p = salvar amostra FOTO em PAPEL (mostre foto impressa)
-       t = salvar amostra FOTO em TELA  (mostre foto no celular/tablet)
+       r = ROSTO REAL      p = FOTO em PAPEL
+       t = FOTO em TELA    v = VÍDEO em TELA (replay — o ataque desta rodada)
        q = sair (imprime estatísticas de tamanho do rosto)
-     Colete ~15-20 de cada, na distância/posição REAL de uso.
+     Cada tecla grava um BURST de 5 frames em 2s, espelhando BURST_FRAMES /
+     BURST_DURACAO_S do produto. Frame solto subestimaria o atacante: o gate
+     decide por MAX do burst, então UM frame sortudo já registra presença.
+     Colete >= 6 bursts por célula, na distância/posição REAL de uso.
 
   # Etapa B — rodar um modelo ONNX nas amostras coletadas:
-  python scripts/_validar_liveness.py --test caminho/modelo.onnx
-  python scripts/_validar_liveness.py --test modelo.onnx --preproc minivision
+  python scripts/_validar_liveness.py --test scripts/models/best_model.onnx
 
-Amostras vão para o scratchpad (não sujam o repo):
-  cada amostra = frame inteiro (.jpg) + bbox do YuNet (.txt: "x y w h").
-  Guardar o frame bruto deixa qualquer preproc (margem/scale) ser testado depois.
+Amostras: .liveness_samples/<label>/<cond>/burst_NNN/frame_M.{png,txt}
+  cada frame = frame inteiro (.png, sem recompressão) + bbox do YuNet
+  (.txt: "x y w h"). PNG e não JPEG: o encode JPEG atenua o conteúdo de alta
+  frequência (moiré, grão de impressão) que o PAD de textura usa — pontuar
+  em cima disso manufaturaria margem que não existe. Guardar o frame bruto
+  deixa qualquer preproc (margem/scale) ser testado depois.
+  Diretório é git-ignored: são rostos de pessoas reais e o repo é público.
 """
+import sys
 import pathlib
+# Esta ferramenta roda como script solto (`python scripts/_validar_liveness.py`),
+# o que põe BackEnd/scripts/ no sys.path — e não BackEnd/, que é o que
+# `from scripts.` precisa. Sem este shim o import abaixo levanta
+# ModuleNotFoundError SÓ na execução real: nos testes o pytest já resolve o
+# path, então a suíte passa com o script quebrado. Mesmo shim de
+# reconhecimento_tempo_real.py:1-3.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
 import os
 import argparse
-import glob
+import math
+import time
 
 import cv2
 import numpy as np
+
+from scripts.anti_spoofing import rosto_avaliavel
+from scripts.deteccao_tela import regiao_emissiva
 
 _AQUI = pathlib.Path(__file__).resolve().parent
 
@@ -43,7 +63,25 @@ _SAMPLES_DIR = pathlib.Path(
     os.getenv("LIVENESS_SAMPLES_DIR", "")
     or (_AQUI.parent.parent / ".liveness_samples")
 )
-_LABELS = {"r": "real", "p": "papel", "t": "tela"}
+_LABELS = {"r": "real", "p": "papel", "t": "tela", "v": "video"}
+
+# Cadência espelhada do produto (reconhecimento_tempo_real.py): o gate decide
+# por MAX de BURST_FRAMES frames em BURST_DURACAO_S. Medir frame solto
+# subestima o atacante — basta UM frame acima do limiar para registrar presença.
+_BURST_FRAMES = 5
+_BURST_DURACAO_S = 2.0
+
+# Célula da matriz de coleta. Setar por execução: LIVENESS_COND=2m-celular
+_COND = (os.getenv("LIVENESS_COND") or "").strip() or "sem_cond"
+
+# Tolerância para "V é efetivamente zero". softmax sobre logits float32 quase
+# nunca devolve exatamente 0.0 — um fake saturado mede algo como 2e-09, não
+# 0.0 — então comparar `V == 0` é o teste errado; usar uma tolerância.
+_V_ZERO_TOL = 1e-6
+
+# Limiar em vigor em produção, mesma variável que reconhecimento_tempo_real.py
+# lê. A ferramenta nunca recomenda um valor abaixo deste (ver _recomendacao).
+_TEXTURE_LIVENESS_MIN_ATUAL = float(os.getenv("TEXTURE_LIVENESS_MIN", "0.08"))
 
 
 def _resolver_yunet() -> str:
@@ -72,12 +110,163 @@ def _maior_rosto(faces):
 
 
 # ---------------------------------------------------------------------------
+# Agregação — a conta que define o limiar
+# ---------------------------------------------------------------------------
+def _max_por_burst(scores_por_burst):
+    """MAX de cada burst. Burst sem nenhum score (nenhum rosto detectado) é
+    descartado, não vira 0 — 0 mentiria dizendo 'fake perfeito'."""
+    return [max(scores) for scores in scores_por_burst if scores]
+
+
+def _separacao(max_real, max_fake):
+    """(R, V, folga) sobre max-por-burst.
+
+    R = min(real): o pior burst de rosto real, o que define falso positivo.
+    V = max(fake): o melhor burst de ataque, o que define falso negativo.
+    folga = R / V. Devolve (None, None, None) se faltar amostra de um lado.
+    """
+    if not max_real or not max_fake:
+        return None, None, None
+    R = min(max_real)
+    V = max(max_fake)
+    folga = R / V if V > 0 else math.inf
+    return R, V, folga
+
+
+def _meio_geometrico(R, V):
+    """Limiar sugerido quando há separação: equidistante em escala log."""
+    return math.sqrt(R * V)
+
+
+def _limiar_sugerido(R, V):
+    """Limiar a recomendar. Com V~0 a separação é perfeita e o meio geométrico
+    colapsaria perto de 0 — que o gate lê como 'passa tudo'. Metade do pior
+    burst real é a escolha conservadora e continua muito acima de qualquer
+    ataque medido."""
+    if V < _V_ZERO_TOL:
+        return R / 2
+    return _meio_geometrico(R, V)
+
+
+def _recomendacao(R, V, limiar_atual):
+    """(valor_recomendado, subir). Nunca recomenda afrouxar o gate: se a
+    sugestão fica abaixo do limiar em vigor, a recomendação é MANTER o que
+    está lá — ele já foi calibrado contra foto e protege mais."""
+    sugerido = _limiar_sugerido(R, V)
+    if sugerido <= limiar_atual:
+        return limiar_atual, False
+    return sugerido, True
+
+
+# ---------------------------------------------------------------------------
+# Layout no disco: <raiz>/<label>/<cond>/burst_NNN/frame_M.{png,txt}
+# `cond` = célula da matriz de coleta (ex.: "2m-celular"), vem de LIVENESS_COND.
+# ---------------------------------------------------------------------------
+def _descobrir_bursts(raiz, label):
+    """[(cond, dir_do_burst)] ordenado. Amostra do layout antigo (frame solto
+    direto em <label>/) é ignorada: a spec exige recoletar `real` na mesma
+    sessão, então misturar iluminação de julho com a de hoje falsearia R."""
+    base = pathlib.Path(raiz) / label
+    if not base.is_dir():
+        return []
+    achados = []
+    for cond_dir in sorted(p for p in base.iterdir() if p.is_dir()):
+        for burst_dir in sorted(p for p in cond_dir.iterdir()
+                                if p.is_dir() and p.name.startswith("burst_")):
+            achados.append((cond_dir.name, burst_dir))
+    return achados
+
+
+def _proximo_indice_burst(raiz, label, cond):
+    """Continua a numeração entre execuções; nunca sobrescreve burst salvo.
+
+    Deriva do MAIOR índice existente + 1, não de len(): apagar um burst do
+    meio (ex.: burst_002 de um lote 000..004) não pode fazer o próximo take
+    mirar burst_002 de novo — isso mesclaria dois takes no mesmo diretório e
+    contaminaria o max-por-burst com frames de sessões diferentes.
+    """
+    existentes = [d for c, d in _descobrir_bursts(raiz, label) if c == cond]
+    indices = []
+    for d in existentes:
+        _prefixo, _sep, sufixo = d.name.partition("_")
+        try:
+            indices.append(int(sufixo))
+        except ValueError:
+            continue  # nome de diretório que não é burst_<int> — ignora
+    return max(indices, default=-1) + 1
+
+
+# ---------------------------------------------------------------------------
 # Etapa A — coleta
 # ---------------------------------------------------------------------------
-def coletar():
-    for lbl in _LABELS.values():
-        (_SAMPLES_DIR / lbl).mkdir(parents=True, exist_ok=True)
+def _drenar(cap, intervalo):
+    """Consome frames pelo resto do intervalo, em vez de dormir.
 
+    Um cap.read() logo após um gap (waitKey/sleep) devolve o que o backend
+    DirectShow tinha enfileirado, não um frame fresco — então o próximo frame
+    "capturado" pode ser velho, e o burst deixa de amostrar 2 s reais.
+    Ler e descartar continuamente mantém o buffer da câmera quente. O
+    cv2.waitKey(1) dentro do laço mantém a janela de preview bombeando o
+    event loop (sem isso a GUI trava até 2 s enquanto o operador mira o
+    aparelho).
+    """
+    alvo = time.monotonic() + intervalo
+    while time.monotonic() < alvo:
+        cap.read()
+        cv2.waitKey(1)
+
+
+def _gravar_burst(cap, detector, raiz, label, cond):
+    """Grava _BURST_FRAMES frames ao longo de _BURST_DURACAO_S.
+
+    Cada frame vira <burst>/frame_M.png (frame INTEIRO, sem recompressão) +
+    frame_M.txt (bbox do YuNet "x y w h"). Guardar o frame inteiro mantém a
+    liberdade de testar qualquer margem/scale depois. Frame sem rosto é
+    pulado, não aborta o burst. PNG (sem perdas) em vez de JPEG: o encode
+    JPEG atenua justo o conteúdo de alta frequência (moiré, grão de
+    impressão) que o PAD de textura usa — recomprimir manufaturaria margem
+    que não existe.
+    """
+    inicio = time.monotonic()
+    n = _proximo_indice_burst(raiz, label, cond)
+    destino = pathlib.Path(raiz) / label / cond / f"burst_{n:03d}"
+    destino.mkdir(parents=True, exist_ok=True)
+
+    intervalo = _BURST_DURACAO_S / _BURST_FRAMES
+    salvos = 0
+    for i in range(_BURST_FRAMES):
+        ok, frame = cap.read()
+        if not ok:
+            print("  (falha ao ler frame — pulado)")
+            _drenar(cap, intervalo)
+            continue
+        h_img, w_img = frame.shape[:2]
+        detector.setInputSize((w_img, h_img))
+        _, faces = detector.detect(frame)
+        box = _maior_rosto(faces)
+        if not box:
+            print(f"  frame {i}: sem rosto — pulado")
+            _drenar(cap, intervalo)
+            continue
+        base = destino / f"frame_{i}"
+        cv2.imwrite(str(base) + ".png", frame)
+        with open(str(base) + ".txt", "w") as fh:
+            fh.write("{} {} {} {}".format(*box))
+        salvos += 1
+        print(f"  frame {i}: rosto {box[2]}x{box[3]}px")
+        _drenar(cap, intervalo)
+
+    duracao = time.monotonic() - inicio
+    if salvos == 0:
+        destino.rmdir()
+        print(f"  ⚠️  burst descartado: nenhum frame com rosto (span={duracao:.2f}s).")
+    else:
+        print(f"  ✅ {label}/{cond}/burst_{n:03d}: {salvos}/{_BURST_FRAMES} frames, "
+              f"span={duracao:.2f}s.")
+    return salvos
+
+
+def coletar():
     detector = cv2.FaceDetectorYN.create(_resolver_yunet(), "", (320, 320), 0.6)
     cam_index = int(os.getenv("CAMERA_INDEX", "0"))
     cap = cv2.VideoCapture(cam_index, cv2.CAP_DSHOW)
@@ -86,9 +275,20 @@ def coletar():
     if not cap.isOpened():
         raise SystemExit(f"Não abriu câmera índice {cam_index}. Ajuste CAMERA_INDEX.")
 
-    contagem = {lbl: len(glob.glob(str(_SAMPLES_DIR / lbl / "*.jpg"))) for lbl in _LABELS.values()}
-    print("Coleta iniciada. Posicione na DISTÂNCIA REAL de uso.")
-    print("Teclas: [r]eal  [p]apel  [t]ela  [q]sair")
+    if _COND == "sem_cond":
+        print("⚠️  LIVENESS_COND não definida — o relatório não vai conseguir "
+              "quebrar por distância/aparelho. Ex.: LIVENESS_COND=2m-celular")
+    print(f"Coleta iniciada. Condição: {_COND}")
+    print(f"Cada tecla grava {_BURST_FRAMES} frames em {_BURST_DURACAO_S}s.")
+    print("Teclas: [r]eal  [p]apel  [t]ela(foto)  [v]ideo  [q]sair")
+
+    # Contagem lida do disco UMA vez e incrementada em memória. Chamar
+    # _descobrir_bursts a cada frame do preview seria uma varredura de
+    # diretório a 30 fps.
+    contagem = {
+        lbl: len([1 for c, _ in _descobrir_bursts(_SAMPLES_DIR, lbl) if c == _COND])
+        for lbl in _LABELS.values()
+    }
 
     try:
         while True:
@@ -107,8 +307,8 @@ def coletar():
                 cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 cv2.putText(vis, f"{w}x{h}px", (x, max(0, y - 8)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            hud = " ".join(f"{l}:{contagem[l]}" for l in _LABELS.values())
-            cv2.putText(vis, f"[r]eal [p]apel [t]ela [q]sair  {hud}",
+            hud = " ".join(f"{lbl}:{contagem[lbl]}" for lbl in _LABELS.values())
+            cv2.putText(vis, f"[r][p][t][v] [q]sair  cond={_COND}  {hud}",
                         (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
             cv2.imshow("Fase 0 - coleta liveness", vis)
 
@@ -118,16 +318,11 @@ def coletar():
                 break
             if tecla in _LABELS:
                 if not box:
-                    print("  (nenhum rosto detectado — não salvo)")
+                    print("  (nenhum rosto no frame de gatilho — burst não iniciado)")
                     continue
-                lbl = _LABELS[tecla]
-                n = contagem[lbl]
-                base = _SAMPLES_DIR / lbl / f"{lbl}_{n:03d}"
-                cv2.imwrite(str(base) + ".jpg", frame)
-                with open(str(base) + ".txt", "w") as fh:
-                    fh.write("{} {} {} {}".format(*box))
-                contagem[lbl] += 1
-                print(f"  salvo {lbl}_{n:03d}  rosto={box[2]}x{box[3]}px")
+                print(f"Burst {_LABELS[tecla]} / {_COND}…")
+                if _gravar_burst(cap, detector, _SAMPLES_DIR, _LABELS[tecla], _COND):
+                    contagem[_LABELS[tecla]] += 1
     finally:
         cap.release()
         cv2.destroyAllWindows()
@@ -139,16 +334,16 @@ def _estatisticas_tamanho():
     print("\n=== Tamanho do rosto (lado menor do bbox, px) ===")
     for lbl in _LABELS.values():
         lados = []
-        for txt in glob.glob(str(_SAMPLES_DIR / lbl / "*.txt")):
-            with open(txt) as fh:
-                _bx, _by, w, h = (int(v) for v in fh.read().split())
-            lados.append(min(w, h))
+        for _cond, burst_dir in _descobrir_bursts(_SAMPLES_DIR, lbl):
+            for txt in sorted(burst_dir.glob("*.txt")):
+                _bx, _by, w, h = (int(v) for v in txt.read_text().split())
+                lados.append(min(w, h))
         if not lados:
             print(f"  {lbl:6s}: (sem amostras)")
             continue
         lados.sort()
         med = lados[len(lados) // 2]
-        print(f"  {lbl:6s}: n={len(lados):2d}  min={lados[0]:3d}  "
+        print(f"  {lbl:6s}: n={len(lados):3d}  min={lados[0]:3d}  "
               f"mediana={med:3d}  max={lados[-1]:3d}")
     print("\nRegra prática: MiniFASNet espera ~80px. Se a mediana do 'real' vier "
           "bem abaixo (ex.: <60px), o modelo provavelmente degrada na distância "
@@ -201,21 +396,85 @@ def _preproc_blob(frame, box, preproc):
     return cv2.dnn.blobFromImage(crop, 1 / 255.0, (128, 128), swapRB=True)
 
 
-def _debug_saida_crua(net, preproc):
-    """Imprime shape + valores crus do modelo p/ 1 amostra de cada label.
-    Revela a interpretação correta do output (índice da classe 'live')."""
-    print("\n--- DEBUG saída crua (1 amostra por label) ---")
+# ---------------------------------------------------------------------------
+# Camada B — região emissiva. A implementação canônica é do PRODUTO
+# (scripts/deteccao_tela.py): medição e gate TÊM que usar a mesma função,
+# senão o número medido deixa de descrever o que roda na câmera.
+# ---------------------------------------------------------------------------
+
+
+def _emissivo_do_burst(burst_dir, percentil=96.0):
+    """(n_frames_com_regiao, n_frames_lidos) do burst."""
+    com = total = 0
+    for txt in sorted(pathlib.Path(burst_dir).glob("*.txt")):
+        frame = cv2.imread(str(txt.with_suffix(".png")))
+        if frame is None:
+            continue
+        box = tuple(int(v) for v in txt.read_text().split())
+        total += 1
+        if regiao_emissiva(frame, box, percentil)[0]:
+            com += 1
+    return com, total
+
+
+def _scores_do_burst(net, burst_dir, preproc, piso=0):
+    """Liveness score de cada frame do burst. Frame ilegível é pulado.
+
+    Frame abaixo do `piso` não pontua — espelha o produto, onde a textura vira
+    None. Burst sem nenhum frame avaliável devolve [] (ausência de amostra),
+    NÃO score 0: zerar diria "fake perfeito" e inflaria a separação.
+    """
+    scores = []
+    for txt in sorted(pathlib.Path(burst_dir).glob("*.txt")):
+        frame = cv2.imread(str(txt.with_suffix(".png")))
+        if frame is None:
+            continue
+        box = tuple(int(v) for v in txt.read_text().split())
+        if not rosto_avaliavel(box, piso):
+            continue
+        try:
+            scores.append(_liveness_score(net, frame, box, preproc))
+        except cv2.error as e:
+            raise SystemExit(f"Falha na inferência ({txt}):\n  {e}")
+    return scores
+
+
+def _avisar_layout_antigo():
+    """Amostra de 2026-07-19 ficava solta em <label>/*.jpg. É ignorada — mas em
+    silêncio o operador pensaria que ela entrou na conta."""
     for lbl in _LABELS.values():
-        txts = sorted(glob.glob(str(_SAMPLES_DIR / lbl / "*.txt")))
+        base = _SAMPLES_DIR / lbl
+        if base.is_dir() and any(base.glob("*.jpg")):
+            print(f"⚠️  {base} tem amostra do layout antigo (frame solto). "
+                  "IGNORADA: a spec exige recoletar 'real' na mesma sessão.")
+
+
+def _scores_por_label(net, preproc, piso=0):
+    """{label: {cond: [max_por_burst]}} — a grandeza que o gate compara."""
+    resumo = {}
+    for lbl in _LABELS.values():
+        por_cond = {}
+        for cond, burst_dir in _descobrir_bursts(_SAMPLES_DIR, lbl):
+            por_cond.setdefault(cond, []).append(
+                _scores_do_burst(net, burst_dir, preproc, piso))
+        resumo[lbl] = {cond: _max_por_burst(bursts) for cond, bursts in por_cond.items()}
+    return resumo
+
+
+def _debug_saida_crua(net, preproc):
+    """Imprime shape + valores crus do modelo p/ 1 frame de cada label.
+    Revela a interpretação correta do output (índice da classe 'live')."""
+    print("\n--- DEBUG saída crua (1 frame por label) ---")
+    for lbl in _LABELS.values():
+        achados = _descobrir_bursts(_SAMPLES_DIR, lbl)
+        txts = sorted(achados[0][1].glob("*.txt")) if achados else []
         if not txts:
             print(f"  {lbl:6s}: (sem amostras)")
             continue
-        jpg = txts[0][:-4] + ".jpg"
-        frame = cv2.imread(jpg)
+        frame = cv2.imread(str(txts[0].with_suffix(".png")))
         if frame is None:
             continue
-        with open(txts[0]) as fh:
-            box = tuple(int(v) for v in fh.read().split())
+        box = tuple(int(v) for v in txts[0].read_text().split())
         blob = _preproc_blob(frame, box, preproc)
         net.setInput(blob)
         out = net.forward()
@@ -225,7 +484,36 @@ def _debug_saida_crua(net, preproc):
     print("--- fim debug ---\n")
 
 
-def testar(modelo_path, preproc):
+def _relatorio_emissivo(percentil):
+    """Quanto a camada B candidata vetaria, por label e condição.
+
+    Veto = >=1 frame do burst com o rosto dentro de região emissiva. É o mesmo
+    critério de MAX do gate: um frame que denuncia a tela basta.
+    """
+    print(f"\n=== Camada B candidata: região emissiva (percentil {percentil:g}) ===")
+    print("  Veto = >=1 frame do burst com o rosto DENTRO de área que emite luz.")
+    for lbl in _LABELS.values():
+        bursts = _descobrir_bursts(_SAMPLES_DIR, lbl)
+        if not bursts:
+            print(f"  {lbl:6s}: (sem amostras)")
+            continue
+        por_cond = {}
+        for cond, bd in bursts:
+            com, tot = _emissivo_do_burst(bd, percentil)
+            por_cond.setdefault(cond, []).append((com, tot))
+        print(f"  {lbl}:")
+        for cond in sorted(por_cond):
+            v = por_cond[cond]
+            vet = sum(1 for com, _t in v if com >= 1)
+            print(f"    {cond:16s}: {vet}/{len(v)} bursts vetados  "
+                  f"(frames: {' '.join(f'{c}/{t}' for c, t in v)})")
+    print("  ⚠️  Em 'real' isto tem que dar ZERO. Qualquer veto aqui é aluno "
+          "legítimo perdendo presença.")
+    print("  ⚠️  O limiar é percentil DA CENA: porta ensolarada ou janela no "
+          "quadro podem inverter este resultado. É medição, não gate.")
+
+
+def testar(modelo_path, preproc, percentil=96.0, piso=0):
     if not os.path.exists(modelo_path):
         raise SystemExit(f"Modelo não encontrado: {modelo_path}")
     try:
@@ -233,46 +521,81 @@ def testar(modelo_path, preproc):
     except cv2.error as e:
         raise SystemExit(
             f"cv2.dnn NÃO carregou o ONNX (possível op não suportada):\n  {e}\n"
-            "=> este modelo exigiria onnxruntime (dep nova). Ponto #2 do advisor."
+            "=> este modelo exigiria onnxruntime (dep nova)."
         )
     print(f"Modelo carregado em cv2.dnn OK. preproc={preproc}")
-    _estatisticas_tamanho()  # px do rosto (risco distância)
+    if piso:
+        print(f"Piso de rosto: {piso}px (lado menor). Frame abaixo NÃO pontua — "
+              "espelha TEXTURE_FACE_MIN_PX do produto.")
+    else:
+        print("Piso de rosto: 0 (desligado). Use --piso 80 para simular o gate atual.")
+    _avisar_layout_antigo()
+    _estatisticas_tamanho()
     _debug_saida_crua(net, preproc)
 
-    resumo = {}
-    for lbl in _LABELS.values():
-        scores = []
-        for txt in sorted(glob.glob(str(_SAMPLES_DIR / lbl / "*.txt"))):
-            jpg = txt[:-4] + ".jpg"
-            frame = cv2.imread(jpg)
-            if frame is None:
-                continue
-            with open(txt) as fh:
-                box = tuple(int(v) for v in fh.read().split())
-            try:
-                scores.append(_liveness_score(net, frame, box, preproc))
-            except cv2.error as e:
-                raise SystemExit(f"Falha na inferência ({jpg}):\n  {e}")
-        resumo[lbl] = scores
+    resumo = _scores_por_label(net, preproc, piso)
 
-    print("\n=== Liveness score (0=fake .. 1=real) ===")
-    for lbl, scores in resumo.items():
-        if not scores:
-            print(f"  {lbl:6s}: (sem amostras)")
+    print("=== max-por-burst (0=fake .. 1=real) — a grandeza que o gate usa ===")
+    for lbl, por_cond in resumo.items():
+        if not por_cond:
+            print(f"  {lbl}: (sem amostras)")
             continue
-        scores.sort()
-        med = scores[len(scores) // 2]
-        print(f"  {lbl:6s}: n={len(scores):2d}  min={scores[0]:.3f}  "
-              f"mediana={med:.3f}  max={scores[-1]:.3f}")
-    reais = resumo.get("real", [])
-    fakes = resumo.get("papel", []) + resumo.get("tela", [])
-    if reais and fakes:
-        print(f"\nSeparação: min(real)={min(reais):.3f} vs max(fake)={max(fakes):.3f}")
-        if min(reais) > max(fakes):
-            print("  ✅ Separável — existe limiar que separa real de foto nesta distância.")
+        print(f"  {lbl}:")
+        for cond in sorted(por_cond):
+            m = sorted(por_cond[cond])
+            if not m:
+                print(f"    {cond:16s}: (nenhum burst com rosto)")
+                continue
+            print(f"    {cond:16s}: n={len(m):2d}  min={m[0]:.3f}  "
+                  f"mediana={m[len(m) // 2]:.3f}  max={m[-1]:.3f}")
+
+    reais = [v for m in resumo.get("real", {}).values() for v in m]
+    videos = [v for m in resumo.get("video", {}).values() for v in m]
+    _imprimir_desfecho(reais, videos, resumo.get("video", {}), _TEXTURE_LIVENESS_MIN_ATUAL)
+    _relatorio_emissivo(percentil)
+
+
+def _imprimir_desfecho(reais, videos, video_por_cond, limiar_atual):
+    """Tabela de desfecho da spec 2026-08-05."""
+    R, V, folga = _separacao(reais, videos)
+    if R is None:
+        print("\n⚠️  Sem amostra de 'real' ou de 'video' — nada a concluir. "
+              "Colete os dois na MESMA sessão (spec: iluminação desloca o score).")
+        return
+
+    print(f"\n=== Desfecho ===\n  R = min(max_burst(real))  = {R:.4f}"
+          f"\n  V = max(max_burst(video)) = {V:.4f}\n  folga = R/V = {folga:.2f}x"
+          f"\n  limiar em vigor (TEXTURE_LIVENESS_MIN) = {limiar_atual:.6g}")
+    if R > V and folga >= 2.0:
+        valor, subir = _recomendacao(R, V, limiar_atual)
+        if subir:
+            print(f"  ✅ SEPARADO com folga. Subir TEXTURE_LIVENESS_MIN para "
+                  f"{valor:.6g}. Nenhum código novo no loop.")
         else:
-            print("  ⚠️  Sobreposto — não há limiar limpo. Modelo fraco nesta distância; "
-                  "considerar fallback (endurecer pose) OU aproximar/melhorar câmera.")
+            print(f"  ✅ SEPARADO com folga, mas a sugestão ({_limiar_sugerido(R, V):.6g}) "
+                  f"fica ABAIXO do limiar em vigor ({limiar_atual:.6g}). MANTER "
+                  f"TEXTURE_LIVENESS_MIN em {valor:.6g} — ele já foi calibrado contra "
+                  f"foto e protege mais que o que este vídeo exigiria.")
+    elif R > V:
+        valor, subir = _recomendacao(R, V, limiar_atual)
+        if subir:
+            print(f"  ⚠️  SEPARADO, folga fina (<2x). Limiar sugerido "
+                  f"{valor:.6g} MAIS camada anti-replay "
+                  f"(bezel/moiré) nas condições que encostam.")
+        else:
+            print(f"  ⚠️  SEPARADO, folga fina (<2x), mas a sugestão "
+                  f"({_limiar_sugerido(R, V):.6g}) fica ABAIXO do limiar em vigor "
+                  f"({limiar_atual:.6g}). MANTER TEXTURE_LIVENESS_MIN em {valor:.6g} "
+                  f"— ele já protege mais que a sugestão — MAIS camada anti-replay "
+                  f"(bezel/moiré) nas condições que encostam.")
+    else:
+        print("  ❌ SOBREPOSTO — não há limiar que separe. Camada anti-replay "
+              "é obrigatória.")
+
+    if video_por_cond:
+        pior = max(video_por_cond.items(), key=lambda kv: max(kv[1], default=0.0))
+        print(f"  Condição de ataque mais forte: {pior[0]} "
+              f"(max={max(pior[1], default=0.0):.6g})")
 
 
 def main():
@@ -280,9 +603,15 @@ def main():
     ap.add_argument("--test", metavar="MODELO.onnx", help="roda modelo nas amostras coletadas")
     # facenox é o default: garciafido/minivision onnx testado veio quebrado.
     ap.add_argument("--preproc", choices=["minivision", "facenox"], default="facenox")
+    ap.add_argument("--piso", type=int, default=0, metavar="PX",
+                    help="descarta frames com rosto (lado menor) abaixo de PX, "
+                         "espelhando TEXTURE_FACE_MIN_PX do produto. 0 = desligado.")
+    ap.add_argument("--percentil", type=float, default=96.0, metavar="P",
+                    help="percentil de brilho da cena para a região emissiva "
+                         "da camada B candidata (default 96).")
     args = ap.parse_args()
     if args.test:
-        testar(args.test, args.preproc)
+        testar(args.test, args.preproc, args.percentil, args.piso)
     else:
         coletar()
 
