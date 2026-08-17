@@ -2,7 +2,7 @@
 
 *Contexto imediato. Atualizar ao fim de toda sessão.*
 
-**Última atualização: 2026-08-16.**
+**Última atualização: 2026-08-17.**
 
 ## ✅ Liveness: o bypass foi FECHADO — mas com um teste faltando
 
@@ -72,6 +72,14 @@ do pin de `cryptography` (mergeado e em prod).
 Em 2026-08-16 as branches de liveness foram todas mergeadas e apagadas (#112, #113), junto com
 quatro antigas que já tinham PR mergeada (#106, #107, #108, #109). **Só `main` existe agora**,
 com 761 testes verdes; a única remota viva é a do Dependabot (#111, aberta).
+
+Em 2026-08-17 o **Security Scan** estava vermelho na `main` (desde o push de 2026-08-16 e na run
+agendada) por 4 advisories high no `npm audit (app)`. Corrigido na branch
+`fix/npm-audit-app-deps`, **ainda sem commit/PR** (Gustavo commita): overrides de `js-yaml` para
+3.15.1/4.3.1 (os pins antigos ficaram um patch curtos da advisory nova), `nanoid@3: 3.3.18` (a PR
+do Dependabot para `/app` falhou), e os dois GHSA de `image-size` na ALLOWLIST do gate — não têm
+versão corrigida publicada e vêm pinados pelo metro do Expo 55. Gate roda exit 0 local, `tsc` e
+`expo lint` verdes. Detalhe em [[log.md]].
 
 `.memory/wiki/` passou a ser **versionado na `main`** (o repo é PRIVADO — a crença de que era
 público estava errada). Branch criada antes disso ignora `.memory/` e **apaga o wiki do disco no
