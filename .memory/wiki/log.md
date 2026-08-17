@@ -238,3 +238,24 @@ dizia "PAD local = futuro"); `CAMERA_SERVICE_TOKEN` ainda é o nome da env na m�
   **Armadilha local:** no PowerShell o pipe entre dois executáveis insere BOM e o gate morre com
   "Não foi possível parsear a saída" — artefato de shell no Windows, não bug do script (o CI roda
   em bash). Rodar esse pipe pelo Bash.
+- 2026-08-17: **revisão das 2 PRs abertas (#114, #115) — as duas verdes e mergeáveis.**
+  #114: `nanoid` 3.3.17→3.3.18 no `portal/package-lock.json`, devDep (postcss/tailwind), fecha o
+  **único alerta aberto** do Dependabot. #115: grupo `python-minor`, 13 pins do BackEnd; `fastapi`
+  fica em 0.136.1 (o pin contra o release malicioso não foi tocado), pip-audit --strict e os 761
+  testes verdes com o `requirements.txt` novo instalado de fato pelo CI. Starlette 1.3.1→1.6.0 é o
+  maior salto e é inócuo aqui: as mudanças são GZipMiddleware, header Range e um `max_body_size`
+  opt-in, e não usamos nenhum dos três (`api.py` só registra CSRF/CORS/ProxyHeaders/SecurityHeaders).
+  **sentry-sdk 2.68.0 torna `enable_logs`/`enable_metrics` no-op** e move a coleta automática para
+  um `capture_sentry_logs` por integração, **default False**. Nossa postura de PII sobrevive
+  intacta porque ela nunca dependeu de `enable_logs`: é `LoggingIntegration(level=None,
+  event_level=None)` em `core/observabilidade.py`, e não chamamos a API `sentry_sdk.logger.X`.
+  **Risco real que o CI não cobre:** `opencv-python` 4.13→4.14 e `numpy` 2.5.1→2.5.2 rodam na
+  máquina da câmera, que não tem teste automatizado — e a margem do liveness é fina (limiar 0.22
+  contra medições de 0.22–0.28 em ataque). Depois de atualizar a máquina da porta, **remedir com
+  `_validar_liveness.py`** antes de confiar nos limiares.
+  **Descoberta que muda em que sinal confiar:** os alertas do Dependabot para `/app` estão
+  **errados**. `js-yaml` (2 alertas) e `nanoid` aparecem como **`fixed`** enquanto o
+  `app/package-lock.json` da `main` ainda tem 3.15.0/4.3.0/3.3.16 — versões dentro do range das
+  advisories. E os dois GHSA de `image-size` **nunca geraram alerta nenhum**. Ou seja: a tela de
+  alertas mostra `/app` limpo, o `npm audit` mostra 4 high. **O gate do `security.yml` é o sinal;
+  a tela de alertas não é.**
