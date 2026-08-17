@@ -16,19 +16,25 @@
  * Toda entrada precisa de motivo e de condição de saída (o que destrava a remoção).
  */
 const ALLOWLIST = {
-  "GHSA-mh99-v99m-4gvg": {
-    pacote: "brace-expansion",
+  "GHSA-w3rx-r6r6-pgpr": {
+    pacote: "image-size",
     motivo:
-      "DoS por expansão sem limite (CVE-2026-14257). JÁ CORRIGIDO na árvore: " +
-      "overrides pinam 1.1.18 (backport publicado em 2026-07-30, mantém a API " +
-      "callable que minimatch@3 exige) e 5.0.9 (o 5.0.8 do advisory deixou " +
-      "expandSequence e o acúmulo de `values` sem teto de maxLength). " +
-      "O alerta persiste porque o range da advisory é `<= 5.0.7` em semver puro, " +
-      "que engloba o ramo 1.x inteiro — inclusive o 1.1.18 já corrigido.",
+      "DoS por laço infinito no parser ICNS. SEM CORREÇÃO PUBLICADA: o range é " +
+      "`<= 2.0.2` e 2.0.2 é a última versão que existe no registry — não há " +
+      "versão para onde subir. Na árvore entra como image-size@1.2.1, pinado por " +
+      "metro@0.83.7 (expo 55 → @expo/metro), fora do nosso controle. " +
+      "Exposição real é de build/dev: metro é bundler, não vai no binário do app, " +
+      "e só processa asset local do próprio repo — não há entrada de terceiro.",
     remover_quando:
-      "o GitHub corrigir o range da advisory para excluir o 1.x corrigido " +
-      "(ou expo/react-native/eslint migrarem para glob 10+, eliminando " +
-      "minimatch@3 da árvore).",
+      "image-size publicar 2.0.3+ E o metro do SDK do Expo em uso passar a " +
+      "resolver essa versão (checar `npm ls image-size` em app/).",
+  },
+  "GHSA-5p2g-fcmc-qvqq": {
+    pacote: "image-size",
+    motivo:
+      "Mesmo pacote e mesma cadeia do GHSA-w3rx-r6r6-pgpr, outros parsers " +
+      "(JXL e HEIF). Sem versão corrigida publicada; vale a mesma justificativa.",
+    remover_quando: "igual ao GHSA-w3rx-r6r6-pgpr.",
   },
 };
 

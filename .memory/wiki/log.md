@@ -214,3 +214,27 @@ dizia "PAD local = futuro"); `CAMERA_SERVICE_TOKEN` ainda é o nome da env na m�
   **Fica aberto e não é detalhe:** o `0/6` de falso positivo do veto foi medido com rosto de
   161–358px, parado e perto. Em produção o aluno passa a 60–75px — condição NÃO testada. Falso
   positivo ali vira falta silenciosa. Também não testados: porta com sol, e tablet.
+- 2026-08-17: **Security Scan agendado voltou a verde — 4 advisories high no `npm audit (app)`.**
+  Falhava desde o push de 2026-08-16 (e na run agendada de segunda), sempre no mesmo job; PR não
+  pegava porque o `paths-filter` só roda o job de mobile quando o PR toca `app/`. Diagnóstico:
+  `js-yaml` (GHSA-5p4m-2wfm-xmqj) — os overrides `js-yaml@3: 3.15.0` / `js-yaml@4: 4.3.0`
+  ficaram **um patch curtos**: a advisory nova corta exatamente em 3.15.1 / 4.3.1, ou seja, o
+  pin que resolvia a advisory anterior virou o alvo da seguinte. `nanoid` (GHSA-2v37-7h3g-55p8)
+  — 3.3.16 na árvore via `@react-navigation/native`, `expo-router` e `postcss`; a PR do
+  Dependabot para `/app` **falhou** (`bin/run update_files` exit 1, sem detalhe no log) enquanto
+  a de `/portal` mergeou, e o Dependabot ignora a stack Expo/react-navigation, então sozinho não
+  ia resolver. `image-size` (GHSA-w3rx-r6r6-pgpr e GHSA-5p2g-fcmc-qvqq) — **sem correção
+  possível**: o range é `<= 2.0.2` e 2.0.2 é a última versão publicada; entra como 1.2.1 pinado
+  por `metro@0.83.7` (expo 55). O `fixAvailable` do npm sugeria `expo 53.0.27`, que é
+  **downgrade de major** — não confiar nesse campo.
+  Correção: overrides para 3.15.1 / 4.3.1 e `nanoid@3: 3.3.18`; os dois GHSA de `image-size`
+  entraram na ALLOWLIST do gate com motivo e condição de saída (metro é bundler de build, não
+  vai no binário e só processa asset do próprio repo). Removida a entrada de `brace-expansion`
+  — o gate já vinha avisando por `::notice::` que ela não aparecia mais no audit, prova de que
+  vale a pena o script reclamar de allowlist obsoleta.
+  Verificado com o comando do CI (`npm audit --json | node .github/scripts/npm-audit-gate.mjs`):
+  exit 0, 10 high restantes todos nas cadeias de `image-size`. `tsc --noEmit` e `expo lint` verdes;
+  diff do lockfile é só version/resolved/integrity dos 3 pacotes.
+  **Armadilha local:** no PowerShell o pipe entre dois executáveis insere BOM e o gate morre com
+  "Não foi possível parsear a saída" — artefato de shell no Windows, não bug do script (o CI roda
+  em bash). Rodar esse pipe pelo Bash.
