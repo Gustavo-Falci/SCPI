@@ -1,5 +1,8 @@
 .vscode/
 .env
+# Backup/intermediário do reorganizador do .env — mesmos segredos do original.
+.env.bak
+.env.novo
 # Amostras da validação Fase 0 de anti-spoofing (scripts/_validar_liveness.py)
 .liveness_samples/
 # Logs de aplicação (retenção 90 dias via TimedRotatingFileHandler)

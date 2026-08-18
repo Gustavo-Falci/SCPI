@@ -27,6 +27,12 @@
 
 ---
 
-⚠️ **Este diretório é git-ignored de propósito.** O repositório `Gustavo-Falci/SCPI` é
-público e estas páginas contêm caminhos de produção, IPs, nomes de segredo e dívida de
-segurança conhecida. Não versionar sem sanitizar.
+⚠️ **Este diretório É VERSIONADO na `main`** desde 2026-08-16. O repositório
+`Gustavo-Falci/SCPI` é **PRIVADO** — a afirmação anterior de que era público (e a
+consequente regra de manter a wiki git-ignored) estava errada.
+
+Ainda assim, estas páginas contêm caminhos de produção, IPs, nomes de segredo e dívida de
+segurança conhecida: **nunca tornar o repositório público sem sanitizar antes.**
+
+Branch criada antes de 2026-08-16 ainda ignora `.memory/` e **apaga a wiki do disco no
+checkout**. Recuperar com `git archive main .memory/wiki | tar -x`.
