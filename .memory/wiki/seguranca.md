@@ -24,7 +24,7 @@ em 2026-05-18. O sistema é TCC **com uso real e biometria facial**, portanto so
 12. Pipeline `security.yml` (Bandit, pip-audit, gitleaks, npm audit, SBOM CycloneDX).
 13. `dependabot.yml`.
 14. Boot hardening: warning de `RESEND_API_KEY`, helper `_env_int` para `DB_POOL_*`.
-15. Runbook em `docs/SECURITY_RUNBOOK.md`.
+15. Runbook em `docs/runbooks/SECURITY_RUNBOOK.md`.
 
 ### Design do #8 (cookie + CSRF)
 
@@ -85,7 +85,7 @@ Mudanças operacionais:
 
 - **`CAMERA_SERVICE_TOKEN` global e `CAMERA_SALA` não existem mais.** Token **por sala** em
   `camera_tokens` (SHA-256), emitido por `BackEnd/scripts/camera_token.py`, roteiro em
-  `docs/SECURITY_RUNBOOK.md`. A sala vem do token, nunca do cliente.
+  `docs/runbooks/SECURITY_RUNBOOK.md`. A sala vem do token, nunca do cliente.
 - Portal sem CDN: Tailwind e Inter vendorizados, CSP por meta tag. `connect-src` fixa
   `https://api.scpi.me` e precisa ser editado junto de `portal/js/env.js` ao trocar de host —
   inclusive para dev local.
