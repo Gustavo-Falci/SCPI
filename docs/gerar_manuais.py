@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import sys
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -96,7 +97,16 @@ def partir_inline(texto: str) -> list:
         if not pedaco:
             continue
         if pedaco.startswith("**") and pedaco.endswith("**"):
-            partes.append(("negrito", pedaco[2:-2]))
+            # Negrito pode ter código aninhado (ex.: "**Incrementar o `?v=N`**"):
+            # cada trecho entre crases dentro do negrito vira um run à parte,
+            # em vez de imprimir a crase literal dentro do texto em negrito.
+            for sub in re.split(r"(`[^`]+`)", pedaco[2:-2]):
+                if not sub:
+                    continue
+                if sub.startswith("`") and sub.endswith("`"):
+                    partes.append(("negrito-codigo", sub[1:-1]))
+                else:
+                    partes.append(("negrito", sub))
         elif pedaco.startswith("`") and pedaco.endswith("`"):
             partes.append(("codigo", pedaco[1:-1]))
         else:
@@ -105,7 +115,17 @@ def partir_inline(texto: str) -> list:
 
 
 def _celulas(linha: str) -> list:
-    return [c.strip() for c in linha.strip().strip("|").split("|")]
+    """Divide linha de tabela por pipes, respeitando pipes escapados com \\|.
+
+    A barra invertida de escape é removida do resultado final.
+    """
+    linha = linha.strip().strip("|")
+    # Substituir pipes escapados por um marcador temporário
+    marcador = "\x00PIPE_ESCAPADO\x00"
+    linha_processada = linha.replace("\\|", marcador)
+    # Dividir pelos pipes não escapados e restaurar os pipes escapados
+    celulas = [c.replace(marcador, "|").strip() for c in linha_processada.split("|")]
+    return celulas
 
 
 def parse(texto: str) -> Manual:
@@ -164,13 +184,57 @@ def parse(texto: str) -> Manual:
 
         if linha.startswith(">"):
             descarregar()
-            conteudo = linha[1:].strip()
-            achou = re.match(r"^\*\*([^:*]+):\*\*\s*(.*)$", conteudo)
-            if achou and achou.group(1) in ROTULOS_CALLOUT:
-                blocos.append(Callout(achou.group(1), achou.group(2)))
-            else:
-                blocos.append(Callout("", conteudo))
-            i += 1
+            rotulo_atual = ""
+            buffer_callout: list = []
+            primeira_linha = True
+
+            def descarregar_callout():
+                nonlocal rotulo_atual, buffer_callout
+                if buffer_callout:
+                    blocos.append(Callout(rotulo_atual, " ".join(buffer_callout)))
+                    buffer_callout = []
+                rotulo_atual = ""
+
+            while i < len(linhas) and linhas[i].startswith(">"):
+                conteudo = linhas[i][1:].strip()
+
+                if conteudo.startswith("```"):
+                    descarregar_callout()
+                    linguagem = conteudo[3:].strip()
+                    i += 1
+                    corpo_codigo = []
+                    while (
+                        i < len(linhas)
+                        and linhas[i].startswith(">")
+                        and not linhas[i][1:].strip().startswith("```")
+                    ):
+                        corpo_codigo.append(linhas[i][1:].strip())
+                        i += 1
+                    if i >= len(linhas) or not linhas[i].startswith(">"):
+                        raise ErroDeFonte(
+                            "bloco de código dentro de citação não fechado (falta > ```)"
+                        )
+                    blocos.append(Codigo(linguagem, corpo_codigo))
+                    i += 1
+                    continue
+
+                if not conteudo:
+                    # linha de citação em branco: separador dentro do bloco, não vira texto
+                    i += 1
+                    continue
+
+                achou = None
+                if primeira_linha and not buffer_callout:
+                    achou = re.match(r"^\*\*([^:*]+):\*\*\s*(.*)$", conteudo)
+                if achou and achou.group(1) in ROTULOS_CALLOUT:
+                    rotulo_atual = achou.group(1)
+                    buffer_callout.append(achou.group(2))
+                else:
+                    buffer_callout.append(conteudo)
+                primeira_linha = False
+                i += 1
+
+            descarregar_callout()
             continue
 
         item = re.match(r"^(-|\d+\.)\s+(.*)$", linha)
@@ -219,8 +283,14 @@ def numerar(blocos: list) -> list:
     return blocos
 
 
-def _texto_dos_blocos(manual: Manual) -> str:
-    """Extrai todo o texto dos blocos de um manual."""
+def _texto_dos_blocos(manual: Manual, incluir_codigo: bool = False) -> str:
+    """Extrai todo o texto dos blocos de um manual.
+
+    Por padrão não inclui blocos de código: a varredura de referência cruzada
+    não deve acusar um nome de arquivo citado dentro de um comando. Passar
+    `incluir_codigo=True` para a contagem de ⚠️ CONFIRMAR, que precisa pegar
+    também o que está dentro de um bloco de comando (OCID, bucket, host).
+    """
     partes = []
     for bloco in manual.blocos:
         if isinstance(bloco, (Paragrafo, Titulo)):
@@ -233,6 +303,8 @@ def _texto_dos_blocos(manual: Manual) -> str:
             partes.extend(bloco.cabecalho)
             for linha in bloco.linhas:
                 partes.extend(linha)
+        elif incluir_codigo and isinstance(bloco, Codigo):
+            partes.extend(bloco.linhas)
     return "\n".join(partes)
 
 
@@ -241,12 +313,13 @@ def validar(manual: Manual, fontes_conhecidas: set) -> list:
 
     Levanta ErroDeFonte se houver referência cruzada quebrada.
     """
-    texto = _texto_dos_blocos(manual)
+    texto_confirmar = _texto_dos_blocos(manual, incluir_codigo=True)
     avisos = []
-    if "CONFIRMAR" in texto:
-        pendentes = texto.count("CONFIRMAR")
+    if "CONFIRMAR" in texto_confirmar:
+        pendentes = texto_confirmar.count("CONFIRMAR")
         avisos.append("%d marcação(ões) ⚠️ CONFIRMAR ainda pendentes" % pendentes)
-    referencias = set(re.findall(r"\b(\d{2}-[a-z0-9-]+\.md)\b", texto))
+    texto_referencias = _texto_dos_blocos(manual, incluir_codigo=False)
+    referencias = set(re.findall(r"\b(\d{2}-[a-z0-9-]+\.md)\b", texto_referencias))
     quebradas = sorted(r for r in referencias if r not in fontes_conhecidas)
     if quebradas:
         raise ErroDeFonte("referência para manual inexistente: %s" % ", ".join(quebradas))
@@ -288,6 +361,10 @@ def _escrever_inline(paragrafo, texto: str) -> None:
         if estilo == "negrito":
             run.bold = True
         elif estilo == "codigo":
+            run.font.name = FONTE_CODIGO
+            run.font.size = Pt(10)
+        elif estilo == "negrito-codigo":
+            run.bold = True
             run.font.name = FONTE_CODIGO
             run.font.size = Pt(10)
 
@@ -358,14 +435,71 @@ def gerar_docx(manual: Manual, destino: Path) -> None:
 
     destino.parent.mkdir(parents=True, exist_ok=True)
     documento.save(str(destino))
+    _normalizar_docx(destino, manual.meta["data"])
+
+
+def _normalizar_docx(destino: Path, data_str: str) -> None:
+    """Regrava o .docx com `date_time` fixo em todos os membros do zip.
+
+    Um `.docx` é um zip; python-docx grava cada membro com o timestamp do
+    momento da gravação. Regerar o mesmo manual sem mudar a fonte produz
+    então um binário diferente a cada vez — ruído permanente em
+    `git status` com onze manuais. O `date_time` de cada membro é fixado a
+    partir da data do front-matter (`data:`), para que duas gerações da
+    mesma fonte produzam bytes idênticos.
+    """
+    try:
+        ano, mes, dia = (int(p) for p in data_str.split("-"))
+        data_fixa = (ano, mes, dia, 0, 0, 0)
+    except ValueError:
+        data_fixa = (1980, 1, 1, 0, 0, 0)
+
+    with zipfile.ZipFile(destino, "r") as zf:
+        membros = [(info, zf.read(info.filename)) for info in zf.infolist()]
+
+    with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as zf:
+        for info, dados in membros:
+            novo = zipfile.ZipInfo(info.filename, date_time=data_fixa)
+            novo.compress_type = info.compress_type
+            novo.external_attr = info.external_attr
+            novo.create_system = info.create_system
+            zf.writestr(novo, dados)
+
+
+def _resolver_caminho_fonte(nome: str) -> Path | None:
+    """Resolve o argumento de linha de comando para um arquivo-fonte existente.
+
+    Aceita tanto o nome solto ("01-ambiente-dev.md", resolvido contra
+    RAIZ_DOCS) quanto o caminho relativo à raiz do repositório
+    ("docs/01-ambiente-dev.md", o que o autocompletar do shell produz quando
+    o comando é digitado a partir da raiz). Devolve None se nenhuma forma
+    corresponder a um arquivo existente.
+    """
+    candidatos = [Path(nome), RAIZ_DOCS / nome]
+    partes = Path(nome).parts
+    if partes and partes[0] == RAIZ_DOCS.name:
+        candidatos.append(RAIZ_DOCS.joinpath(*partes[1:]))
+    for candidato in candidatos:
+        if candidato.is_file():
+            return candidato
+    return None
 
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     fontes_conhecidas = {p.name for p in sorted(RAIZ_DOCS.glob("[0-9][0-9]-*.md"))}
-    alvos = [RAIZ_DOCS / nome for nome in argv] or sorted(
-        RAIZ_DOCS.glob("[0-9][0-9]-*.md")
-    )
+
+    if argv:
+        alvos = []
+        for nome in argv:
+            caminho = _resolver_caminho_fonte(nome)
+            if caminho is None:
+                print("ERRO: fonte não encontrada: %s" % nome)
+                return 1
+            alvos.append(caminho)
+    else:
+        alvos = sorted(RAIZ_DOCS.glob("[0-9][0-9]-*.md"))
+
     if not alvos:
         print("nenhuma fonte encontrada em %s" % RAIZ_DOCS)
         return 1
@@ -379,6 +513,9 @@ def main(argv=None) -> int:
             gerar_docx(manual, saida)
         except ErroDeFonte as erro:
             print("ERRO em %s: %s" % (caminho.name, erro))
+            return 1
+        except OSError as erro:
+            print("ERRO ao ler %s: %s" % (caminho.name, erro))
             return 1
         for aviso in avisos:
             print("aviso  %s: %s" % (caminho.name, aviso))

@@ -11,6 +11,7 @@ from gerar_manuais import (
     Tabela,
     Titulo,
     gerar_docx,
+    main,
     partir_inline,
     parse,
     nome_saida,
@@ -271,3 +272,203 @@ def test_estilos_de_titulo_sao_heading_do_word(tmp_path):
     estilos = {p.text: p.style.name for p in docx.Document(str(destino)).paragraphs}
     assert estilos["1 Um"] == "Heading 1"
     assert estilos["1.1 Dois"] == "Heading 2"
+
+
+def test_tabela_com_pipe_escapado_produz_pipe_literal():
+    fonte = CABECALHO + (
+        "| Comando | Para quê |\n"
+        "|---|---|\n"
+        "| `npm audit --json \\| node gate.mjs` | roda o gate |\n"
+    )
+    tabela = [b for b in parse(fonte).blocos if isinstance(b, Tabela)][0]
+    assert tabela.cabecalho == ["Comando", "Para quê"]
+    assert len(tabela.linhas) == 1
+    assert len(tabela.linhas[0]) == 2
+    # A célula deve conter o pipe literal sem a barra invertida
+    assert tabela.linhas[0][0] == "`npm audit --json | node gate.mjs`"
+    assert tabela.linhas[0][1] == "roda o gate"
+
+
+def test_tabela_com_pipe_escapado_valida_colunas_erradas():
+    fonte = CABECALHO + (
+        "| A | B |\n"
+        "|---|---|\n"
+        "| `só tem uma \\| com escape` |\n"
+    )
+    with pytest.raises(ErroDeFonte, match="colunas"):
+        parse(fonte)
+
+
+# --- B1: callout de várias linhas vira um único Callout ---------------------
+
+
+def test_callout_de_varias_linhas_vira_um_callout_so():
+    fonte = CABECALHO + (
+        "> **Atenção:** primeira linha do aviso que\n"
+        "> continua na segunda linha e\n"
+        "> termina na terceira.\n"
+    )
+    callouts = [b for b in parse(fonte).blocos if isinstance(b, Callout)]
+    assert len(callouts) == 1
+    assert callouts[0].rotulo == "Atenção"
+    assert callouts[0].texto == (
+        "primeira linha do aviso que continua na segunda linha e termina na terceira."
+    )
+
+
+def test_callout_sem_rotulo_de_varias_linhas_tambem_junta():
+    fonte = CABECALHO + (
+        "> texto solto que\n"
+        "> continua aqui.\n"
+    )
+    callouts = [b for b in parse(fonte).blocos if isinstance(b, Callout)]
+    assert len(callouts) == 1
+    assert callouts[0].rotulo == ""
+    assert callouts[0].texto == "texto solto que continua aqui."
+
+
+# --- B2: bloco de código dentro de citação vira Codigo normal ---------------
+
+
+def test_bloco_de_codigo_dentro_de_citacao_vira_codigo_normal():
+    fonte = CABECALHO + (
+        "> **Atenção:** confira antes de commitar:\n"
+        ">\n"
+        "> ```bash\n"
+        "> git diff -- a b\n"
+        "> ```\n"
+        ">\n"
+        "> A saída tem de estar vazia.\n"
+    )
+    blocos = parse(fonte).blocos
+    assert [type(b).__name__ for b in blocos] == ["Callout", "Codigo", "Callout"]
+    callout1, codigo, callout2 = blocos
+    assert callout1.rotulo == "Atenção"
+    assert callout1.texto == "confira antes de commitar:"
+    assert codigo.linguagem == "bash"
+    assert codigo.linhas == ["git diff -- a b"]
+    assert callout2.rotulo == ""
+    assert callout2.texto == "A saída tem de estar vazia."
+    # nenhuma crase de bloco de código deve sobrar no texto do callout
+    assert "```" not in callout1.texto
+    assert "```" not in callout2.texto
+
+
+def test_codigo_dentro_de_citacao_sem_fechamento_falha():
+    fonte = CABECALHO + (
+        "> **Atenção:** confira antes de commitar:\n"
+        "> ```bash\n"
+        "> git diff -- a b\n"
+    )
+    with pytest.raises(ErroDeFonte, match="não fechado"):
+        parse(fonte)
+
+
+# --- B3: negrito com código aninhado ----------------------------------------
+
+
+def test_partir_inline_negrito_com_codigo_aninhado():
+    assert partir_inline("**Incrementar o `?v=N`**") == [
+        ("negrito", "Incrementar o "),
+        ("negrito-codigo", "?v=N"),
+    ]
+
+
+def test_partir_inline_negrito_todo_ele_codigo():
+    assert partir_inline("**`BackEnd/infra/migrations.py`**") == [
+        ("negrito-codigo", "BackEnd/infra/migrations.py"),
+    ]
+
+
+def test_escrever_inline_negrito_com_codigo_produz_runs_sem_crase(tmp_path):
+    fonte = CABECALHO + "## Um\n\ntexto com **`BackEnd/infra/migrations.py`** no meio.\n"
+    manual = parse(fonte)
+    numerar(manual.blocos)
+    destino = tmp_path / "s.docx"
+    gerar_docx(manual, destino)
+    documento = docx.Document(str(destino))
+    paragrafo = [p for p in documento.paragraphs if "no meio" in p.text][0]
+    assert "`" not in paragrafo.text
+    runs_codigo = [r for r in paragrafo.runs if r.text == "BackEnd/infra/migrations.py"]
+    assert runs_codigo, "esperava um run isolado com o texto do código"
+    assert runs_codigo[0].bold is True
+    assert runs_codigo[0].font.name == "Consolas"
+
+
+# --- B4: CONFIRMAR dentro de Codigo entra na contagem, mas não na referência cruzada ---
+
+
+def test_validar_conta_confirmar_dentro_de_bloco_de_codigo():
+    manual = Manual(
+        meta={}, blocos=[Codigo("bash", ["oci os bucket create --name ⚠️ CONFIRMAR"])]
+    )
+    avisos = validar(manual, fontes_conhecidas=set())
+    assert any("CONFIRMAR" in a for a in avisos)
+
+
+def test_validar_nao_varre_codigo_para_referencia_cruzada():
+    manual = Manual(
+        meta={},
+        blocos=[Codigo("bash", ["python docs/gerar_manuais.py 99-inexistente.md"])],
+    )
+    # não deve levantar, mesmo citando um "manual" inexistente dentro do comando
+    assert validar(manual, fontes_conhecidas=set()) == []
+
+
+# --- B5: main() aceita as duas formas de caminho e falha com mensagem clara ---
+
+
+def test_main_aceita_nome_solto():
+    assert main(["01-ambiente-dev.md"]) == 0
+
+
+def test_main_aceita_caminho_relativo_a_raiz_do_repo():
+    assert main(["docs/01-ambiente-dev.md"]) == 0
+
+
+def test_main_com_arquivo_inexistente_devolve_mensagem_clara(capsys):
+    codigo = main(["99-nao-existe.md"])
+    assert codigo == 1
+    saida = capsys.readouterr()
+    assert "Traceback" not in saida.out
+    assert "Traceback" not in saida.err
+    assert "99-nao-existe.md" in (saida.out + saida.err)
+
+
+# --- C1: regerar sem mudar a fonte produz bytes idênticos -------------------
+
+
+def test_gerar_docx_duas_vezes_produz_bytes_identicos(tmp_path, monkeypatch):
+    # Sem controlar o relógio, duas gerações rápidas em sequência podem cair
+    # no mesmo segundo par e "passar" mesmo com o bug (o zip trunca a
+    # resolução do timestamp em 2s). Avançamos o relógio manualmente entre
+    # as duas gerações para que o teste pegue o bug de verdade.
+    import time as time_mod
+
+    relogio = [1_700_000_000]
+
+    def tempo_falso():
+        relogio[0] += 10
+        return relogio[0]
+
+    monkeypatch.setattr(time_mod, "time", tempo_falso)
+
+    fonte = CABECALHO + (
+        "## Introdução\n\nTexto de abertura.\n\n"
+        "### Peças\n\n"
+        "| Peça | Função |\n|---|---|\n| scpi-api | serve a API |\n\n"
+        "> **Importante:** não remover o HEAD da rota.\n\n"
+        "```bash\nsystemctl status scpi-api\n```\n"
+    )
+    destino1 = tmp_path / "um.docx"
+    destino2 = tmp_path / "dois.docx"
+
+    manual1 = parse(fonte)
+    numerar(manual1.blocos)
+    gerar_docx(manual1, destino1)
+
+    manual2 = parse(fonte)
+    numerar(manual2.blocos)
+    gerar_docx(manual2, destino2)
+
+    assert destino1.read_bytes() == destino2.read_bytes()

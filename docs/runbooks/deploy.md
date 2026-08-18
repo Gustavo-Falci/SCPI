@@ -15,6 +15,7 @@
 ```bash
 cd /opt/scpi
 git pull
+source venv/bin/activate
 cd BackEnd
 pip install -r requirements.txt --upgrade
 sudo systemctl restart scpi-api

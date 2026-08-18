@@ -42,11 +42,13 @@ Quatro rótulos aparecem ao longo do texto:
 
 Este manual cobre a máquina do desenvolvedor. Três assuntos vizinhos moram em outros manuais da suíte:
 
-- **Produção** — a VM, o systemd, o nginx, o deploy, os backups e os timers estão no Manual de Operações da VM. Nada neste documento deve ser executado contra o servidor de produção.
+- **Produção** — a VM, o systemd, o nginx, o deploy, os backups e os timers estão no Manual da VM de Produção (ainda não escrito). Nada neste documento deve ser executado contra o servidor de produção.
 - **Câmera e liveness** — o script de reconhecimento contínuo, os modelos ONNX, a calibração dos limiares e as duas camadas de anti-spoofing estão no Manual de Liveness. Aqui a câmera aparece só como um dos quatro componentes do sistema.
 - **Contas de terceiros e segredos** — AWS, Resend, Expo, Firebase, Sentry, e o backup de segredos cifrado com `age`, estão no Manual de Contas e Segredos. Aqui você aprende a **gerar** as chaves locais, não a recuperar as de produção.
 
 > **Atenção:** nenhum valor de segredo aparece neste manual, por decisão de projeto. Onde uma chave é necessária, o texto diz onde ela mora e como gerar uma nova.
+
+> **Pegadinha:** além dos manuais numerados desta suíte (que ainda não cobrem toda a operação — a VM de Produção segue sem manual próprio), existem dois manuais legados em `docs/`: `SCPI-Manual-Operacoes.docx` (backup do PostgreSQL e monitoramento) e `SCPI-Manual-Liveness.docx`. Quem lê só os manuais novos não descobre que eles existem — vale abrir os dois antes de assumir que falta documentação.
 
 ## Visão geral do sistema
 
@@ -196,7 +198,7 @@ pip install tzdata python-docx
 
 ### Criar o arquivo .env
 
-Existe **um único** `.env`, na raiz do repositório. Ele alimenta a API, os scripts do backend, o script da câmera e — via `npm run sync-env` — o app mobile.
+Existe **um `.env` por máquina**, sempre na raiz do repositório clonado nela — a máquina de desenvolvimento tem o seu, e a máquina da câmera tem o dela (ver os blocos 8 e 9 na tabela abaixo). Ele alimenta a API, os scripts do backend, o script da câmera e — via `npm run sync-env` — o app mobile.
 
 > **Atenção:** este passo roda **na raiz do repositório**, e o passo anterior deixou você em `BackEnd/`. Por isso os dois blocos abaixo começam com `cd ..`. Rodados de dentro de `BackEnd/`, eles falham: `BackEnd/.env.example` não existe.
 
