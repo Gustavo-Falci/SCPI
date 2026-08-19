@@ -50,8 +50,17 @@ audit_logger = logging.getLogger("scpi.audit")
 router = APIRouter(tags=["alunos"])
 
 
-@router.get("/aluno/dashboard/{usuario_id}")
+@router.get("/aluno/dashboard/{usuario_id}", summary="Resumo do dashboard do aluno")
 def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    """Devolve nome do aluno, frequência geral (%) e as aulas de hoje
+    (conforme turno e dia da semana).
+
+    Só o próprio aluno ou um Admin pode consultar (`require_self_or_admin`
+    — mismatch devolve 404, não 403, para não confirmar a existência do
+    recurso a quem não é dono). Devolve 404 se o `usuario_id` não tiver
+    perfil de aluno. `frequencia_geral` é 0 quando não há chamadas ainda
+    (evita divisão por zero).
+    """
     require_self_or_admin(usuario_id, current_user)
     try:
         row = obter_dashboard_aluno(usuario_id)
@@ -75,8 +84,16 @@ def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_curren
         raise internal_error(e)
 
 
-@router.get("/aluno/frequencias/{usuario_id}")
+@router.get("/aluno/frequencias/{usuario_id}", summary="Frequência do aluno por turma")
 def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    """Devolve a média geral de presença do aluno e o detalhamento por turma
+    (percentual, total de aulas, presenças e faltas).
+
+    Só o próprio aluno ou um Admin pode consultar (`require_self_or_admin`,
+    404 em caso de acesso negado). Devolve 404 se o `usuario_id` não tiver
+    perfil de aluno. Percentuais são 0 quando a turma ainda não teve
+    nenhuma aula (evita divisão por zero).
+    """
     require_self_or_admin(usuario_id, current_user)
     try:
         aluno = buscar_aluno_por_usuario_id(usuario_id)
@@ -117,12 +134,25 @@ def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get
         raise internal_error(e)
 
 
-@router.get("/aluno/historico-chamadas/{usuario_id}")
+@router.get(
+    "/aluno/historico-chamadas/{usuario_id}",
+    summary="Histórico de chamadas do aluno numa turma",
+)
 def get_historico_chamadas_aluno(
     usuario_id: str,
     turma_id: str,
     current_user: dict = Depends(get_current_user),
 ):
+    """Devolve o histórico de chamadas do aluno numa turma específica
+    (`turma_id` via query string): totais de aulas/presenças/ausências,
+    contagem de chamadas parciais (presente em algumas aulas do slot, não
+    em todas) e a lista de chamadas com dia da semana calculado.
+
+    Só o próprio aluno ou um Admin pode consultar (`require_self_or_admin`,
+    404 em caso de acesso negado). Devolve 404 se o aluno não existir ou se
+    a turma não existir/o aluno não pertencer a ela (`aluno_pertence_turma`)
+    — mesma mensagem genérica nos dois casos.
+    """
     require_self_or_admin(usuario_id, current_user)
     try:
         aluno = buscar_aluno_por_usuario_id(usuario_id)
@@ -294,7 +324,7 @@ def _persistir_biometria(
     return {"status": "sucesso", "face_id": face_id, "external_id": external_id, "angulo": angulo}
 
 
-@router.post("/alunos/cadastrar-face")
+@router.post("/alunos/cadastrar-face", summary="Cadastra um ângulo de biometria facial do aluno")
 @limiter.limit("10/minute")
 async def cadastrar_aluno_api(
     request: Request,
@@ -308,7 +338,30 @@ async def cadastrar_aluno_api(
     angulo: str = Form("frontal"),
     current_user: dict = Depends(get_current_user),
 ):
-    """Recebe dados e foto do App, salva no S3, indexa no Rekognition e salva no Banco."""
+    """Recebe uma foto (um `angulo` — padrão "frontal") e cadastra a
+    biometria facial do aluno: sobe a imagem para o S3, indexa no AWS
+    Rekognition e grava o vínculo no banco.
+
+    Exige `consentimento_biometrico=true` e `politica_versao` igual à
+    vigente (`POLITICA_PRIVACIDADE_VERSAO`) — devolve 400
+    `CONSENTIMENTO_OBRIGATORIO`/`POLITICA_DESATUALIZADA` caso contrário.
+    Aluno só pode cadastrar a própria face (403 se tentar cadastrar de
+    outro usuário); Admin pode cadastrar de qualquer aluno (via
+    `user_id`/`email` no form). `angulo` fora de `ANGULOS_VALIDOS` devolve
+    400. Imagem é validada por magic bytes reais, não só content-type
+    (`validate_image_upload`), limite de 5 MB. Devolve 400 "Nenhum rosto
+    detectado na imagem." se o Rekognition não achar face.
+
+    `ExternalImageId` no Rekognition é o `aluno_id` (UUID), nunca o nome —
+    evita colisão entre alunos homônimos e tira dado pessoal da collection.
+    Recadastrar o mesmo ângulo substitui o FaceId/objeto S3 anterior
+    (best-effort: falha ao apagar o antigo não desfaz o cadastro novo).
+    Também registra o aceite de consentimento LGPD na trilha append-only
+    (só grava evento novo se o último aceite não for já desta versão — evita
+    4 aceites idênticos ao cadastrar os 4 ângulos de uma vez). Roda em
+    threadpool (`run_in_threadpool`): psycopg2 e boto3 são síncronos e um
+    IndexFaces trava o event loop se rodar direto na corrotina.
+    """
     validar_consentimento(consentimento_biometrico, politica_versao)
 
     if angulo not in ANGULOS_VALIDOS:
@@ -341,9 +394,9 @@ async def cadastrar_aluno_api(
         raise internal_error(e, "cadastrar_aluno_api")
 
 
-@router.get("/aluno/biometria-foto/{usuario_id}")
+@router.get("/aluno/biometria-foto/{usuario_id}", summary="URL temporária da foto de biometria cadastrada")
 def obter_foto_biometria(usuario_id: str, current_user: dict = Depends(get_current_user)):
-    """Retorna URL temporária (presigned) da foto cadastrada — só dono ou Admin."""
+    """Retorna URL temporária (presigned, 300s) da foto cadastrada — só dono ou Admin."""
     require_self_or_admin(usuario_id, current_user)
     try:
         row = obter_path_biometria_por_usuario(usuario_id)
@@ -359,9 +412,17 @@ def obter_foto_biometria(usuario_id: str, current_user: dict = Depends(get_curre
         raise internal_error(e, "obter_foto_biometria")
 
 
-@router.get("/alunos/status-angulos-face/{usuario_id}")
+@router.get(
+    "/alunos/status-angulos-face/{usuario_id}",
+    summary="Ângulos de biometria já cadastrados pelo aluno",
+)
 def status_angulos_face(usuario_id: str, current_user: dict = Depends(get_current_user)):
-    """Retorna quais ângulos já foram cadastrados para o aluno."""
+    """Retorna quais ângulos já foram cadastrados para o aluno (`total`,
+    lista `angulos_cadastrados` e `completo` quando há 4 ou mais rostos
+    ativos — o cadastro multi-ângulo padrão). Só dono ou Admin
+    (`require_self_or_admin`, 404 em acesso negado); 404 se o `usuario_id`
+    não tiver perfil de aluno.
+    """
     require_self_or_admin(usuario_id, current_user)
     try:
         aluno = buscar_aluno_por_usuario_id(usuario_id)
@@ -380,9 +441,18 @@ def status_angulos_face(usuario_id: str, current_user: dict = Depends(get_curren
         raise internal_error(e, "status_angulos_face")
 
 
-@router.get("/aluno/consentimento/{usuario_id}")
+@router.get("/aluno/consentimento/{usuario_id}", summary="Estado do consentimento LGPD do aluno")
 def consentimento_estado(usuario_id: str, current_user: dict = Depends(get_current_user)):
-    """Estado do consentimento para o card do perfil do aluno."""
+    """Estado do consentimento para o card do perfil do aluno: `"nunca"`
+    (nenhum evento na trilha), `"ativo"` (último evento é aceite) ou
+    `"revogado"` (último evento é revogação) — derivado do último registro
+    da trilha append-only (`obter_ultimo_evento`), não de uma coluna de
+    estado. Também devolve a versão da política aceita, quando foi
+    registrada, os ângulos de biometria ativos e a política vigente
+    (`POLITICA_PRIVACIDADE_VERSAO`/`SCPI_PRIVACY_URL`) para o front comparar.
+    Só dono ou Admin (`require_self_or_admin`, 404 em acesso negado); 404 se
+    o `usuario_id` não tiver perfil de aluno.
+    """
     require_self_or_admin(usuario_id, current_user)
     try:
         aluno = buscar_aluno_por_usuario_id(usuario_id)
@@ -416,13 +486,27 @@ def consentimento_estado(usuario_id: str, current_user: dict = Depends(get_curre
         raise internal_error(e, "consentimento_estado")
 
 
-@router.delete("/aluno/biometria/{usuario_id}")
+@router.delete("/aluno/biometria/{usuario_id}", summary="Revoga consentimento e apaga a biometria do aluno")
 def revogar_biometria(
     usuario_id: str,
     request: Request,
     current_user: dict = Depends(get_current_user),
 ):
-    """Permite ao aluno (ou Admin) revogar consentimento e apagar biometria."""
+    """Permite ao aluno (ou Admin) revogar consentimento e apagar a
+    biometria facial.
+
+    Só dono ou Admin (`require_self_or_admin`, 404 em acesso negado). 404 se
+    o aluno não existir ou não houver biometria ativa cadastrada. Apaga cada
+    rosto (todos os ângulos) do Rekognition e do objeto correspondente no
+    S3 — falha em qualquer uma dessas exclusões é só logada (best-effort),
+    não interrompe o processo. Marca os rostos como revogados no banco
+    (`revogar_rosto_por_aluno`) e grava evento `"revogacao"` na trilha
+    append-only de consentimento LGPD, com `origem` `"app"` (o próprio
+    aluno) ou `"admin"`. Isto apaga só a BIOMETRIA — não exclui o aluno nem
+    o usuário; a exclusão de aluno é bloqueada pelo banco enquanto houver
+    consentimento registrado (ver `ConsentimentosLGPD`), rota separada, fora
+    deste arquivo.
+    """
     require_self_or_admin(usuario_id, current_user)
     try:
         aluno = buscar_aluno_por_usuario_id(usuario_id)
@@ -462,17 +546,29 @@ def revogar_biometria(
         raise internal_error(e, "revogar_biometria")
 
 
-@router.get("/aluno/meus-dados/{usuario_id}")
+@router.get("/aluno/meus-dados/{usuario_id}", summary="Exporta os dados pessoais do titular (LGPD)")
 def exportar_meus_dados(
     usuario_id: str,
     formato: str = "zip",
     current_user: dict = Depends(get_current_user),
 ):
-    """Retorna dados pessoais do titular — LGPD Art. 18 §1.
+    """Retorna dados pessoais do titular — LGPD Art. 18 §1 (direito de
+    acesso/portabilidade).
 
     Query param ``formato``:
-      - ``zip`` (default): pacote com PDF + JSON + foto + manifesto de integridade.
-      - ``json``: retrocompatível, retorna apenas o JSON estruturado.
+      - ``zip`` (default): pacote `.zip` (attachment) com PDF legível +
+        JSON estruturado + foto(s) de biometria ativas + manifesto de
+        integridade assinado por HMAC (`SCPI_EXPORT_HMAC_KEY`, obrigatória
+        — o processo falha ao subir sem ela).
+      - ``json``: retrocompatível, devolve só o JSON estruturado direto no
+        corpo (sem PDF, foto nem manifesto).
+
+    Só dono ou Admin (`require_self_or_admin`, 404 em acesso negado). 404 se
+    não houver dados para o `usuario_id`. Baixar a(s) foto(s) do S3 é
+    best-effort: falha ao baixar uma foto não interrompe a exportação (a
+    foto simplesmente fica de fora do zip, com aviso em log). Toda
+    solicitação é registrada em log de auditoria com quem pediu
+    (`current_user`) e para qual titular.
     """
     from fastapi.responses import Response
 

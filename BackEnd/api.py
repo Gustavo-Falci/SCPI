@@ -126,8 +126,48 @@ async def lifespan(_app: FastAPI):
 # Em produção, desabilita docs/schema interativos — evita expor toda a superfície
 # da API (endpoints + schemas) a anônimos. Em dev/homolog seguem disponíveis.
 _IS_PRODUCTION = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
+_DESCRICAO_API = """
+API do SCPI — controle de presença acadêmica por reconhecimento facial.
+
+**Autenticação.** O login devolve cookies `HttpOnly` (`scpi_access` e
+`scpi_refresh`); não existe header `Authorization`. Toda requisição que altera
+estado precisa do header `X-Requested-With: XMLHttpRequest` (CSRF
+double-submit). `/auth/login` e `/auth/refresh` são isentos de CSRF por
+design — o cookie jar do React Native motivou a isenção.
+
+**Papéis.** `Admin`, `Professor` e `Aluno`. A tag `admin` inteira exige papel
+Admin. Rotas marcadas como *serviço* são chamadas pelo script da câmera, com
+token emitido por sala.
+
+**Erros.** Respostas de erro trazem `error_code` além de `detail` — são 27
+códigos padronizados, consumidos pelo toast do portal e pelo `useErrorToast`
+do app. Violação de unicidade vira 409, chave estrangeira vira 400, banco
+indisponível vira 503.
+
+**Limites.** Rotas sensíveis têm rate limit por IP (SlowAPI, storage
+compartilhado em PostgreSQL) e o login tem lockout progressivo.
+
+Este `/docs` fica **desligado em produção** (`ENVIRONMENT=production`).
+"""
+
+_TAGS_OPENAPI = [
+    {"name": "público", "description": "Sem autenticação: saúde da API e política de privacidade."},
+    {"name": "auth", "description": "Login, refresh, logout, primeiro acesso e recuperação de senha."},
+    {"name": "admin", "description": "Gestão de usuários, turmas, horários, biometria e relatórios. Exige papel Admin em todas as rotas."},
+    {"name": "alunos", "description": "Dashboard, frequência, biometria, consentimento LGPD e export de dados do próprio aluno."},
+    {"name": "professores", "description": "Dashboard do professor."},
+    {"name": "turmas", "description": "Turmas do usuário e alunos matriculados."},
+    {"name": "chamadas", "description": "Abertura, acompanhamento, ajuste e fechamento de chamada. Inclui as rotas de serviço usadas pela câmera."},
+    {"name": "relatorios", "description": "Relatórios de frequência em JSON e PDF, para professor e admin."},
+    {"name": "notificacoes", "description": "Registro do push token do dispositivo."},
+]
+
 app = FastAPI(
     title="SCPI API",  # gitleaks:allow — falso positivo (generic-api-key), sem segredo
+    # Subir na mudança que quebra contrato com portal ou app.
+    version="1.0.0",
+    description=_DESCRICAO_API,
+    openapi_tags=_TAGS_OPENAPI,
     docs_url=None if _IS_PRODUCTION else "/docs",
     redoc_url=None if _IS_PRODUCTION else "/redoc",
     openapi_url=None if _IS_PRODUCTION else "/openapi.json",

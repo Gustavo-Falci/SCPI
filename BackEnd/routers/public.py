@@ -13,15 +13,16 @@ from infra.database import get_db_cursor
 
 logger = logging.getLogger("scpi.health")
 
-router = APIRouter()
+router = APIRouter(tags=["público"])
 
 
-@router.get("/")
+@router.get("/", summary="Confirma que a API está no ar")
 def home():
+    """Endpoint raiz, sem autenticação: confirma que a API está respondendo."""
     return {"mensagem": "API SCPI está rodando!"}
 
 
-@router.get("/politica-privacidade")
+@router.get("/politica-privacidade", summary="Versão vigente da política de privacidade")
 @limiter.limit("30/minute")
 def politica_privacidade(request: Request):
     """Versão vigente da política — público, o app lê antes de mostrar o aceite."""
@@ -32,7 +33,7 @@ def politica_privacidade(request: Request):
     }
 
 
-@router.api_route("/health", methods=["GET", "HEAD"])
+@router.api_route("/health", methods=["GET", "HEAD"], summary="Healthcheck da API e do banco")
 @limiter.limit("30/minute")
 def health(request: Request):
     """Healthcheck: valida a conexão com o Postgres.
