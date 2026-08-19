@@ -17,8 +17,13 @@
   segundo banco na VM** — o `scpi_db`/`postgres` que aparecia no `.env` local do Gustavo era
   erro, corrigido em 2026-08-05.
 - **TimeZone do Postgres = `America/Sao_Paulo`**, não UTC.
-- **Não há acesso SSH a partir da máquina Windows do Gustavo** (sem `~/.ssh/config`, chave
-  ou agent). Todo deploy é executado por ele.
+- **Há acesso SSH sim** (corrigido 2026-08-19 — a afirmação anterior de que não havia estava
+  errada): o Gustavo conecta da própria máquina Windows pelo MobaXterm, em
+  `ubuntu@144.22.240.31:22`, com a chave privada baixada do console da OCI. A chave vive em
+  `%USERPROFILE%\.ssh\scpi_vm`, com herança de ACL removida e leitura só para o dono
+  (`icacls /inheritance:r /grant:r`) — foi movida de `Downloads/` em 2026-08-19. **Só existe
+  nessa máquina**: se ela morrer, o acesso SSH à VM morre junto (recuperação pela Console
+  Connection da OCI). Todo deploy é executado por ele.
 
 ## Deploy
 

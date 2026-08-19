@@ -74,6 +74,27 @@
   Advisory nova em dep do app fica invisível nas PRs e só quebra no push em `main` — foi o
   que deixou `main` vermelha de 2026-07-21 a 2026-07-23 sem nenhuma PR reprovada.
 
+## Bugs de produção ABERTOS (achados em 2026-08-18, ao escrever o Manual do Banco)
+
+- **Excluir professor pelo banco apaga histórico de presença.** `turmas.professor_id` e
+  `chamadas.professor_id` são `ON DELETE CASCADE` (`schema_inicial.sql:530,602` e
+  `migrations.py:62,104`), e `presencas` cascateia de `chamadas` (`migrations.py:118`). A
+  intenção documentada — orfanar preservando presença — existe **só** em
+  `excluir_professor_em_cascata`, que faz UPDATE antes do DELETE. Um `DELETE FROM professores`
+  no DBeaver não passa por ela e leva turma → chamada → presença junto, em silêncio.
+  Alinhar exigiria migration trocando as duas FKs para `ON DELETE SET NULL`.
+- **Direito ao esquecimento bloqueado.** `excluir_aluno_em_cascata`
+  (`repositories/alunos.py:389-402`) apaga Colecao_Rostos, Turma_Alunos, Presencas, Alunos e
+  Usuarios, mas **não** `ConsentimentosLGPD`, cuja FK (`migrations.py:201`) não declara
+  `ON DELETE`. `DELETE /admin/alunos/{id}` devolve **400 `FOREIGN_KEY_VIOLATION`** — não 500,
+  porque `core/helpers.py:131-139` intercepta antes do ramo genérico — com a mensagem
+  "Referência inválida: um dos registros vinculados não existe.", que **não menciona
+  consentimento**. A migration fez backfill para todo aluno com biometria ativa, então o caso
+  é comum. Consertar envolve decisão de política: a trilha é append-only por design, então
+  apagar, anonimizar ou bloquear a exclusão são caminhos diferentes — decisão do Gustavo.
+
+Ambos estão documentados em `docs/07-banco-de-dados.md`.
+
 ## Bugs de produção já resolvidos (o raciocínio ainda vale)
 
 - **Chamada aberta escolhida globalmente**: `registrar_presenca_por_face` usava

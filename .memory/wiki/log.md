@@ -259,3 +259,46 @@ dizia "PAD local = futuro"); `CAMERA_SERVICE_TOKEN` ainda é o nome da env na m�
   advisories. E os dois GHSA de `image-size` **nunca geraram alerta nenhum**. Ou seja: a tela de
   alertas mostra `/app` limpo, o `npm audit` mostra 4 high. **O gate do `security.yml` é o sinal;
   a tela de alertas não é.**
+
+## 2026-08-18 — Suíte de manuais de handover, fase 1 (PR #117)
+
+Objetivo do trabalho: se o Gustavo parar, quem assumir opera, entende e altera o sistema só
+com os documentos. Onze manuais planejados; esta fase entregou a ferramenta e quatro deles.
+
+`docs/gerar_manuais.py` converte fonte Markdown em `.docx` no padrão dos dois manuais legados
+(capa, campo de sumário do Word, `Heading 1/2/3` numerados, tabelas, código, callouts). 44
+testes. **Falha barulhento** em front-matter incompleto, tabela com colunas inconsistentes,
+bloco de código não fechado, título que pula nível e referência cruzada para manual
+inexistente — e valida ANTES de escrever, para não deixar `.docx` corrompido em disco.
+
+Manuais entregues: `01-ambiente-dev.md` (do clone ao primeiro PR), `06-portal-web.md`,
+`07-banco-de-dados.md`, `11-fluxo-ci.md`. Fontes em `docs/`, `.docx` em `docs/dist/`, ambos
+versionados. `docs/` saiu do `.gitignore` (só `docs/superpowers/` continua fora) — a DPIA da
+LGPD e o runbook de deploy estavam sem backup nenhum fora da máquina local.
+
+**Cinco defeitos do gerador, todos da mesma família: degradar em silêncio.** Separador de
+tabela espaçado (`| --- | --- |`) não era reconhecido e a tabela virava um parágrafo com os
+pipes colados; título que pulava nível gerava numeração `1.0.1`; pipe escapado cortava a
+célula; callout quebrado em várias linhas virava um callout por linha; `**negrito com `código`
+dentro**` imprimia as crases. Os três últimos **já estavam nos `.docx` entregues** e só
+apareceram porque alguém abriu o arquivo gerado, não a fonte.
+
+O `.docx` passou a ser determinístico (timestamps do zip fixos): antes, regerar sem mudar nada
+produzia bytes diferentes, o que com onze manuais viraria ruído permanente no `git status`.
+`docs/**` entrou nos gatilhos do `tests.yml` com um passo `pytest docs/`, e `python-docx` foi
+declarado em `requirements-dev.txt` — ele não estava em requirements nenhum.
+
+**Verificar cada comando na máquina real expôs onze pontos em que o README afirmava o que o
+código não faz.** Os três piores: a URL da API do portal mora em `portal/js/env.js` e não num
+`<script>` inline no `index.html` (que a própria CSP sem `unsafe-inline` proibiria);
+`VITE_API_URL` não era lida por código nenhum; e `criar_admin.py` usa
+`load_dotenv(override=True)`, então o comando com variáveis inline do README nunca funcionou.
+
+Dois defeitos de produção foram achados ao documentar o banco e estão em [[bugs.md]], seção
+"Bugs de produção ABERTOS": o `CASCADE` de professor que apaga histórico de presença, e a
+exclusão de aluno travada pelo consentimento (o caminho do direito ao esquecimento).
+
+Fica para as fases 2 e 3: VM Oracle, DNS/TLS, AWS, App Mobile, Contas e Segredos, Câmera e
+LGPD. E um buraco de inventário que o review final encontrou: **a API/backend não tem manual
+em nenhum dos onze planejados**, sendo o componente que mais se altera no repositório.
+
