@@ -117,7 +117,10 @@ def _rotulo_professor_pdf(professor_id: Optional[str], itens: list) -> Optional[
     return itens[0].get("professor_nome") or professor_id
 
 
-@router.get("/professor/relatorios/chamadas")
+@router.get(
+    "/professor/relatorios/chamadas",
+    summary="Lista chamadas do professor, com filtros e PDF",
+)
 def listar_relatorios_professor(
     limit: int = 50,
     offset: int = 0,
@@ -130,6 +133,24 @@ def listar_relatorios_professor(
     paginado: bool = False,
     current_user: dict = Depends(require_role("Professor")),
 ):
+    """Lista as chamadas fechadas do professor autenticado, com filtros e resumo de presença.
+
+    Filtros: `data_inicio`/`data_fim` (400 se `data_inicio` > `data_fim`),
+    `turma_id`, `turno` ("Matutino"/"Noturno", 400 para qualquer outro
+    valor), `semestre`. 404 se o usuário autenticado não tiver cadastro de
+    professor.
+
+    Formato de retorno muda com os parâmetros:
+    - Padrão: lista simples de chamadas (compatível com a tela sem
+      paginação).
+    - `paginado=1`: envelope opt-in `{"items": [...], "total": int,
+      "has_more": bool}` — muda o formato inteiro da resposta, então só use
+      quando o cliente já espera o envelope.
+    - `formato=pdf`: ignora `limit`/`offset`/`paginado` (o PDF é sempre o
+      recorte inteiro, não a página da tela) e devolve o arquivo
+      (`application/pdf`, anexo) em vez de JSON. Recorte com mais de
+      `TETO_CONSOLIDADO` (2000) chamadas vira 400 em vez de gerar o PDF.
+    """
     professor_id = obter_professor_id(current_user.get("sub"))
     if not professor_id:
         raise HTTPException(status_code=404, detail="Professor não encontrado.")
@@ -176,10 +197,18 @@ def listar_relatorios_professor(
         raise internal_error(e, "listar_relatorios_professor")
 
 
-@router.get("/professor/relatorios/filtros")
+@router.get(
+    "/professor/relatorios/filtros",
+    summary="Opções de filtro de relatórios do professor",
+)
 def opcoes_filtros_relatorios_professor(
     current_user: dict = Depends(require_role("Professor")),
 ):
+    """Valores disponíveis (turmas, turnos, semestres etc.) para popular os filtros da tela de relatórios do professor.
+
+    Recorte pelo `professor_id` do usuário autenticado — só turmas dele
+    aparecem como opção. 404 se o usuário não tiver cadastro de professor.
+    """
     professor_id = obter_professor_id(current_user.get("sub"))
     if not professor_id:
         raise HTTPException(status_code=404, detail="Professor não encontrado.")
@@ -191,23 +220,39 @@ def opcoes_filtros_relatorios_professor(
         raise internal_error(e, "opcoes_filtros_relatorios_professor")
 
 
-@router.get("/admin/relatorios/filtros")
+@router.get(
+    "/admin/relatorios/filtros",
+    summary="Opções de filtro de relatórios (Admin)",
+)
 def opcoes_filtros_relatorios_admin(
     current_user: dict = Depends(require_role("Admin")),
 ):
-    """Mesmas opções da tela do professor, sem recorte de professor."""
+    """Mesmas opções da tela do professor, sem recorte de professor.
+
+    Enxerga turmas/professores de toda a instituição, não só de um professor.
+    """
     try:
         return opcoes_filtros_relatorios()
     except Exception as e:
         raise internal_error(e, "opcoes_filtros_relatorios_admin")
 
 
-@router.get("/professor/relatorios/chamadas/{chamada_id}")
+@router.get(
+    "/professor/relatorios/chamadas/{chamada_id}",
+    summary="Detalhe de uma chamada do professor",
+)
 def detalhe_relatorio_professor(
     chamada_id: str,
     formato: Optional[str] = None,
     current_user: dict = Depends(require_role("Professor")),
 ):
+    """Detalhe de uma chamada fechada: alunos, presenças por aula e resumo.
+
+    Escopo por professor: só enxerga chamada de turma sua — chamada de
+    outra turma (ou inexistente) devolve 404, evitando enumeração de
+    `chamada_id`. Com `formato=pdf` devolve a ata em PDF
+    (`application/pdf`, anexo) em vez de JSON.
+    """
     professor_id = obter_professor_id(current_user.get("sub"))
     if not professor_id:
         raise HTTPException(status_code=404, detail="Professor não encontrado.")
@@ -222,7 +267,10 @@ def detalhe_relatorio_professor(
         raise internal_error(e, "detalhe_relatorio_professor")
 
 
-@router.get("/admin/relatorios/chamadas")
+@router.get(
+    "/admin/relatorios/chamadas",
+    summary="Lista chamadas de todas as turmas (Admin)",
+)
 def listar_relatorios_admin(
     turma_id: Optional[str] = None,
     limit: int = 200,
@@ -236,6 +284,19 @@ def listar_relatorios_admin(
     formato: Optional[str] = None,
     current_user: dict = Depends(require_role("Admin")),
 ):
+    """Lista chamadas fechadas de qualquer turma/professor, com filtros e PDF.
+
+    Sem recorte de professor (visão Admin). Filtros adicionais em relação ao
+    endpoint do professor: `professor_id` e `frequencia_baixa` — este último
+    mantém só as chamadas com percentual de presença abaixo de
+    `LIMITE_FREQUENCIA`, filtrado em Python DEPOIS do `LIMIT` do SQL. Com
+    `limit` pequeno o resultado é "as de baixa frequência dentro das N mais
+    recentes", não "as N mais recentes de baixa frequência" — armadilha só
+    inofensiva porque o portal usa o teto de 2000. `formato=pdf` funciona
+    como no endpoint do professor: ignora `limit`/`offset`, recorte inteiro
+    até `TETO_CONSOLIDADO` (2000, senão 400), devolve `application/pdf`.
+    Não tem envelope de paginação (`paginado` não existe aqui).
+    """
     if data_inicio and data_fim and data_inicio > data_fim:
         raise HTTPException(status_code=400, detail="Intervalo de datas inválido.")
     pdf = formato == "pdf"
@@ -269,12 +330,20 @@ def listar_relatorios_admin(
         raise internal_error(e, "listar_relatorios_admin")
 
 
-@router.get("/admin/relatorios/chamadas/{chamada_id}")
+@router.get(
+    "/admin/relatorios/chamadas/{chamada_id}",
+    summary="Detalhe de qualquer chamada (Admin)",
+)
 def detalhe_relatorio_admin(
     chamada_id: str,
     formato: Optional[str] = None,
     current_user: dict = Depends(require_role("Admin")),
 ):
+    """Detalhe de qualquer chamada fechada, sem recorte de professor.
+
+    404 se a chamada não existir. Com `formato=pdf` devolve a ata em PDF
+    (`application/pdf`, anexo) em vez de JSON.
+    """
     try:
         detalhe = detalhe_relatorio(chamada_id)
         if formato == "pdf":
@@ -286,7 +355,10 @@ def detalhe_relatorio_admin(
         raise internal_error(e, "detalhe_relatorio_admin")
 
 
-@router.get("/professor/relatorios/turmas/{turma_id}/frequencia")
+@router.get(
+    "/professor/relatorios/turmas/{turma_id}/frequencia",
+    summary="Frequência por aluno de uma turma do professor",
+)
 def frequencia_turma_professor(
     turma_id: str,
     data_inicio: Optional[date] = None,
@@ -294,6 +366,16 @@ def frequencia_turma_professor(
     formato: Optional[str] = None,
     current_user: dict = Depends(require_role("Professor")),
 ):
+    """Frequência acumulada por aluno de uma turma do professor, no período.
+
+    404 se a turma não existir ou não for do professor autenticado (nunca
+    403 — evita enumeração de `turma_id`). 400 se `data_inicio` > `data_fim`.
+    Cada aluno recebe `percentual` e `situacao` ("Regular"/"Risco" pelo
+    `LIMITE_FREQUENCIA`, ou "Insuficiente" quando ainda não houve aula
+    dada para ele — matrícula após a última chamada do período, por
+    exemplo — para não pontuar 0% sem base). Com `formato=pdf` devolve o
+    relatório em PDF (`application/pdf`, anexo) em vez de JSON.
+    """
     professor_id = obter_professor_id(current_user.get("sub"))
     if not professor_id:
         raise HTTPException(status_code=404, detail="Professor não encontrado.")
@@ -313,7 +395,10 @@ def frequencia_turma_professor(
         raise internal_error(e, "frequencia_turma_professor")
 
 
-@router.get("/admin/relatorios/turmas/{turma_id}/frequencia")
+@router.get(
+    "/admin/relatorios/turmas/{turma_id}/frequencia",
+    summary="Frequência por aluno de qualquer turma (Admin)",
+)
 def frequencia_turma_admin(
     turma_id: str,
     data_inicio: Optional[date] = None,
@@ -321,6 +406,13 @@ def frequencia_turma_admin(
     formato: Optional[str] = None,
     current_user: dict = Depends(require_role("Admin")),
 ):
+    """Frequência acumulada por aluno de qualquer turma, sem recorte de professor.
+
+    404 se a turma não existir. 400 se `data_inicio` > `data_fim`. Mesmos
+    campos calculados de `/professor/relatorios/turmas/{turma_id}/frequencia`
+    (`percentual`, `situacao`). Com `formato=pdf` devolve o relatório em PDF
+    (`application/pdf`, anexo) em vez de JSON.
+    """
     if data_inicio and data_fim and data_inicio > data_fim:
         raise HTTPException(status_code=400, detail="Intervalo de datas inválido.")
     try:

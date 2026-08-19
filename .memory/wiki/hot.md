@@ -2,7 +2,7 @@
 
 *Contexto imediato. Atualizar ao fim de toda sessão.*
 
-**Última atualização: 2026-08-17.**
+**Última atualização: 2026-08-18.**
 
 ## ✅ Liveness: o bypass foi FECHADO — mas com um teste faltando
 
@@ -85,6 +85,17 @@ versão corrigida publicada e vêm pinados pelo metro do Expo 55. Gate roda exit
 público estava errada). Branch criada antes disso ignora `.memory/` e **apaga o wiki do disco no
 checkout**; recuperar com `git archive main .memory/wiki | tar -x`.
 
+Em 2026-08-18 entrou a **fase 1 da suíte de manuais de handover** (PR #117): o gerador
+`docs/gerar_manuais.py` (44 testes, `.docx` determinístico, `pytest docs/` no CI) e quatro
+manuais — ambiente de desenvolvimento, portal, banco e fluxo/CI. `docs/` deixou de ser
+git-ignored; só `docs/superpowers/` continua fora. Detalhe em [[log.md]].
+
+**Dois defeitos de produção apareceram ao documentar o banco** e estão em [[bugs.md]], seção
+"Bugs de produção ABERTOS": o `ON DELETE CASCADE` de professor que apaga histórico de presença
+num `DELETE` manual, e a exclusão de aluno bloqueada por `ConsentimentosLGPD` — que é o caminho
+do direito ao esquecimento da LGPD. Nenhum dos dois foi corrigido: são migration e decisão de
+política.
+
 ## Próximos passos
 
 - [ ] **RETOMAR AQUI: passar pela porta do jeito DIFÍCIL, com o veto ligado.** É o único risco
@@ -113,6 +124,15 @@ checkout**; recuperar com `git archive main .memory/wiki | tar -x`.
 - [ ] **SHA-1 do Play App Signing** na chave Firebase ANTES de publicar na Play Store,
       senão push quebra em prod. Ver [[app-mobile.md]].
 - [ ] Validar em campo o warning `Sala X com 2 chamadas abertas hoje (candidatas=[...])`.
+- [ ] **Manuais fase 2** — VM de Produção (Oracle) e Domínio/DNS/TLS (Namecheap). Dependem de
+      comandos rodados na VM e de dados do painel; o primeiro bloqueio é saber **como se acessa
+      a VM hoje** (a wiki diz que não há SSH da máquina Windows do Gustavo).
+- [ ] **Manuais fase 3** — AWS, App Mobile/EAS/Firebase, Contas e Segredos, Câmera (instalação
+      e calibração), LGPD. Dependem de entrevista de console.
+- [ ] **Decidir sobre o manual da API/backend** — não está em nenhum dos onze planejados, e é o
+      componente que mais se altera no repositório.
+- [ ] Publicar a convenção de escrita da suíte em lugar versionado (hoje só existe na spec, que
+      é git-ignored) — decide se os sete manuais restantes saem no mesmo formato.
 - [ ] Na VM: criar `/etc/scpi-receipts.env` e instalar os units versionados de
       `ops/receipts/` — hoje a VM roda a versão feita à mão. Ver [[ops.md]].
 

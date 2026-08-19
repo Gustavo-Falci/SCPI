@@ -11,8 +11,21 @@ from repositories.professores import obter_dashboard_professor
 router = APIRouter(prefix="/professor", tags=["professores"])
 
 
-@router.get("/dashboard/{usuario_id}")
+@router.get(
+    "/dashboard/{usuario_id}",
+    summary="Dashboard do professor: estatísticas e aulas",
+)
 def get_dashboard(usuario_id: str, current_user: dict = Depends(get_current_user)):
+    """Dados do dashboard do professor: estatísticas, aulas de hoje e chamada ativa.
+
+    Só o próprio professor ou um Admin pode consultar (404 para os demais,
+    não 403 — evita enumeração de `usuario_id`). `estatisticas` vem da
+    chamada mais recente do professor (zerada com
+    `disciplina="Nenhuma chamada recente"` se ele nunca abriu uma);
+    `chamada_ativa` só aparece (não-`None`) se houver chamada aberta agora;
+    `aulas_hoje` lista as aulas previstas para o dia da semana atual (fuso
+    America/Sao_Paulo).
+    """
     require_self_or_admin(usuario_id, current_user)
     try:
         row = obter_dashboard_professor(usuario_id)

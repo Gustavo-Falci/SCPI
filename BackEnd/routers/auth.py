@@ -84,9 +84,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _DUMMY_PASSWORD_HASH = get_password_hash("scpi-timing-equalizer-not-a-real-password")
 
 
-@router.post("/register")
+@router.post("/register", summary="Endpoint desabilitado (cadastro é exclusivo do Admin)")
 @limiter.limit("5/minute")
 def register(request: Request, usuario: UsuarioRegistro):
+    """Rota desativada: sempre devolve 403.
+
+    Cadastro de usuário só acontece pelo painel do Admin. Esta rota só existe
+    para não quebrar chamadas antigas de clientes desatualizados — toda
+    tentativa é registrada em log de auditoria (nível warning) com o IP de
+    origem, útil para detectar cliente desatualizado tentando usá-la.
+    """
     audit_logger.warning(
         "Tentativa de uso de endpoint desabilitado rota=/auth/register ip=%s", client_ip(request)
     )
@@ -96,9 +103,19 @@ def register(request: Request, usuario: UsuarioRegistro):
     )
 
 
-@router.post("/register-aluno-com-face")
+@router.post(
+    "/register-aluno-com-face",
+    summary="Endpoint desabilitado (cadastro com face é exclusivo do Admin)",
+)
 @limiter.limit("5/minute")
 async def register_aluno_com_face(request: Request):
+    """Rota desativada: sempre devolve 403.
+
+    Sucessora do fluxo antigo de autocadastro de aluno com biometria; o
+    cadastro de face hoje é feito via `/alunos/cadastrar-face`, autenticado.
+    Mantida só para não quebrar clientes antigos — cada tentativa é
+    registrada em log de auditoria (nível warning) com o IP de origem.
+    """
     audit_logger.warning(
         "Tentativa de uso de endpoint desabilitado rota=/auth/register-aluno-com-face ip=%s",
         client_ip(request),
@@ -109,13 +126,34 @@ async def register_aluno_com_face(request: Request):
     )
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, summary="Autentica usuário e abre sessão")
 @limiter.limit("10/minute")
 def login(
     request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
 ):
+    """Valida email/senha (form OAuth2 padrão) e abre sessão.
+
+    Em caso de sucesso: seta os cookies `HttpOnly` `scpi_access` e
+    `scpi_refresh` (usados pelo portal) **e** devolve `access_token` e
+    `refresh_token` no corpo (usados pelo app mobile, que guarda em
+    storage próprio em vez de cookie). Também devolve dados básicos do
+    usuário (`user_role`, `user_id`, `user_name`, `user_email`), e, quando
+    `Aluno`, `user_ra` e `face_cadastrada`.
+
+    Bloqueado por lockout progressivo por conta (`esta_bloqueado`/
+    `registrar_falha`) — complementa o rate-limit por IP, que sozinho não
+    pega brute-force distribuído entre IPs. Email/senha errados devolvem
+    sempre a mesma mensagem 401 genérica, e o tempo de resposta é
+    equalizado com um hash descartável quando o email não existe, para não
+    permitir enumeração de contas por timing. Migra silenciosamente o hash
+    da senha para a política de iterações atual quando necessário — falha
+    nessa migração não derruba o login.
+
+    Rota isenta de CSRF por design (junto com `/auth/refresh`): o cookie jar
+    do React Native motivou a isenção.
+    """
     email_limpo = form_data.username.strip()
     email_key = email_limpo.lower()
 
@@ -191,7 +229,7 @@ def login(
     }
 
 
-@router.post("/refresh")
+@router.post("/refresh", summary="Renova o access token a partir do refresh token")
 @limiter.limit("30/minute")
 def refresh_access_token(
     request: Request,
@@ -204,7 +242,17 @@ def refresh_access_token(
     Aceita o refresh por dois canais:
     - Body `refresh_token` (mobile/legado).
     - Cookie `scpi_refresh` (portal). Quando vier por cookie, novos cookies
-      são emitidos no response e o cliente não precisa armazenar o token.
+      `HttpOnly` (`scpi_access`/`scpi_refresh`) são emitidos no response e o
+      cliente não precisa armazenar o token.
+
+    A cada troca o refresh token antigo é invalidado e um novo é emitido
+    (rotação); reusar um refresh token já trocado é tratado como sinal de
+    roubo — todas as sessões da família são revogadas e o chamador recebe
+    401 "Sessão inválida. Faça login novamente." Devolve 401 também quando o
+    refresh está ausente, é inválido ou expirou.
+
+    Rota isenta de CSRF por design (junto com `/auth/login`): o cookie jar
+    do React Native motivou a isenção.
     """
     refresh_plain = body.refresh_token or scpi_refresh
     if not refresh_plain:
@@ -247,14 +295,17 @@ def refresh_access_token(
         raise internal_error(e, "refresh_access_token")
 
 
-@router.get("/session")
+@router.get("/session", summary="Confirma se a sessão atual ainda é válida")
 @limiter.limit("60/minute")
 def validar_sessao(request: Request, current_user: dict = Depends(get_current_user)):
     """Confirma que o access token/cookie ainda é válido.
 
-    Usado no boot do portal para decidir entre login e dashboard sem confiar no
-    perfil guardado em localStorage. Não toca no refresh token — validar sessão
-    não pode disparar rotação nem detecção de reuso entre abas.
+    Devolve `usuario_id`, `email` e `role` extraídos do token — nada é
+    consultado no banco. Usado no boot do portal para decidir entre login e
+    dashboard sem confiar no perfil guardado em localStorage. Não toca no
+    refresh token — validar sessão não pode disparar rotação nem detecção de
+    reuso entre abas. Access token ausente/expirado/inválido devolve 401 (via
+    `get_current_user`).
     """
     return {
         "usuario_id": current_user.get("sub"),
@@ -263,7 +314,7 @@ def validar_sessao(request: Request, current_user: dict = Depends(get_current_us
     }
 
 
-@router.post("/logout")
+@router.post("/logout", summary="Encerra a sessão (revoga refresh token e cookies)")
 def logout(
     response: Response,
     body: RefreshRequest,
@@ -274,6 +325,11 @@ def logout(
 
     Access token continua válido até expirar; o portal não consegue mais
     apresentá-lo após o clear_auth_cookies remover scpi_access do browser.
+    Exige sessão válida (`get_current_user`). Sempre devolve
+    `{"mensagem": "Sessão encerrada."}`, mesmo quando o refresh token já
+    estava revogado/expirado ou o banco está fora do ar (nesse caso
+    `revogados` fica None/0 no log de auditoria, sem afetar a resposta ao
+    cliente — a limpeza local dos cookies/tokens é autoritativa por design).
     """
     refresh_plain = body.refresh_token or scpi_refresh
     try:
@@ -295,8 +351,17 @@ def logout(
         raise internal_error(e, "logout")
 
 
-@router.post("/alterar-senha")
+@router.post("/alterar-senha", summary="Troca a senha do usuário autenticado")
 def alterar_senha(body: AlterarSenhaBody, current_user: dict = Depends(get_current_user)):
+    """Troca a senha de quem já está logado, exigindo a senha atual.
+
+    Exige sessão válida (`get_current_user`). Devolve 404 se o usuário não
+    for encontrado, 401 se `senha_atual` não confere, 400 se `nova_senha`
+    aparece em vazamentos públicos (checagem via `senha_comprometida`). Em
+    sucesso, revoga TODOS os refresh tokens do usuário (todas as sessões
+    ativas em outros dispositivos são derrubadas) e devolve
+    `{"mensagem": "Senha alterada com sucesso."}`.
+    """
     usuario_id = current_user.get("sub")
     try:
         user = buscar_senha_por_usuario_id(usuario_id)
@@ -327,8 +392,20 @@ def alterar_senha(body: AlterarSenhaBody, current_user: dict = Depends(get_curre
         raise internal_error(e, "alterar_senha")
 
 
-@router.post("/alterar-senha-primeiro-acesso")
+@router.post(
+    "/alterar-senha-primeiro-acesso",
+    summary="Define a senha definitiva no primeiro acesso (sem senha atual)",
+)
 def alterar_senha_primeiro_acesso(body: PrimeiroAcessoSenhaBody, current_user: dict = Depends(get_current_user)):
+    """Troca a senha temporária do primeiro acesso, sem exigir a senha atual.
+
+    Exige sessão válida (`get_current_user`) e que a flag `primeiro_acesso`
+    do usuário ainda esteja ativa — devolve 403 se já foi usada antes (não
+    é um caminho de troca de senha comum, é de uso único). Devolve 404 se o
+    usuário não for encontrado, 400 se `nova_senha` aparece em vazamentos
+    públicos. Em sucesso, revoga TODOS os refresh tokens do usuário e
+    devolve `{"mensagem": "Senha alterada com sucesso."}`.
+    """
     usuario_id = current_user.get("sub")
     try:
         user = buscar_primeiro_acesso_por_usuario_id(usuario_id)
@@ -354,9 +431,19 @@ def alterar_senha_primeiro_acesso(body: PrimeiroAcessoSenhaBody, current_user: d
         raise internal_error(e, "alterar_senha_primeiro_acesso")
 
 
-@router.post("/esqueci-senha")
+@router.post("/esqueci-senha", summary="Envia código de redefinição de senha por e-mail")
 @limiter.limit("3/minute")
 def esqueci_senha(request: Request, body: EsqueciSenhaBody):
+    """Primeiro passo da recuperação: gera e envia por e-mail um código de 6
+    dígitos, válido por 15 minutos.
+
+    Devolve sempre a mesma mensagem genérica
+    `{"mensagem": "Se o e-mail existir, um código de redefinição foi
+    enviado."}`, exista ou não o email — evita enumeração de contas. Persiste
+    apenas o HMAC do código (`hash_reset_code`); o texto puro só vai no
+    e-mail. Envio via Resend; falha no envio devolve 500 (o código já foi
+    persistido nesse caso). Segue com `/auth/verificar-codigo`.
+    """
     email = body.email.strip().lower()
     generic_response = {"mensagem": "Se o e-mail existir, um código de redefinição foi enviado."}
 
@@ -400,9 +487,20 @@ def esqueci_senha(request: Request, body: EsqueciSenhaBody):
     return generic_response
 
 
-@router.post("/verificar-codigo")
+@router.post("/verificar-codigo", summary="Valida o código recebido por e-mail e emite reset_token")
 @limiter.limit("5/minute")
 def verificar_codigo(request: Request, body: VerificarCodigoBody):
+    """Segundo passo da recuperação: confere o código de 6 dígitos enviado
+    por `/auth/esqueci-senha` e, se válido, marca-o como usado e devolve um
+    `reset_token` (JWT de 15 minutos, com `jti` = id do código consumido)
+    para usar em `/auth/redefinir-senha`.
+
+    Devolve 400 "Código inválido ou já utilizado." quando o código não
+    confere/já foi usado/não existe, e 400 "Código expirado." quando o prazo
+    de 15 minutos passou. Lockout por conta: acumula tentativas inválidas do
+    código ativo e, ao atingir `_MAX_TENTATIVAS_CODIGO` (5), devolve 429 e
+    exige solicitar um novo código.
+    """
     email = body.email.strip().lower()
 
     row = buscar_codigo_reset_valido(email, hash_reset_code(email, body.codigo))
@@ -452,8 +550,22 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
     return {"reset_token": reset_token}
 
 
-@router.post("/redefinir-senha")
+@router.post("/redefinir-senha", summary="Define a nova senha a partir do reset_token")
 def redefinir_senha(request: Request, body: RedefinirSenhaBody):
+    """Terceiro e último passo da recuperação: troca a senha usando o
+    `reset_token` emitido por `/auth/verificar-codigo`.
+
+    Devolve 400 "Token inválido ou expirado." para token malformado/expirado,
+    de tipo errado, sem `jti` (formato anterior ao endurecimento A4, nunca
+    aceito), ou já consumido — a mensagem é deliberadamente a mesma nesses
+    casos para não confirmar ao atacante se o token chegou a ser válido.
+    Devolve 400 "Esta senha aparece em vazamentos públicos." se a nova senha
+    falhar `senha_comprometida`. O consumo do token (uso único) só acontece
+    depois de todas as checagens que não escrevem nada, para não queimar o
+    token de quem digitou senha vazada na primeira tentativa. Em sucesso,
+    revoga TODOS os refresh tokens do usuário e devolve
+    `{"mensagem": "Senha redefinida com sucesso."}`.
+    """
     try:
         payload = _jwt.decode(body.reset_token, SECRET_KEY, algorithms=[ALGORITHM])
     except _jwt.InvalidTokenError:

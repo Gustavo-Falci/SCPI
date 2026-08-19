@@ -15,9 +15,21 @@ from repositories.turmas import (
 router = APIRouter(prefix="/turmas", tags=["turmas"])
 
 
-@router.get("/{usuario_id}")
+@router.get(
+    "/{usuario_id}",
+    summary="Lista turmas do professor com status de aula",
+)
 def get_turmas(usuario_id: str, current_user: dict = Depends(get_current_user)):
-    """Retorna as turmas de um professor com flag indicando se está no horário de aula."""
+    """Turmas do professor com indicador de horário de aula e chamada aberta.
+
+    Só o próprio professor ou um Admin pode consultar (404 para os demais,
+    não 403 — evita enumeração de `usuario_id`). Para cada turma calcula, a
+    partir do horário atual (fuso America/Sao_Paulo): `pode_iniciar` (existe
+    aula prevista agora, pelo dia da semana), `proximo_horario` (texto do
+    horário de hoje ou do próximo dia com aula prevista) e
+    `chamada_aberta`/`chamada_id` (se já existe chamada aberta agora para a
+    turma). Devolve `{"turmas": [...]}`.
+    """
     require_self_or_admin(usuario_id, current_user)
     try:
         agora = datetime.datetime.now(zoneinfo.ZoneInfo("America/Sao_Paulo"))
@@ -60,8 +72,18 @@ def get_turmas(usuario_id: str, current_user: dict = Depends(get_current_user)):
         raise internal_error(e)
 
 
-@router.get("/{turma_id}/alunos")
+@router.get(
+    "/{turma_id}/alunos",
+    summary="Lista alunos matriculados na turma",
+)
 def get_alunos_turma(turma_id: str, current_user: dict = Depends(get_current_user)):
+    """Lista os alunos matriculados na turma.
+
+    Professor só vê turma da qual é responsável, aluno só vê turma em que
+    está matriculado (ambos 404 se não for o caso, nunca 403 — evita
+    enumeração de `turma_id`); Admin vê qualquer turma; qualquer outra role
+    leva 403. Devolve `{"alunos": [...]}`.
+    """
     try:
         role = current_user.get("role")
         if role == "Professor":
