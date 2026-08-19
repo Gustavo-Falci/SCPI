@@ -302,3 +302,38 @@ Fica para as fases 2 e 3: VM Oracle, DNS/TLS, AWS, App Mobile, Contas e Segredos
 LGPD. E um buraco de inventário que o review final encontrou: **a API/backend não tem manual
 em nenhum dos onze planejados**, sendo o componente que mais se altera no repositório.
 
+## 2026-08-19 — Swagger da API documentado, etapa A (PR #118)
+
+Decisão: em vez de um manual Word da API, melhorar o `/docs`. Documentação de rota que mora
+junto do código é a única que não envelhece sozinha.
+
+Estado antes: 68 rotas sem `summary`, 52 sem descrição, as 2 rotas de `public.py` sem tag
+(caíam no grupo "default"), e o app só com `title="SCPI API"`. O Swagger mostrava caminho e
+parâmetros de entrada, e quase nada sobre o que volta.
+
+Agora: 69 operações com `summary` e descrição, 9 tags descritas, e uma `description` de app
+que explica o que o Swagger não tinha como mostrar — autenticação por cookie `HttpOnly` (não
+há header `Authorization`), `X-Requested-With` exigido em mutação, isenção de CSRF em
+login/refresh, `error_code` nas respostas de erro, rate limit e lockout.
+
+`BackEnd/tests/test_openapi_documentado.py` é o guarda: reprova rota sem summary, sem
+descrição ou sem tag, tag sem descrição em `openapi_tags`, schema que não gera, e marcador de
+pendência esquecido. **Armadilha do guarda**, aprendida na prática: buscar "todo" em minúsculas
+dá falso positivo em português ("todo" = "inteiro") e obriga a reescrever frase correta — só
+marcador MAIÚSCULO (`TODO`, `FIXME`, `TBD`) e frases inequívocas de rascunho.
+
+`response_model` NÃO entrou: ele filtra o payload e pode sumir com campo que portal ou app
+consomem, em silêncio. É a etapa B, rota a rota, com verificação contra os consumidores.
+
+Achados de código que a documentação revelou, todos registrados nas próprias docstrings:
+- `DELETE /admin/turmas/{id}` apaga chamadas e presenças da turma via CASCADE, **pela API**, e
+  não valida existência (id inexistente devolve sucesso). Mesmo padrão em
+  `DELETE /admin/horarios/{id}`. É o terceiro caso da família CASCADE — ver [[bugs.md]].
+- `relatorios.py`: `frequencia_baixa` filtra em Python DEPOIS do `LIMIT` do SQL, então com
+  `limit` pequeno o resultado é "as de baixa frequência dentro das N mais recentes". Inofensivo
+  só porque o portal manda o teto de 2000.
+- `POST /auth/register` e `/auth/register-aluno-com-face` continuam registradas e desabilitadas.
+- `GET /admin/alunos` não valida teto de `limit`: acima de 100 é reduzido em silêncio.
+- Warning `Duplicate Operation ID health_health_get`: `/health` serve GET e HEAD no mesmo
+  `api_route`, e ID duplicado quebra gerador de cliente OpenAPI. Não corrigido.
+

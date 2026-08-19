@@ -2,7 +2,7 @@
 
 *Contexto imediato. Atualizar ao fim de toda sessão.*
 
-**Última atualização: 2026-08-18.**
+**Última atualização: 2026-08-19.**
 
 ## ✅ Liveness: o bypass foi FECHADO — mas com um teste faltando
 
@@ -96,6 +96,11 @@ num `DELETE` manual, e a exclusão de aluno bloqueada por `ConsentimentosLGPD` �
 do direito ao esquecimento da LGPD. Nenhum dos dois foi corrigido: são migration e decisão de
 política.
 
+Em 2026-08-19 entrou o **Swagger da API, etapa A** (PR #118): 69 operações com summary e
+descrição, 9 tags, metadados de autenticação e erro, mais o guarda
+`tests/test_openapi_documentado.py`. `response_model` ficou para a etapa B. Detalhe em
+[[log.md]].
+
 ## Próximos passos
 
 - [ ] **RETOMAR AQUI: passar pela porta do jeito DIFÍCIL, com o veto ligado.** É o único risco
@@ -124,6 +129,12 @@ política.
 - [ ] **SHA-1 do Play App Signing** na chave Firebase ANTES de publicar na Play Store,
       senão push quebra em prod. Ver [[app-mobile.md]].
 - [ ] Validar em campo o warning `Sala X com 2 chamadas abertas hoje (candidatas=[...])`.
+- [ ] **Swagger etapa B** — `response_model` rota a rota. MUDA payload (filtra campos): cada
+      rota precisa ser conferida contra o que portal e app leem, com teste cobrindo os campos.
+- [ ] `Duplicate Operation ID` do `/health` — GET e HEAD no mesmo `api_route`. Quebra gerador
+      de cliente OpenAPI. Conserto: dois decoradores, mantendo o HEAD que o UptimeRobot usa.
+- [ ] Apagar as branches mergeadas `docs/manuais-handover` e `docs/swagger-api` (local e
+      remota) e ligar "Automatically delete head branches" no GitHub.
 - [ ] **Manuais fase 2** — VM de Produção (Oracle) e Domínio/DNS/TLS (Namecheap). Dependem de
       comandos rodados na VM e de dados do painel; o primeiro bloqueio é saber **como se acessa
       a VM hoje** (a wiki diz que não há SSH da máquina Windows do Gustavo).
