@@ -8,8 +8,11 @@
 - Projeto em `/opt/scpi`; backend em `/opt/scpi/BackEnd`; venv em `/opt/scpi/venv`
   (Python 3.12).
 - **`.env` fica em `/opt/scpi/.env`**, na raiz do repo — não em `BackEnd/.env`
-  (`find_dotenv()` acha subindo diretórios). O `docs/deploy.md` diz `BackEnd/.env` e está
-  **desatualizado**.
+  (`find_dotenv()` acha subindo diretórios). **Correção 2026-08-18**: linha anterior aqui
+  afirmava que `docs/runbooks/deploy.md` dizia `BackEnd/.env` e estava desatualizado — falso,
+  verificado; o runbook (linha 10) sempre disse `/opt/scpi/.env`. O problema real do runbook
+  era outro: o bloco de deploy não ativava o venv antes do `pip install` (corrigido em
+  2026-08-18).
 - Banco de produção: `DB_NAME=scpi`, `DB_USER=scpi`, `DB_HOST=127.0.0.1`. **Não existe
   segundo banco na VM** — o `scpi_db`/`postgres` que aparecia no `.env` local do Gustavo era
   erro, corrigido em 2026-08-05.
@@ -157,7 +160,7 @@ lê nem altera dado.
 
 Server block de `admin.scpi.me` tem `Cache-Control: no-cache, must-revalidate` + CSP
 `frame-ancestors`, `X-Frame-Options` e `X-Content-Type-Options` **no nível do server**.
-Duas armadilhas que o `docs/PORTAL_NGINX.md` documenta errado:
+Duas armadilhas que o `docs/runbooks/PORTAL_NGINX.md` documenta errado:
 
 1. **`add_header` num `location` substitui os herdados do server, não soma.** Por isso os
    quatro headers ficam no server e as `location` não têm `add_header` nenhum.

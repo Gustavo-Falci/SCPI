@@ -18,9 +18,8 @@ venv/
 .devcontainer
 node_modules/
 admin-portal/dist/
-docs/*
-!docs/SECURITY_RUNBOOK.md
-!docs/PORTAL_NGINX.md
+# Specs e planos do superpowers são artefatos locais de trabalho.
+docs/superpowers/
 BackEnd/scripts/models/*.onnx
 DESIGN.md
 logo-concept.svg

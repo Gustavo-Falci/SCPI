@@ -56,8 +56,9 @@ nenhum SHA da branch aparece em `main`. Conferir pelo conteúdo:
 
 Specs e planos em `docs/superpowers/specs/` e `docs/superpowers/plans/` são artefatos de
 trabalho **locais** — não sugerir commit e não referenciá-los por caminho na descrição de PR
-(referenciar pelo conteúdo). `docs/` é git-ignored, exceto `SECURITY_RUNBOOK.md` e
-`PORTAL_NGINX.md`. Outros docs (README, CHANGELOG, comentários) têm tratamento normal.
+(referenciar pelo conteúdo). `docs/` é versionado, exceto `docs/superpowers/`.
+Runbooks em `docs/runbooks/SECURITY_RUNBOOK.md` e `docs/runbooks/PORTAL_NGINX.md`.
+Outros docs (README, CHANGELOG, comentários) têm tratamento normal.
 
 ## Memória: manter os DOIS sistemas
 

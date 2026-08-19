@@ -11,6 +11,7 @@ on:
       - "BackEnd/**"
       - "portal/**"
       - "app/**"
+      - "docs/**"
       - ".github/workflows/tests.yml"
   pull_request:
     branches: [main]
@@ -18,6 +19,7 @@ on:
       - "BackEnd/**"
       - "portal/**"
       - "app/**"
+      - "docs/**"
       - ".github/workflows/tests.yml"
 
 permissions:
@@ -72,6 +74,9 @@ jobs:
       - name: Run tests
         working-directory: BackEnd
         run: python -m pytest tests -v
+
+      - name: Run tests (gerador de manuais em docs/)
+        run: python -m pytest docs/ -q
 
   # ---------------------------------------------------------------------------
   # Tipos e lint do app. Não há suíte de testes no app (sem jest — os pacotes

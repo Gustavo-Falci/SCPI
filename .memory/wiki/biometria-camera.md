@@ -347,7 +347,7 @@ A ferramenta é Windows-only (`CAP_DSHOW`) e o shell é PowerShell: runbook usa
 `FACE_MATCH_THRESHOLD_SALA` (default **90**) é o limiar de similaridade da Rekognition no
 caminho da sala, separado do cadastro.
 
-Manual da equipe em `docs/SCPI-Manual-Liveness.docx` (`docs/` é git-ignored).
+Manual da equipe em `docs/SCPI-Manual-Liveness.docx` (`docs/` é versionado).
 
 ## Script de câmera
 

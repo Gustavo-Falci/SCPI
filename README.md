@@ -130,7 +130,7 @@ SCPI/
 │   ├── receipts/             # Timer de receipts de push
 │   └── sql/                  # Consultas de verificação
 │
-├── docs/                     # Runbooks e manuais (parcialmente git-ignored)
+├── docs/                     # Runbooks e manuais (versionado, exceto docs/superpowers/)
 ├── .memory/wiki/             # Base de conhecimento para agentes (MemWiki)
 ├── schema_inicial.sql        # Schema inicial
 └── .env.example              # Template de variáveis
@@ -206,6 +206,8 @@ A pose (`LIVENESS_POSE_STD_MIN`) é **advisory** enquanto `ENABLE_TEXTURE=1` —
 - **Conta Resend** para envio de e-mails
 - **Expo CLI** / **EAS CLI** — app mobile e builds de produção
 - **Modelos ONNX** em `BackEnd/scripts/models/` — apenas na máquina com câmera (git-ignored; URLs no `.env.example`)
+
+> Python 3.12, Node 20 e PostgreSQL 16 são os alvos do CI e da produção (fixados em `.github/workflows/tests.yml` e na VM). Versões mais novas funcionam normalmente numa máquina de desenvolvimento — a suíte não depende da versão exata.
 
 ---
 
@@ -289,15 +291,15 @@ python -m http.server 3000
 
 Acesso: `http://localhost:3000`
 
-A URL da API é lida em `portal/js/config.js` a partir de `window.__SCPI_API_URL__`, definido em `portal/index.html`:
-```html
-<script>window.__SCPI_API_URL__ = 'https://api.scpi.me'</script>
+A URL da API é lida em `portal/js/config.js` a partir de `window.__SCPI_API_URL__`, definido em `portal/js/env.js` (carregado por `portal/index.html:18`):
+```javascript
+window.__SCPI_API_URL__ = 'https://api.scpi.me';
 ```
-Sem essa variável o portal cai em `http://localhost:8000`.
+Por padrão aponta para produção — não há `<script>` inline, e não poderia haver: a CSP do portal (sem `'unsafe-inline'` em `script-src`) bloquearia. Para apontar o portal local para a API local são **duas** edições manuais, nenhuma delas commitável: trocar o valor em `portal/js/env.js` para `http://localhost:8000` **e** acrescentar `http://localhost:8000` ao `connect-src` da meta CSP em `portal/index.html` (sem essa segunda edição a CSP bloqueia a chamada, e a tela fica sem dados sem erro visível fora do console).
 
 A CSP do portal **não** permite `'unsafe-inline'` em `script-src` nem em `style-src`: nada de handler inline (`onclick=`) nem de `<style>` avulso. Valor de estilo contínuo (largura de barra, etc.) vai por `el.style`, que a CSP não bloqueia. Há teste automatizado cobrando isso.
 
-Produção: publicar `portal/` em qualquer web server (Nginx — ver `docs/PORTAL_NGINX.md`).
+Produção: publicar `portal/` em qualquer web server (Nginx — ver `docs/runbooks/PORTAL_NGINX.md`).
 
 ---
 
@@ -389,9 +391,10 @@ python scripts/camera_token.py revogar --id <id>
 
 | Variável | Descrição | Exemplo |
 |---|---|---|
-| `VITE_API_URL` | URL da API consumida pelo portal | `http://localhost:8000` |
 | `EXPO_PUBLIC_API_URL` | URL da API consumida pelo app | `http://192.168.1.10:8000` |
 | `SCPI_API_URL` | URL da API consumida pelo script da câmera | `http://localhost:8000` |
+
+> A URL da API consumida pelo portal **não** vem de variável de ambiente: é definida em `portal/js/env.js` (`window.__SCPI_API_URL__`). Ver [Admin Portal (Estático)](#admin-portal-estático).
 
 ### Câmera e reconhecimento
 
@@ -444,9 +447,11 @@ python scripts/camera_token.py revogar --id <id>
 
 ### Criar usuário administrador
 
+Preencha `ADMIN_NOME`, `ADMIN_EMAIL` e `ADMIN_SENHA` no bloco 6 do `.env` da raiz antes de rodar — o script chama `load_dotenv(..., override=True)`, então o `.env` sobrescreve qualquer valor passado inline na linha de comando:
+
 ```bash
 cd BackEnd
-ADMIN_EMAIL="admin@escola.com" ADMIN_SENHA="SenhaForte123" python scripts/criar_admin.py
+python scripts/criar_admin.py
 ```
 
 ### Token de serviço da câmera
@@ -605,7 +610,7 @@ SCPI_RUN_DB_TESTS=1 DB_HOST=localhost DB_NAME=scpi_test DB_USER=scpi_test DB_PAS
 - Deploy: `git pull` → `cd BackEnd && pip install -r requirements.txt --upgrade` → restart do `scpi-api`
 - `GET /health` monitorado externamente a cada 5 minutos
 - Timers systemd versionados em `ops/` (backup do Postgres, backup de segredos, receipts de push)
-- Runbooks: `docs/SECURITY_RUNBOOK.md`, `docs/PORTAL_NGINX.md`
+- Runbooks: `docs/runbooks/SECURITY_RUNBOOK.md`, `docs/runbooks/PORTAL_NGINX.md`
 
 ---
 
