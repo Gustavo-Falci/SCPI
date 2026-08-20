@@ -120,6 +120,21 @@ Detalhe em [[log.md]].
 Gustavo executa migrations contra o banco de produção. Para só ler o Swagger, gerar o
 `openapi.json` via `app.openapi()` sem subir servidor.
 
+O `/docs` ganhou **tema escuro** (PRs #120, #121 e `75b3bb46`, em prod). O escuro vem do
+**dark mode nativo do Swagger UI 5** — 180 regras `html.dark-mode` no CSS base, ligadas pela
+classe que `core/docs_protegidos.py` injeta no `<html>`. `static/swagger-tema-escuro.css` é só
+a camada de marca (paleta do portal + accent no Execute/Authorize + foco visível), com
+`@import` do CSS base como primeira regra — `swagger_css_url` **substitui** a folha base, e
+comentário antes do `@import` faz o navegador descartá-lo.
+
+**Regra de manutenção do tema:** algo ilegível no /docs → primeiro checar se o nativo já cobre.
+A primeira versão reimplementou à mão o que já existia e deixou a seção Schemas clara. Override
+a mais é o que quebra. Os selos `1.0.0` e `OAS 3.1` ficam com o estilo original de propósito
+(teste `test_tema_nao_repinta_os_badges_de_versao_do_cabecalho` trava isso).
+
+⚠️ Depois de deploy que mexe no /docs, **Ctrl+F5**: o navegador guarda o HTML anterior, sem a
+classe `dark-mode`, e a página parece não ter mudado.
+
 ## Próximos passos
 
 - [ ] **RETOMAR AQUI: passar pela porta do jeito DIFÍCIL, com o veto ligado.** É o único risco
@@ -156,9 +171,15 @@ Gustavo executa migrations contra o banco de produção. Para só ler o Swagger,
       E campo devolvido que não está documentado. Escopo do lote 1: só as **~12 rotas** que já
       têm teste exercitando o handler (TestClient ou chamada direta) — o resto entra numa lista
       `SEM_MODELO_DE_SAIDA` no guarda, que só encolhe. Nada declarado sem prova.
-- [ ] Apagar as branches mergeadas `docs/manuais-handover`, `docs/swagger-api` e
-      `feat/docs-protegido-prod` (local e remota) e ligar "Automatically delete head
-      branches" no GitHub.
+- [ ] Apagar as branches mergeadas (`docs/manuais-handover`, `docs/swagger-api`,
+      `feat/docs-protegido-prod`, `feat/swagger-tema-escuro`, `fix/swagger-badges-versao`,
+      `feat/swagger-dark-mode-nativo`) e ligar "Automatically delete head branches" no
+      GitHub. **PR aberta = branch congelada**: commitar em branch já mergeada fez o compare
+      conflitar duas vezes em 2026-08-20 (#120, #121), porque o squash reescreve o commit.
+- [ ] **Log de auditoria do `/docs`** (adiado, não decidido): o gate em
+      `core/docs_protegidos.py` não registra nada — nem Admin que abriu, nem tentativa
+      negada. `require_role` loga negativa em `audit_logger`; este caminho não. Cookie de
+      Admin vazado abre o Swagger sem deixar rastro.
 - [ ] **Manuais fase 2** — VM de Produção (Oracle) e Domínio/DNS/TLS (Namecheap). Dependem de
       comandos rodados na VM e de dados do painel. **Destravado**: há acesso SSH
       (`ubuntu@144.22.240.31:22`, chave em `%USERPROFILE%\.ssh\scpi_vm`) — ver [[ops.md]].

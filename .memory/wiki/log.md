@@ -398,3 +398,39 @@ ou variável de ambiente.
 Armadilha da verificação, para a próxima: `curl` anônimo em `/docs` dá **404 antes e depois** da
 mudança, então sozinho não prova que o deploy chegou. O que separa os dois estados é
 `ls BackEnd/core/docs_protegidos.py` na VM e o teste autenticado no navegador.
+
+## 2026-08-20 — tema escuro do Swagger (PRs #120, #121 e 75b3bb46)
+
+O Swagger ganhou tema escuro. A primeira versão escreveu 202 linhas de CSS reimplementando o
+escuro à mão, seletor a seletor. **Estava reinventando o que já existia**: o Swagger UI 5 traz
+tema escuro pronto no próprio CSS base, atrás da classe `dark-mode` no `<html>` — 180 regras,
+sendo 97 de opblock e 16 de modelo.
+
+O sintoma que revelou isso: a seção Schemas apareceu clara, porque o override manual não cobria
+`.model-container`, `.model-box` nem `.model-title`. Caçar seletor teria repetido o problema a
+cada tela nova aberta.
+
+Agora `core/docs_protegidos.py` injeta a classe (o template do FastAPI não expõe atributo de
+`<html>`, daí o replace na resposta) e `static/swagger-tema-escuro.css` caiu para 85 linhas de
+camada de marca: paleta de `portal/tailwind.config.js`, accent `#4B39EF` no Execute e no
+Authorize, e foco visível. Os overrides usam prefixo `html.dark-mode` para empatar em
+especificidade com as regras nativas e vencer pela ordem.
+
+Duas armadilhas que os testes agora travam:
+
+- `swagger_css_url` **substitui** a folha base do Swagger; o arquivo servido precisa reimportá-la,
+  e o `@import` tem que ser a **primeira regra** — comentário antes faz o navegador descartá-lo
+  e a página vem crua.
+- Os selos `1.0.0` e `OAS 3.1` do cabeçalho ficam com o estilo original a pedido do Gustavo:
+  escurecidos, somem no cabeçalho em vez de marcarem a versão.
+
+**Regra de manutenção:** algo ilegível no /docs → primeiro checar se o nativo já cobre. Quase
+sempre cobre; override a mais é o que quebra.
+
+**Processo — erro repetido duas vezes no mesmo dia.** Continuei commitando em branch que já
+tinha PR mergeada, e como o projeto usa squash, o merge reescreve o commit: o compare seguinte
+abriu com "Can't automatically merge" nas duas vezes (#120 e depois #121). Conserto usado nas
+duas: branch nova a partir de `origin/main` + `cherry-pick` do commit que faltava. **PR aberta =
+branch congelada.**
+
+Suíte: 791 testes verdes, 17 deles cobrindo /docs, /redoc, /openapi.json e o tema.
