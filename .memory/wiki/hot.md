@@ -137,6 +137,11 @@ classe `dark-mode`, e a página parece não ter mudado.
 
 ## Próximos passos
 
+- [ ] **RETOMAR AQUI (código, sem depender de ninguém): Swagger etapa B, lote 1.** Desenho
+      fechado (ver acima). Ordem sugerida: helper de teste primeiro — é ele que dá a prova —
+      depois rota a rota. Estado hoje: `schemas/respostas/` **não existe** e só `POST
+      /auth/login` tem modelo de saída. Esperar achado de código a cada modelo escrito: a
+      etapa A rendeu cinco só ao documentar.
 - [ ] **RETOMAR AQUI: passar pela porta do jeito DIFÍCIL, com o veto ligado.** É o único risco
       sério que sobrou. Andando, na distância real de uso (rosto de ~60–75px, não colado na
       câmera), de perfil, contra a luz. No log, `tela_frames` tem que dar **0**. Se der ≥2 numa
@@ -171,10 +176,10 @@ classe `dark-mode`, e a página parece não ter mudado.
       E campo devolvido que não está documentado. Escopo do lote 1: só as **~12 rotas** que já
       têm teste exercitando o handler (TestClient ou chamada direta) — o resto entra numa lista
       `SEM_MODELO_DE_SAIDA` no guarda, que só encolhe. Nada declarado sem prova.
-- [ ] Apagar as branches mergeadas (`docs/manuais-handover`, `docs/swagger-api`,
-      `feat/docs-protegido-prod`, `feat/swagger-tema-escuro`, `fix/swagger-badges-versao`,
-      `feat/swagger-dark-mode-nativo`) e ligar "Automatically delete head branches" no
-      GitHub. **PR aberta = branch congelada**: commitar em branch já mergeada fez o compare
+- [ ] Ligar "Automatically delete head branches" no GitHub (Settings → General → Pull
+      Requests). As branches de 2026-08-20 já foram apagadas — **só `main` existe**, local e
+      remota, verificado por `git cherry` e por arquivo (nenhuma tinha conteúdo exclusivo).
+      **PR aberta = branch congelada**: commitar em branch já mergeada fez o compare
       conflitar duas vezes em 2026-08-20 (#120, #121), porque o squash reescreve o commit.
 - [ ] **Log de auditoria do `/docs`** (adiado, não decidido): o gate em
       `core/docs_protegidos.py` não registra nada — nem Admin que abriu, nem tentativa
