@@ -138,3 +138,16 @@ def test_folha_de_tema_importa_o_css_base_do_swagger():
 
 def test_folha_de_tema_tem_o_mesmo_gate_das_outras_rotas():
     assert _make_client(producao=True).get("/docs/tema-escuro.css").status_code == 404
+
+
+def test_tema_nao_repinta_os_badges_de_versao_do_cabecalho():
+    """Os selos `1.0.0` e `OAS 3.1` ficam com o estilo base do Swagger.
+
+    Escurecidos eles somem no cabeçalho; o cinza e o verde originais já
+    contrastam com o fundo escuro e sinalizam versão à primeira vista.
+    """
+    client = _make_client(producao=True)
+    client.cookies.update(_cookie_de("Admin"))
+    css = client.get("/docs/tema-escuro.css").text
+
+    assert ".info .title small" not in css

@@ -78,10 +78,9 @@ body,
   color: var(--scpi-muted);
 }
 
-.swagger-ui .info .title small pre {
-  background: var(--scpi-card-hover);
-  color: var(--scpi-faint);
-}
+/* Os selos `1.0.0` e `OAS 3.1` do cabeçalho ficam com o estilo base do
+ * Swagger: o cinza e o verde originais já contrastam com o fundo escuro, e
+ * repintados eles somem no cabeçalho em vez de marcarem a versão. */
 
 /* Barra superior: o verde padrão do Swagger é a única cor que não é do produto. */
 .swagger-ui .topbar {
