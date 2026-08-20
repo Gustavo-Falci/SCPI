@@ -26,10 +26,19 @@ def _app():
 
 
 def _rotas_documentaveis():
+    """Rotas que aparecem no /docs — as únicas em que documentação é visível.
+
+    `include_in_schema=False` fica de fora: a rota não tem página no Swagger,
+    então não há o que documentar ali. Hoje é só o HEAD /health, que duplica o
+    GET logo acima dele. Marcar uma rota assim para escapar deste guarda seria
+    abuso: a rota some do /docs junto.
+    """
     return [
         rota
         for rota in _app().routes
-        if isinstance(rota, APIRoute) and rota.path not in _ROTAS_INTERNAS
+        if isinstance(rota, APIRoute)
+        and rota.path not in _ROTAS_INTERNAS
+        and rota.include_in_schema
     ]
 
 

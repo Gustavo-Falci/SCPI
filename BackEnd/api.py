@@ -27,6 +27,7 @@ from slowapi.errors import RateLimitExceeded
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from core.csrf import CSRFMiddleware
+from core.docs_protegidos import registrar_rotas_docs
 from core.errors import rate_limit_handler
 from core.limiter import limiter
 from core.security_headers import SecurityHeadersMiddleware
@@ -123,8 +124,9 @@ async def lifespan(_app: FastAPI):
         close_pool()
 
 
-# Em produção, desabilita docs/schema interativos — evita expor toda a superfície
-# da API (endpoints + schemas) a anônimos. Em dev/homolog seguem disponíveis.
+# Em produção, /docs, /redoc e /openapi.json exigem sessão de Admin e respondem
+# 404 para o resto — evita expor toda a superfície da API (endpoints + schemas)
+# a anônimos. Em dev/homolog seguem abertos. Ver core/docs_protegidos.py.
 _IS_PRODUCTION = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
 _DESCRICAO_API = """
 API do SCPI — controle de presença acadêmica por reconhecimento facial.
@@ -168,9 +170,11 @@ app = FastAPI(
     version="1.0.0",
     description=_DESCRICAO_API,
     openapi_tags=_TAGS_OPENAPI,
-    docs_url=None if _IS_PRODUCTION else "/docs",
-    redoc_url=None if _IS_PRODUCTION else "/redoc",
-    openapi_url=None if _IS_PRODUCTION else "/openapi.json",
+    # As tres rotas nativas ficam desligadas: quem as serve e
+    # registrar_rotas_docs, que exige Admin quando em producao.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
     lifespan=lifespan,
 )
 
@@ -216,3 +220,6 @@ app.include_router(professores.router)
 app.include_router(turmas.router)
 app.include_router(chamadas.router)
 app.include_router(relatorios.router)
+
+# Depois dos routers: o /openapi.json servido aqui monta o schema do app ja completo.
+registrar_rotas_docs(app, producao=_IS_PRODUCTION)

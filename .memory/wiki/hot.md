@@ -2,7 +2,7 @@
 
 *Contexto imediato. Atualizar ao fim de toda sessão.*
 
-**Última atualização: 2026-08-19.**
+**Última atualização: 2026-08-20.**
 
 ## ✅ Liveness: o bypass foi FECHADO — mas com um teste faltando
 
@@ -74,8 +74,8 @@ quatro antigas que já tinham PR mergeada (#106, #107, #108, #109). **Só `main`
 com 761 testes verdes; a única remota viva é a do Dependabot (#111, aberta).
 
 Em 2026-08-17 o **Security Scan** estava vermelho na `main` (desde o push de 2026-08-16 e na run
-agendada) por 4 advisories high no `npm audit (app)`. Corrigido na branch
-`fix/npm-audit-app-deps`, **ainda sem commit/PR** (Gustavo commita): overrides de `js-yaml` para
+agendada) por 4 advisories high no `npm audit (app)`. Corrigido e **mergeado na `main`
+pela PR #116** (`f7070c8e`): overrides de `js-yaml` para
 3.15.1/4.3.1 (os pins antigos ficaram um patch curtos da advisory nova), `nanoid@3: 3.3.18` (a PR
 do Dependabot para `/app` falhou), e os dois GHSA de `image-size` na ALLOWLIST do gate — não têm
 versão corrigida publicada e vêm pinados pelo metro do Expo 55. Gate roda exit 0 local, `tsc` e
@@ -100,6 +100,19 @@ Em 2026-08-19 entrou o **Swagger da API, etapa A** (PR #118): 69 operações com
 descrição, 9 tags, metadados de autenticação e erro, mais o guarda
 `tests/test_openapi_documentado.py`. `response_model` ficou para a etapa B. Detalhe em
 [[log.md]].
+
+Em 2026-08-20, na branch `feat/docs-protegido-prod` (**sem commit — Gustavo commita**):
+`/docs`, `/redoc` e `/openapi.json` deixaram de ser desligados em produção e passaram a exigir
+sessão de **Admin**, respondendo **404** (não 401/403) para o resto — 404 não confirma que a
+documentação existe no host. Gate em `core/docs_protegidos.py`, com dependency própria porque
+`get_current_user` levanta 401 antes de a rota rodar. Junto entrou o fix do `Duplicate
+Operation ID` do `/health` (GET e HEAD em decoradores separados; o HEAD que o UptimeRobot usa
+saiu do schema). 785 testes verdes. Detalhe em [[log.md]].
+
+**Atenção ao subir a API local:** o lifespan roda `_migrations.run_all()` (`api.py:116`) e o
+`.env` da raiz aponta `DB_HOST=168.138.134.208` — **produção**. `uvicorn api:app` na máquina do
+Gustavo executa migrations contra o banco de produção. Para só ler o Swagger, gerar o
+`openapi.json` via `app.openapi()` sem subir servidor.
 
 ## Próximos passos
 
@@ -129,15 +142,19 @@ descrição, 9 tags, metadados de autenticação e erro, mais o guarda
 - [ ] **SHA-1 do Play App Signing** na chave Firebase ANTES de publicar na Play Store,
       senão push quebra em prod. Ver [[app-mobile.md]].
 - [ ] Validar em campo o warning `Sala X com 2 chamadas abertas hoje (candidatas=[...])`.
-- [ ] **Swagger etapa B** — `response_model` rota a rota. MUDA payload (filtra campos): cada
-      rota precisa ser conferida contra o que portal e app leem, com teste cobrindo os campos.
-- [ ] `Duplicate Operation ID` do `/health` — GET e HEAD no mesmo `api_route`. Quebra gerador
-      de cliente OpenAPI. Conserto: dois decoradores, mantendo o HEAD que o UptimeRobot usa.
+- [ ] **Swagger etapa B** — desenho já decidido em 2026-08-20, falta escrever: modelos de saída
+      declarados por `responses={200: {"model": X}}`, **não** `response_model=` (este filtra o
+      payload e sumiria com campo que portal ou app leem). Modelos em
+      `BackEnd/schemas/respostas/`, um arquivo por router. Fidelidade garantida por helper de
+      teste com `model_validate` e `extra="forbid"`, que pega campo documentado que não existe
+      E campo devolvido que não está documentado. Escopo do lote 1: só as **~12 rotas** que já
+      têm teste exercitando o handler (TestClient ou chamada direta) — o resto entra numa lista
+      `SEM_MODELO_DE_SAIDA` no guarda, que só encolhe. Nada declarado sem prova.
 - [ ] Apagar as branches mergeadas `docs/manuais-handover` e `docs/swagger-api` (local e
       remota) e ligar "Automatically delete head branches" no GitHub.
 - [ ] **Manuais fase 2** — VM de Produção (Oracle) e Domínio/DNS/TLS (Namecheap). Dependem de
-      comandos rodados na VM e de dados do painel; o primeiro bloqueio é saber **como se acessa
-      a VM hoje** (a wiki diz que não há SSH da máquina Windows do Gustavo).
+      comandos rodados na VM e de dados do painel. **Destravado**: há acesso SSH
+      (`ubuntu@144.22.240.31:22`, chave em `%USERPROFILE%\.ssh\scpi_vm`) — ver [[ops.md]].
 - [ ] **Manuais fase 3** — AWS, App Mobile/EAS/Firebase, Contas e Segredos, Câmera (instalação
       e calibração), LGPD. Dependem de entrevista de console.
 - [ ] **Decidir sobre o manual da API/backend** — não está em nenhum dos onze planejados, e é o
