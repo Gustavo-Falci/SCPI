@@ -17,7 +17,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from core.auth_utils import ACCESS_COOKIE_NAME, decode_access_token
 
@@ -63,11 +63,16 @@ def registrar_rotas_docs(app: FastAPI, producao: bool) -> None:
     def swagger_protegido(request: Request):
         _exigir_admin(request, producao)
         # swagger_css_url substitui a folha base; o arquivo servido a reimporta.
-        return get_swagger_ui_html(
+        pagina = get_swagger_ui_html(
             openapi_url="/openapi.json",
             title="%s — Swagger" % app.title,
             swagger_css_url=_TEMA_ESCURO_URL,
         )
+        # O Swagger UI 5 traz o tema escuro pronto no próprio CSS, atrás da
+        # classe `dark-mode` no <html> — 180 regras, incluindo a seção Schemas.
+        # O template do FastAPI não expõe atributo de <html>, daí a troca.
+        html = pagina.body.decode("utf-8").replace("<html>", '<html class="dark-mode">', 1)
+        return HTMLResponse(html)
 
     @app.get("/redoc", include_in_schema=False)
     def redoc_protegido(request: Request):

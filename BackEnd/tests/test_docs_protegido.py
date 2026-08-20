@@ -151,3 +151,14 @@ def test_tema_nao_repinta_os_badges_de_versao_do_cabecalho():
     css = client.get("/docs/tema-escuro.css").text
 
     assert ".info .title small" not in css
+
+
+def test_swagger_ativa_o_dark_mode_nativo_do_swagger_ui():
+    """O Swagger UI 5 traz 180 regras `html.dark-mode` no CSS base.
+
+    Ativar a classe cobre a página inteira — incluindo cantos que só aparecem
+    ao expandir uma rota — em vez de caçar seletor a seletor no override.
+    """
+    client = _make_client(producao=True)
+    client.cookies.update(_cookie_de("Admin"))
+    assert '<html class="dark-mode">' in client.get("/docs").text
