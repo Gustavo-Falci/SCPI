@@ -134,6 +134,28 @@ cross-origin. **Não remover sem ler esse raciocínio.**
 Escolhido porque build antiga faz `Array.isArray(data)` e renderizaria lista vazia — **falha
 silenciosa é pior que erro visível**. Backend e app sobem em qualquer ordem.
 
+## Adiado com gatilho — auth dedicado para o Swagger (2026-08-20)
+
+`/docs` exige sessão de **Admin** (PR #119). Decidido **não** criar autenticação própria para a
+documentação agora — quem lê o Swagger hoje já é Admin, e um segundo mecanismo de auth seria
+segredo novo sem leitor novo.
+
+**Gatilho para retomar:** aparecer alguém que precise ler a documentação e **não** deva ser
+Admin — dev novo no handover, auditor, sócio. Hoje ler a doc custa um crachá que vê e apaga
+dado pessoal de aluno (biometria, RA, presença), o que é privilégio excessivo para leitura.
+
+**Quando retomar, a opção a defender é um papel de leitor** no próprio sistema de usuários:
+usuário real, revogável um a um, com trilha de auditoria e sem segredo novo. Custa mexer no
+`tipo_usuario` (hoje `Professor|Aluno|Admin`, com pattern na validação e valor no banco).
+
+**Basic auth no nginx foi considerada e rejeitada** como caminho preferencial: credencial
+compartilhada, sem trilha de quem acessou, e revogar para uma pessoa obriga a trocar para
+todos. Trocar sessão individual revogável por segredo coletivo piora a auditoria.
+
+**Buraco conhecido, independente dessa decisão:** o gate em `core/docs_protegidos.py` **não
+registra nada** — nem Admin que abriu, nem tentativa negada. O `require_role` loga negativa em
+`audit_logger`; este caminho não. Cookie de Admin vazado abre o Swagger sem deixar rastro.
+
 ## Em aberto — decisão dos sócios
 
 Levadas ao grupo em 2026-07-07 e depois; **não retomar o design até a resposta**.

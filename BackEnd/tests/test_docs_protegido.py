@@ -105,3 +105,36 @@ def test_api_desliga_as_rotas_nativas_e_registra_as_protegidas():
 
     caminhos = {r.path for r in api.app.routes}
     assert {"/docs", "/redoc", "/openapi.json"} <= caminhos
+
+
+def test_swagger_carrega_a_folha_de_tema_da_propria_api():
+    """O tema vem de 'self': a CSP de /docs permite style-src 'self'."""
+    client = _make_client(producao=True)
+    client.cookies.update(_cookie_de("Admin"))
+    assert "/docs/tema-escuro.css" in client.get("/docs").text
+
+
+def test_folha_de_tema_e_css_com_a_paleta_do_portal():
+    client = _make_client(producao=True)
+    client.cookies.update(_cookie_de("Admin"))
+    resp = client.get("/docs/tema-escuro.css")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/css")
+    # Paleta herdada de portal/tailwind.config.js — Swagger e portal são o mesmo produto.
+    assert "#0C0C12" in resp.text
+    assert "#4B39EF" in resp.text
+
+
+def test_folha_de_tema_importa_o_css_base_do_swagger():
+    """swagger_css_url SUBSTITUI o CSS base; sem o @import a página vem sem estilo."""
+    client = _make_client(producao=True)
+    client.cookies.update(_cookie_de("Admin"))
+    css = client.get("/docs/tema-escuro.css").text
+
+    assert css.lstrip().startswith("@import"), "o @import precisa ser a primeira regra do arquivo"
+    assert "swagger-ui-dist@5" in css
+
+
+def test_folha_de_tema_tem_o_mesmo_gate_das_outras_rotas():
+    assert _make_client(producao=True).get("/docs/tema-escuro.css").status_code == 404

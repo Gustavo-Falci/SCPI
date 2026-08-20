@@ -387,3 +387,14 @@ passa a ser garantida por um helper de teste com `model_validate` e `extra="forb
 os dois erros: campo documentado que a rota não devolve, e campo devolvido que não está
 documentado. O lote 1 cobre só as ~12 rotas que já têm teste exercitando o handler; o resto vai
 para uma lista `SEM_MODELO_DE_SAIDA` no guarda, que só encolhe. Nada declarado sem prova.
+
+**Validação em produção (mesmo dia, PR #119 mergeada):** Admin logado no portal abre
+`api.scpi.me/docs` e o Swagger renderiza; sem cookie, as três rotas devolvem 404. Confirmado
+antes do deploy que o 404 de então vinha do **FastAPI** (`{"detail":"Not Found"}`,
+`Content-Type: application/json`) e não do nginx, e que a CSP de docs já saía em produção pelo
+middleware — por isso o deploy foi só `git pull` + restart, sem tocar nginx, `requirements.txt`
+ou variável de ambiente.
+
+Armadilha da verificação, para a próxima: `curl` anônimo em `/docs` dá **404 antes e depois** da
+mudança, então sozinho não prova que o deploy chegou. O que separa os dois estados é
+`ls BackEnd/core/docs_protegidos.py` na VM e o teste autenticado no navegador.
