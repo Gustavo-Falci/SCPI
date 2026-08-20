@@ -101,13 +101,19 @@ descrição, 9 tags, metadados de autenticação e erro, mais o guarda
 `tests/test_openapi_documentado.py`. `response_model` ficou para a etapa B. Detalhe em
 [[log.md]].
 
-Em 2026-08-20, na branch `feat/docs-protegido-prod` (**sem commit — Gustavo commita**):
+Em 2026-08-20 entrou o **/docs protegido em produção** (PR #119, **em prod e validado**):
 `/docs`, `/redoc` e `/openapi.json` deixaram de ser desligados em produção e passaram a exigir
 sessão de **Admin**, respondendo **404** (não 401/403) para o resto — 404 não confirma que a
 documentação existe no host. Gate em `core/docs_protegidos.py`, com dependency própria porque
 `get_current_user` levanta 401 antes de a rota rodar. Junto entrou o fix do `Duplicate
 Operation ID` do `/health` (GET e HEAD em decoradores separados; o HEAD que o UptimeRobot usa
-saiu do schema). 785 testes verdes. Detalhe em [[log.md]].
+saiu do schema). 785 testes verdes.
+
+Validado em produção no mesmo dia: Admin logado no portal abre `api.scpi.me/docs` e vê o
+Swagger; anônimo recebe 404 nas três rotas. **Nenhuma config de servidor mudou** — nginx é só
+proxy (o 404 vinha do FastAPI, com `{"detail":"Not Found"}`), a CSP relaxada de docs já saía em
+produção pelo middleware, e o gate reusa o `ENVIRONMENT=production` que já estava na VM.
+Detalhe em [[log.md]].
 
 **Atenção ao subir a API local:** o lifespan roda `_migrations.run_all()` (`api.py:116`) e o
 `.env` da raiz aponta `DB_HOST=168.138.134.208` — **produção**. `uvicorn api:app` na máquina do
@@ -150,8 +156,9 @@ Gustavo executa migrations contra o banco de produção. Para só ler o Swagger,
       E campo devolvido que não está documentado. Escopo do lote 1: só as **~12 rotas** que já
       têm teste exercitando o handler (TestClient ou chamada direta) — o resto entra numa lista
       `SEM_MODELO_DE_SAIDA` no guarda, que só encolhe. Nada declarado sem prova.
-- [ ] Apagar as branches mergeadas `docs/manuais-handover` e `docs/swagger-api` (local e
-      remota) e ligar "Automatically delete head branches" no GitHub.
+- [ ] Apagar as branches mergeadas `docs/manuais-handover`, `docs/swagger-api` e
+      `feat/docs-protegido-prod` (local e remota) e ligar "Automatically delete head
+      branches" no GitHub.
 - [ ] **Manuais fase 2** — VM de Produção (Oracle) e Domínio/DNS/TLS (Namecheap). Dependem de
       comandos rodados na VM e de dados do painel. **Destravado**: há acesso SSH
       (`ubuntu@144.22.240.31:22`, chave em `%USERPROFILE%\.ssh\scpi_vm`) — ver [[ops.md]].

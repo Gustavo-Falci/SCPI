@@ -13,11 +13,16 @@ O token é extraído à mão, sem reusar `get_current_user`, porque aquela
 dependency levanta 401 antes de o código desta rota rodar — e 401 é exatamente
 a resposta que não queremos dar aqui.
 """
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from core.auth_utils import ACCESS_COOKIE_NAME, decode_access_token
+
+_TEMA_ESCURO = Path(__file__).resolve().parent.parent / "static" / "swagger-tema-escuro.css"
+_TEMA_ESCURO_URL = "/docs/tema-escuro.css"
 
 
 def _token_da_requisicao(request: Request) -> str | None:
@@ -49,10 +54,20 @@ def registrar_rotas_docs(app: FastAPI, producao: bool) -> None:
         _exigir_admin(request, producao)
         return JSONResponse(app.openapi())
 
+    @app.get(_TEMA_ESCURO_URL, include_in_schema=False)
+    def tema_escuro(request: Request):
+        _exigir_admin(request, producao)
+        return FileResponse(_TEMA_ESCURO, media_type="text/css")
+
     @app.get("/docs", include_in_schema=False)
     def swagger_protegido(request: Request):
         _exigir_admin(request, producao)
-        return get_swagger_ui_html(openapi_url="/openapi.json", title="%s — Swagger" % app.title)
+        # swagger_css_url substitui a folha base; o arquivo servido a reimporta.
+        return get_swagger_ui_html(
+            openapi_url="/openapi.json",
+            title="%s — Swagger" % app.title,
+            swagger_css_url=_TEMA_ESCURO_URL,
+        )
 
     @app.get("/redoc", include_in_schema=False)
     def redoc_protegido(request: Request):

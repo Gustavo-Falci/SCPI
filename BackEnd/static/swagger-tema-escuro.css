@@ -1,0 +1,202 @@
+@import url("https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css");
+
+/* Tema escuro do Swagger do SCPI.
+ *
+ * A paleta é a mesma de portal/tailwind.config.js — Swagger e portal são o
+ * mesmo produto, e os cinzas de texto de lá já passaram por contraste WCAG AA
+ * (ver BackEnd/tests/test_portal_contraste_wcag.py).
+ *
+ * As cores dos métodos HTTP (GET/POST/PUT/DELETE) são mantidas e apenas
+ * clareadas para o fundo escuro: ali a cor é informação, não decoração — quem
+ * lê a página se orienta por ela antes de ler o texto.
+ *
+ * Servido pela própria API (style-src 'self' na CSP de /docs). O @import
+ * precisa ser a primeira regra do arquivo, senão o navegador o descarta e a
+ * página vem sem o CSS base do Swagger.
+ */
+
+:root {
+  --scpi-surface: #0C0C12;
+  --scpi-card: #151718;
+  --scpi-card-hover: #1A1C1E;
+  --scpi-borda: #2A2D31;
+  --scpi-accent: #4B39EF;
+  --scpi-texto: #E5E7EB;
+  --scpi-muted: #9ca3af;
+  --scpi-faint: #8b9099;
+}
+
+body,
+.swagger-ui {
+  background: var(--scpi-surface);
+  color: var(--scpi-texto);
+}
+
+/* O Swagger fixa #3b4151 em dezenas de seletores; esta lista cobre os que
+ * aparecem na página do SCPI. Texto que escapar aqui fica ilegível no escuro. */
+.swagger-ui,
+.swagger-ui p,
+.swagger-ui li,
+.swagger-ui h1,
+.swagger-ui h2,
+.swagger-ui h3,
+.swagger-ui h4,
+.swagger-ui h5,
+.swagger-ui label,
+.swagger-ui table thead tr td,
+.swagger-ui table thead tr th,
+.swagger-ui .info .title,
+.swagger-ui .info li,
+.swagger-ui .info p,
+.swagger-ui .info table td,
+.swagger-ui .opblock .opblock-section-header h4,
+.swagger-ui .opblock .opblock-summary-path,
+.swagger-ui .opblock .opblock-summary-path__deprecated,
+.swagger-ui .opblock-description-wrapper p,
+.swagger-ui .opblock-external-docs-wrapper p,
+.swagger-ui .opblock-title_normal p,
+.swagger-ui .parameter__name,
+.swagger-ui .parameter__type,
+.swagger-ui .response-col_status,
+.swagger-ui .response-col_links,
+.swagger-ui .responses-inner h4,
+.swagger-ui .responses-inner h5,
+.swagger-ui .model,
+.swagger-ui .model-title,
+.swagger-ui .tab li,
+.swagger-ui .dialog-ux .modal-ux-content h4,
+.swagger-ui .dialog-ux .modal-ux-header h3 {
+  color: var(--scpi-texto);
+}
+
+.swagger-ui .opblock .opblock-summary-description,
+.swagger-ui .parameter__in,
+.swagger-ui .parameter__extension,
+.swagger-ui .opblock-tag small,
+.swagger-ui .info .base-url,
+.swagger-ui .info hgroup.main a {
+  color: var(--scpi-muted);
+}
+
+.swagger-ui .info .title small pre {
+  background: var(--scpi-card-hover);
+  color: var(--scpi-faint);
+}
+
+/* Barra superior: o verde padrão do Swagger é a única cor que não é do produto. */
+.swagger-ui .topbar {
+  background: var(--scpi-card);
+  border-bottom: 1px solid var(--scpi-borda);
+}
+
+.swagger-ui .scheme-container,
+.swagger-ui section.models,
+.swagger-ui .model-box,
+.swagger-ui .dialog-ux .modal-ux {
+  background: var(--scpi-card);
+  border: 1px solid var(--scpi-borda);
+  box-shadow: none;
+}
+
+.swagger-ui .opblock-tag {
+  color: var(--scpi-texto);
+  border-bottom: 1px solid var(--scpi-borda);
+}
+
+.swagger-ui .opblock {
+  background: var(--scpi-card);
+  border-color: var(--scpi-borda);
+  box-shadow: none;
+}
+
+.swagger-ui .opblock .opblock-section-header {
+  background: var(--scpi-card-hover);
+  box-shadow: none;
+}
+
+.swagger-ui .opblock.opblock-get { border-color: #2f81f7; }
+.swagger-ui .opblock.opblock-get .opblock-summary-method { background: #2f81f7; }
+.swagger-ui .opblock.opblock-post { border-color: #3fb950; }
+.swagger-ui .opblock.opblock-post .opblock-summary-method { background: #3fb950; }
+.swagger-ui .opblock.opblock-put { border-color: #d29922; }
+.swagger-ui .opblock.opblock-put .opblock-summary-method { background: #d29922; }
+.swagger-ui .opblock.opblock-patch { border-color: #56d4dd; }
+.swagger-ui .opblock.opblock-patch .opblock-summary-method { background: #56d4dd; }
+.swagger-ui .opblock.opblock-delete { border-color: #f85149; }
+.swagger-ui .opblock.opblock-delete .opblock-summary-method { background: #f85149; }
+
+.swagger-ui .opblock .opblock-summary {
+  border-color: var(--scpi-borda);
+}
+
+/* Tabelas e blocos de código */
+.swagger-ui table tbody tr td {
+  border-color: var(--scpi-borda);
+  color: var(--scpi-texto);
+}
+
+.swagger-ui .highlight-code > .microlight,
+.swagger-ui .model-example .microlight,
+.swagger-ui .body-param__example {
+  background: #0a0c10;
+  color: var(--scpi-texto);
+}
+
+.swagger-ui .prop-type { color: #a5b4fc; }
+.swagger-ui .prop-format { color: var(--scpi-faint); }
+
+/* Campos e botões */
+.swagger-ui input[type="text"],
+.swagger-ui input[type="password"],
+.swagger-ui input[type="email"],
+.swagger-ui input[type="search"],
+.swagger-ui textarea,
+.swagger-ui select {
+  background: var(--scpi-surface);
+  border: 1px solid var(--scpi-borda);
+  color: var(--scpi-texto);
+}
+
+.swagger-ui .btn {
+  background: transparent;
+  border-color: var(--scpi-borda);
+  color: var(--scpi-texto);
+}
+
+.swagger-ui .btn.authorize {
+  border-color: var(--scpi-accent);
+  color: #c7c0ff;
+}
+
+.swagger-ui .btn.authorize svg { fill: #c7c0ff; }
+
+.swagger-ui .btn.execute {
+  background: var(--scpi-accent);
+  border-color: var(--scpi-accent);
+  color: #fff;
+}
+
+/* Foco visível: o contorno padrão some contra o fundo escuro. */
+.swagger-ui a:focus-visible,
+.swagger-ui button:focus-visible,
+.swagger-ui input:focus-visible,
+.swagger-ui select:focus-visible,
+.swagger-ui textarea:focus-visible,
+.swagger-ui summary:focus-visible {
+  outline: 2px solid var(--scpi-accent);
+  outline-offset: 2px;
+}
+
+/* Setas e ícones vêm com fill escuro fixo no SVG. */
+.swagger-ui .expand-methods svg,
+.swagger-ui .expand-operation svg,
+.swagger-ui .opblock-summary-control svg,
+.swagger-ui section.models h4 svg,
+.swagger-ui .model-toggle:after {
+  fill: var(--scpi-muted);
+  filter: invert(1) brightness(1.6);
+}
+
+.swagger-ui .loading-container .loading:after {
+  color: var(--scpi-muted);
+}
