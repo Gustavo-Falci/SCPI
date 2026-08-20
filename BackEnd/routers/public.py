@@ -33,7 +33,7 @@ def politica_privacidade(request: Request):
     }
 
 
-@router.api_route("/health", methods=["GET", "HEAD"], summary="Healthcheck da API e do banco")
+@router.get("/health", summary="Healthcheck da API e do banco")
 @limiter.limit("30/minute")
 def health(request: Request):
     """Healthcheck: valida a conexão com o Postgres.
@@ -57,3 +57,13 @@ def health(request: Request):
             content={"status": "degraded", "database": "error"},
         )
     return {"status": "ok", "database": "ok"}
+
+
+# HEAD em rota propria, e nao methods=["GET","HEAD"] no mesmo api_route: o
+# api_route unico gera operationId duplicado no OpenAPI, o que quebra gerador
+# de cliente. Fora do schema por ser o mesmo recurso do GET acima.
+@router.head("/health", include_in_schema=False)
+@limiter.limit("30/minute")
+def health_head(request: Request):
+    """Mesmo healthcheck do GET. O monitor free do UptimeRobot usa HEAD."""
+    return health(request)

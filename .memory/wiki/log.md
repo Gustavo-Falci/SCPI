@@ -337,3 +337,53 @@ Achados de código que a documentação revelou, todos registrados nas próprias
 - Warning `Duplicate Operation ID health_health_get`: `/health` serve GET e HEAD no mesmo
   `api_route`, e ID duplicado quebra gerador de cliente OpenAPI. Não corrigido.
 
+
+## 2026-08-20 — /docs em produção atrás de Admin, e o fix do Duplicate Operation ID
+
+Branch `feat/docs-protegido-prod`, sem commit (Gustavo commita).
+
+O Swagger da etapa A só existia em dev: `docs_url`, `redoc_url` e `openapi_url` viravam `None`
+quando `ENVIRONMENT=production`. Ver a documentação exigia subir a API local — e isso tem um
+efeito colateral que ninguém tinha anotado: **o lifespan roda `_migrations.run_all()`
+(`api.py:116`) e o `.env` da raiz aponta `DB_HOST=168.138.134.208`, que é produção**. `uvicorn
+api:app` na máquina do Gustavo executa migrations contra o banco de produção. Para só ler o
+schema, `app.openapi()` resolve sem subir servidor.
+
+Agora as três rotas são registradas por `core/docs_protegidos.py` e exigem sessão de Admin em
+produção. Fora de produção seguem abertas, pelo mesmo caminho de código — só a dependency muda
+de comportamento, o que evita a classe de bug que só aparece em prod.
+
+**Quem não é Admin recebe 404**, não 401 nem 403: 404 não confirma que a documentação existe
+naquele host. Mesmo critério anti-enumeração do `require_self_or_admin`.
+
+Duas coisas já estavam prontas e ninguém tinha ligado:
+
+- `core/security_headers.py:29` já tem `_CSP_DOCS`, com `cdn.jsdelivr.net` liberado para
+  `script-src`/`style-src` e os paths `/docs`, `/redoc`, `/openapi.json` tratados à parte. Sem
+  isso a CSP de produção (`default-src 'none'`) bloquearia o Swagger inteiro.
+- O cookie `scpi_access` é host-only em `api.scpi.me` com `SameSite=Lax`, então navegação
+  top-level para `api.scpi.me/docs` leva o cookie, e o `fetch` do `openapi.json` é same-origin.
+  Quem já logou no portal não precisa de passo novo.
+
+O token é extraído à mão em vez de reusar `get_current_user`: aquela dependency levanta 401
+antes de a rota rodar, e 401 é exatamente a resposta que não queremos dar aqui.
+
+Verificado antes de mexer: `curl` em `api.scpi.me/docs`, `/redoc` e `/openapi.json` devolvia 404
+nas três, o que confirma que `ENVIRONMENT=production` está mesmo setada na VM — sem isso o gate
+novo abriria a documentação para anônimo.
+
+Junto entrou o **`Duplicate Operation ID health_health_get`**: `/health` servia GET e HEAD no
+mesmo `api_route`, e ID duplicado quebra gerador de cliente OpenAPI. Agora são dois decoradores,
+com o HEAD (que o UptimeRobot usa) fora do schema por ser o mesmo recurso. Isso obrigou um
+ajuste no guarda da etapa A: `_rotas_documentaveis()` passou a ignorar `include_in_schema=False`
+— rota que não aparece no /docs não tem página para documentar.
+
+Suíte: 785 testes verdes, sem warnings.
+
+**Decidido nesta sessão, para a etapa B do Swagger** (ainda não escrita): declarar os modelos de
+saída com `responses={200: {"model": X}}` e **não** com `response_model=`. O segundo filtra o
+payload e sumiria em silêncio com campo que o portal ou o app consomem. A fidelidade do schema
+passa a ser garantida por um helper de teste com `model_validate` e `extra="forbid"`, que pega
+os dois erros: campo documentado que a rota não devolve, e campo devolvido que não está
+documentado. O lote 1 cobre só as ~12 rotas que já têm teste exercitando o handler; o resto vai
+para uma lista `SEM_MODELO_DE_SAIDA` no guarda, que só encolhe. Nada declarado sem prova.

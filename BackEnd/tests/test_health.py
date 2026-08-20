@@ -78,3 +78,23 @@ def test_health_head_db_fora_retorna_503():
     with patch("routers.public.get_db_cursor", _cursor_none):
         resp = _make_client().head("/health")
     assert resp.status_code == 503
+
+
+def test_head_health_continua_respondendo():
+    """O monitor free do UptimeRobot usa HEAD; perder isso derruba o alerta."""
+    with patch("routers.public.get_db_cursor", _cursor_ok):
+        resp = _make_client().head("/health")
+    assert resp.status_code == 200
+
+
+def test_operation_ids_do_openapi_sao_unicos():
+    """GET e HEAD no mesmo api_route geram operationId duplicado, que quebra
+    gerador de cliente OpenAPI (e emite UserWarning no build do schema)."""
+    spec = _make_client().app.openapi()
+    ids = [
+        op["operationId"]
+        for caminho in spec["paths"].values()
+        for metodo, op in caminho.items()
+        if metodo in ("get", "post", "put", "patch", "delete", "head")
+    ]
+    assert len(ids) == len(set(ids)), "operationId duplicado: %s" % sorted(ids)
