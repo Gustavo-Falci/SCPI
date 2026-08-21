@@ -63,6 +63,7 @@ from schemas.admin import (
     MatricularAlunos,
     TurmaCreate,
 )
+from schemas.respostas.admin import AlunosPaginados, InventarioBiometrico
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("scpi.audit")
@@ -400,7 +401,11 @@ def admin_excluir_horario(horario_id: str, request: Request, current_user: dict 
         raise internal_error(e, "admin_excluir_horario")
 
 
-@router.get("/alunos", summary="Listar alunos com filtros e paginação")
+@router.get(
+    "/alunos",
+    summary="Listar alunos com filtros e paginação",
+    responses={200: {"model": AlunosPaginados}},
+)
 def admin_listar_alunos(
     q: Optional[str] = None,
     turno: Optional[Literal["Matutino", "Noturno"]] = None,
@@ -796,7 +801,11 @@ class S3KeyPayload(BaseModel):
     key: str
 
 
-@router.get("/rostos/inventario", summary="Auditoria cruzada da biometria (Rekognition/S3/banco)")
+@router.get(
+    "/rostos/inventario",
+    summary="Auditoria cruzada da biometria (Rekognition/S3/banco)",
+    responses={200: {"model": InventarioBiometrico}},
+)
 def admin_inventario_biometrico():
     """Collection, bucket e banco cruzados para auditoria da aba Biometria.
 

@@ -2,7 +2,7 @@
 
 *Contexto imediato. Atualizar ao fim de toda sessão.*
 
-**Última atualização: 2026-08-20.**
+**Última atualização: 2026-08-21.**
 
 ## ✅ Liveness: o bypass foi FECHADO — mas com um teste faltando
 
@@ -115,6 +115,24 @@ proxy (o 404 vinha do FastAPI, com `{"detail":"Not Found"}`), a CSP relaxada de 
 produção pelo middleware, e o gate reusa o `ENVIRONMENT=production` que já estava na VM.
 Detalhe em [[log.md]].
 
+Em 2026-08-21 entrou o **Swagger etapa B, lote 1**: 13 rotas passaram a declarar modelo de
+saída, e o /docs deixou de mostrar "Successful Response" vazio nelas. Declaração por
+`responses={200: {"model": X}}`, **nunca** `response_model=` — este filtra o payload em runtime e
+faria campo esquecido no modelo sumir da resposta que portal e app já leem. `Token` (POST
+/auth/login) segue como a única saída por `response_model=`, de antes desta etapa.
+
+A fidelidade é provada, não afirmada: `tests/conformidade_respostas.py` lê o modelo pendurado na
+rota do app real e valida contra ele o payload do teste; como todo modelo herda `RespostaBase`
+(`extra="forbid"`), reprova tanto campo documentado que não existe quanto campo devolvido que
+ninguém documentou. **As duas direções foram verificadas por mutação** antes de fechar. O payload
+passa por `jsonable_encoder` primeiro — o cliente lê JSON, e sem isso um `uuid.UUID` do psycopg2
+falharia contra `str` numa divergência que o cliente nunca vê.
+
+A dívida restante mora em `SEM_MODELO_DE_SAIDA` (`tests/test_openapi_respostas.py`): **54 rotas**.
+A lista **só encolhe** — o guarda reprova rota nova sem modelo que não esteja listada, rota já
+documentada que continue listada, e entrada órfã. 846 testes verdes (eram 785). Detalhe em
+[[log.md]].
+
 **Atenção ao subir a API local:** o lifespan roda `_migrations.run_all()` (`api.py:116`) e o
 `.env` da raiz aponta `DB_HOST=168.138.134.208` — **produção**. `uvicorn api:app` na máquina do
 Gustavo executa migrations contra o banco de produção. Para só ler o Swagger, gerar o
@@ -137,11 +155,13 @@ classe `dark-mode`, e a página parece não ter mudado.
 
 ## Próximos passos
 
-- [ ] **RETOMAR AQUI (código, sem depender de ninguém): Swagger etapa B, lote 1.** Desenho
-      fechado (ver acima). Ordem sugerida: helper de teste primeiro — é ele que dá a prova —
-      depois rota a rota. Estado hoje: `schemas/respostas/` **não existe** e só `POST
-      /auth/login` tem modelo de saída. Esperar achado de código a cada modelo escrito: a
-      etapa A rendeu cinco só ao documentar.
+- [ ] **Swagger etapa B, lote 2.** O lote 1 fechou (13 rotas, ver "Estado atual"); sobram **54** em
+      `SEM_MODELO_DE_SAIDA`. O padrão está pronto e provado — copiar dele: modelo em
+      `schemas/respostas/<router>.py` herdando `RespostaBase`, `responses={200: {"model": X}}`
+      na rota, teste em `tests/test_respostas_documentadas.py` com `assert_resposta_conforme`,
+      e apagar a linha da lista. Candidatos naturais do lote 2: as rotas de relatório com
+      retorno polimórfico (JSON, envelope `paginado=1` e `formato=pdf` na mesma rota) — elas
+      precisam de decisão de desenho antes, o 200 não é um formato só.
 - [ ] **RETOMAR AQUI: passar pela porta do jeito DIFÍCIL, com o veto ligado.** É o único risco
       sério que sobrou. Andando, na distância real de uso (rosto de ~60–75px, não colado na
       câmera), de perfil, contra a luz. No log, `tela_frames` tem que dar **0**. Se der ≥2 numa
@@ -168,14 +188,6 @@ classe `dark-mode`, e a página parece não ter mudado.
 - [ ] **SHA-1 do Play App Signing** na chave Firebase ANTES de publicar na Play Store,
       senão push quebra em prod. Ver [[app-mobile.md]].
 - [ ] Validar em campo o warning `Sala X com 2 chamadas abertas hoje (candidatas=[...])`.
-- [ ] **Swagger etapa B** — desenho já decidido em 2026-08-20, falta escrever: modelos de saída
-      declarados por `responses={200: {"model": X}}`, **não** `response_model=` (este filtra o
-      payload e sumiria com campo que portal ou app leem). Modelos em
-      `BackEnd/schemas/respostas/`, um arquivo por router. Fidelidade garantida por helper de
-      teste com `model_validate` e `extra="forbid"`, que pega campo documentado que não existe
-      E campo devolvido que não está documentado. Escopo do lote 1: só as **~12 rotas** que já
-      têm teste exercitando o handler (TestClient ou chamada direta) — o resto entra numa lista
-      `SEM_MODELO_DE_SAIDA` no guarda, que só encolhe. Nada declarado sem prova.
 - [ ] Ligar "Automatically delete head branches" no GitHub (Settings → General → Pull
       Requests). As branches de 2026-08-20 já foram apagadas — **só `main` existe**, local e
       remota, verificado por `git cherry` e por arquivo (nenhuma tinha conteúdo exclusivo).

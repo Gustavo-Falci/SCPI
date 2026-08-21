@@ -10,19 +10,28 @@ from core.config import (
 )
 from core.limiter import limiter
 from infra.database import get_db_cursor
+from schemas.respostas.public import ApiNoAr, PoliticaPrivacidadeVigente, SaudeDaApi
 
 logger = logging.getLogger("scpi.health")
 
 router = APIRouter(tags=["público"])
 
 
-@router.get("/", summary="Confirma que a API está no ar")
+@router.get(
+    "/",
+    summary="Confirma que a API está no ar",
+    responses={200: {"model": ApiNoAr}},
+)
 def home():
     """Endpoint raiz, sem autenticação: confirma que a API está respondendo."""
     return {"mensagem": "API SCPI está rodando!"}
 
 
-@router.get("/politica-privacidade", summary="Versão vigente da política de privacidade")
+@router.get(
+    "/politica-privacidade",
+    summary="Versão vigente da política de privacidade",
+    responses={200: {"model": PoliticaPrivacidadeVigente}},
+)
 @limiter.limit("30/minute")
 def politica_privacidade(request: Request):
     """Versão vigente da política — público, o app lê antes de mostrar o aceite."""
@@ -33,7 +42,16 @@ def politica_privacidade(request: Request):
     }
 
 
-@router.get("/health", summary="Healthcheck da API e do banco")
+@router.get(
+    "/health",
+    summary="Healthcheck da API e do banco",
+    # O 503 tem o mesmo formato do 200 e é resposta prevista, não erro genérico:
+    # documentar só o 200 esconderia do leitor o corpo que o monitor recebe.
+    responses={
+        200: {"model": SaudeDaApi},
+        503: {"model": SaudeDaApi, "description": "Banco indisponível"},
+    },
+)
 @limiter.limit("30/minute")
 def health(request: Request):
     """Healthcheck: valida a conexão com o Postgres.

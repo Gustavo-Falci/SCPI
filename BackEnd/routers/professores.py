@@ -7,6 +7,7 @@ from core.helpers import internal_error
 from core.security import get_current_user, require_self_or_admin
 from repositories.horarios import listar_aulas_hoje_por_professor
 from repositories.professores import obter_dashboard_professor
+from schemas.respostas.professores import DashboardDoProfessor
 
 router = APIRouter(prefix="/professor", tags=["professores"])
 
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/professor", tags=["professores"])
 @router.get(
     "/dashboard/{usuario_id}",
     summary="Dashboard do professor: estatísticas e aulas",
+    responses={200: {"model": DashboardDoProfessor}},
 )
 def get_dashboard(usuario_id: str, current_user: dict = Depends(get_current_user)):
     """Dados do dashboard do professor: estatísticas, aulas de hoje e chamada ativa.

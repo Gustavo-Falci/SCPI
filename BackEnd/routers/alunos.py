@@ -43,6 +43,8 @@ from repositories.usuarios import (
     buscar_usuario_id_por_email_simples,
     buscar_usuario_id_por_id,
 )
+from schemas.respostas.alunos import EstadoDoConsentimento
+from schemas.respostas.comum import MensagemResposta
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("scpi.audit")
@@ -441,7 +443,11 @@ def status_angulos_face(usuario_id: str, current_user: dict = Depends(get_curren
         raise internal_error(e, "status_angulos_face")
 
 
-@router.get("/aluno/consentimento/{usuario_id}", summary="Estado do consentimento LGPD do aluno")
+@router.get(
+    "/aluno/consentimento/{usuario_id}",
+    summary="Estado do consentimento LGPD do aluno",
+    responses={200: {"model": EstadoDoConsentimento}},
+)
 def consentimento_estado(usuario_id: str, current_user: dict = Depends(get_current_user)):
     """Estado do consentimento para o card do perfil do aluno: `"nunca"`
     (nenhum evento na trilha), `"ativo"` (último evento é aceite) ou
@@ -486,7 +492,11 @@ def consentimento_estado(usuario_id: str, current_user: dict = Depends(get_curre
         raise internal_error(e, "consentimento_estado")
 
 
-@router.delete("/aluno/biometria/{usuario_id}", summary="Revoga consentimento e apaga a biometria do aluno")
+@router.delete(
+    "/aluno/biometria/{usuario_id}",
+    summary="Revoga consentimento e apaga a biometria do aluno",
+    responses={200: {"model": MensagemResposta}},
+)
 def revogar_biometria(
     usuario_id: str,
     request: Request,
