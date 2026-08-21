@@ -487,3 +487,48 @@ Modelos em `BackEnd/schemas/respostas/`, um arquivo por router, mais `comum.py` 
 e `MensagemResposta`.
 
 Suíte: **846 testes verdes** (eram 785), 81 pulados, zero warnings.
+
+## 2026-08-21 — Swagger etapa B, lote 2: a família de relatórios e o 200 polimórfico
+
+As 6 rotas de relatório documentadas. Era o lote que estava travado numa decisão de desenho: a
+mesma rota, no mesmo 200, devolve três coisas diferentes.
+
+**Decisão 1 — `formato=pdf` não é outra rota, é outro `content`.** As quatro rotas com PDF
+declaram `application/json` e `application/pdf` na mesma resposta 200, via
+`_tambem_em_pdf(modelo)` em `routers/relatorios.py`. Declarar só o JSON faria o /docs afirmar que
+a rota nunca devolve PDF, e um cliente gerado do schema trataria os bytes da ata como JSON
+malformado.
+
+**Decisão 2 — `paginado=1` vira união, não rota nova.** `GET /professor/relatorios/chamadas`
+declara `Union[list[ChamadaNoRelatorio], RelatoriosPaginados]`, que o FastAPI emite como `anyOf`.
+Declarar só a lista esconderia o envelope de quem lê o /docs; declarar só o envelope descreveria
+errado a chamada padrão, que é a que o app faz. A rota do admin declara `list[...]` puro —
+`paginado` não existe lá.
+
+Duas mudanças de ferramental caíram junto:
+
+- O helper valida por `TypeAdapter` em vez de `Modelo.model_validate`. Modelo solto, `list[X]` e
+  união passam pela mesma chamada.
+- O guarda ganhou `_modelos_pydantic`, que desembrulha a anotação recursivamente. Sem isso ele
+  olharia para `list`/`Union` — que não são BaseModel — e deixaria passar modelo sem
+  `extra="forbid"` escondido lá dentro. O teste que exigia "o modelo declarado é um BaseModel"
+  virou "a anotação alcança ao menos um BaseModel".
+
+**Onde o mock para, no lote 2.** No repositório, não no service: é o service que acrescenta
+`ausentes`, `percentual` e `situacao` ao que veio do banco, e são justamente esses campos
+calculados que só existem na resposta. Mockar o service pularia a metade da resposta que o SQL
+não explica. As linhas mockadas copiam coluna a coluna o SELECT real, incluindo o `"—"` do
+`COALESCE` de `ra`/`tipo_registro`, que é o valor que chega ao cliente.
+
+O teste de frequência cobre as três `situacao` de uma vez (Regular, Risco e Insuficiente) — o
+`Insuficiente` é o aluno com `aulas_dadas=0`, matriculado depois da última chamada do período.
+
+Mutação de novo antes de fechar, agora no caminho composto: campo fantasma no
+`ChamadaNoRelatorio` e depois remoção de `ausentes`. Os três testes de listagem reprovaram nas
+duas vezes — o `anyOf` não afrouxa a validação.
+
+Dívida: `SEM_MODELO_DE_SAIDA` caiu de **54 para 48**. Suíte: **861 testes verdes**, 81 pulados.
+
+**Achado para o lote 3:** as ~48 rotas restantes em maioria não têm teste exercitando o handler.
+A regra "nada declarado sem prova" passa a exigir escrever o teste antes do modelo — é o que vai
+fazer o lote 3 custar mais que os dois primeiros, e não a documentação em si.

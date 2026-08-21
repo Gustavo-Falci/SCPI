@@ -19,6 +19,7 @@ import json
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.routing import APIRoute
+from pydantic import TypeAdapter
 
 
 def _rota(metodo: str, caminho: str) -> APIRoute:
@@ -66,7 +67,13 @@ def corpo_json(resposta):
 
 
 def assert_resposta_conforme(resposta, metodo: str, caminho: str):
-    """Valida o payload contra o modelo que a rota declara. Devolve o modelo."""
+    """Valida o payload contra o modelo que a rota declara. Devolve o modelo.
+
+    Valida por `TypeAdapter` e não por `Modelo.model_validate` porque nem todo
+    200 é um modelo único: rota que devolve lista declara `list[X]`, e rota com
+    envelope opt-in declara a união dos dois formatos. `TypeAdapter` aceita as
+    três formas com a mesma chamada.
+    """
     modelo = modelo_declarado(metodo, caminho)
-    modelo.model_validate(jsonable_encoder(corpo_json(resposta)))
+    TypeAdapter(modelo).validate_python(jsonable_encoder(corpo_json(resposta)))
     return modelo

@@ -10,6 +10,10 @@ Nada é declarado sem prova: a fidelidade de cada modelo está em
 `tests/test_respostas_documentadas.py`, que valida o payload real da rota
 contra o modelo com `extra="forbid"`.
 """
+import typing
+
+import typing
+
 import pytest
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
@@ -31,9 +35,6 @@ SEM_MODELO_DE_SAIDA = {
     "DELETE /admin/turmas/{turma_id}",
     "GET /admin/horarios-todos",
     "GET /admin/professores",
-    "GET /admin/relatorios/chamadas",
-    "GET /admin/relatorios/chamadas/{chamada_id}",
-    "GET /admin/relatorios/turmas/{turma_id}/frequencia",
     "GET /admin/turmas-completas",
     "GET /admin/turmas/{turma_id}/alunos",
     "GET /aluno/biometria-foto/{usuario_id}",
@@ -45,9 +46,6 @@ SEM_MODELO_DE_SAIDA = {
     "GET /auth/session",
     "GET /chamadas/status/{turma_id}",
     "GET /chamadas/{chamada_id}/alunos",
-    "GET /professor/relatorios/chamadas",
-    "GET /professor/relatorios/chamadas/{chamada_id}",
-    "GET /professor/relatorios/turmas/{turma_id}/frequencia",
     "GET /turmas/{turma_id}/alunos",
     "PATCH /admin/alunos/{aluno_id}",
     "PATCH /admin/professores/{professor_id}",
@@ -84,9 +82,9 @@ SEM_MODELO_DE_SAIDA = {
 # login. Modelo novo usa `responses={200: ...}`, que não valida nada em runtime.
 _FORA_DO_EXTRA_FORBID = {"Token"}
 
-# Fotografia do fim do lote 1, não meta. Se subir, alguém acrescentou rota sem
+# Fotografia do fim do lote 2, não meta. Se subir, alguém acrescentou rota sem
 # modelo; se cair sem a lista encolher junto, a coleta de rotas quebrou.
-_DIVIDA_NO_FIM_DO_LOTE_1 = 54
+_DIVIDA_NO_FIM_DO_LOTE_2 = 48
 
 LOTE_1 = [
     ("GET", "/"),
@@ -102,6 +100,15 @@ LOTE_1 = [
     ("GET", "/admin/relatorios/filtros"),
     ("GET", "/admin/alunos"),
     ("GET", "/admin/rostos/inventario"),
+]
+
+LOTE_2 = [
+    ("GET", "/professor/relatorios/chamadas"),
+    ("GET", "/professor/relatorios/chamadas/{chamada_id}"),
+    ("GET", "/professor/relatorios/turmas/{turma_id}/frequencia"),
+    ("GET", "/admin/relatorios/chamadas"),
+    ("GET", "/admin/relatorios/chamadas/{chamada_id}"),
+    ("GET", "/admin/relatorios/turmas/{turma_id}/frequencia"),
 ]
 
 
@@ -127,6 +134,23 @@ def _modelo_de(rota: APIRoute):
 
 def _com_modelo():
     return {_etiqueta(r): _modelo_de(r) for r in _rotas_documentaveis() if _modelo_de(r)}
+
+
+def _modelos_pydantic(anotacao):
+    """Todo BaseModel alcançável a partir da anotação declarada.
+
+    Nem todo 200 é um modelo solto: rota que devolve lista declara `list[X]`, e
+    a listagem do professor declara a união do formato simples com o envelope
+    do `paginado=1`. Sem desembrulhar, os guardas abaixo olhariam para
+    `list`/`Union` — que não são BaseModel — e deixariam passar modelo sem
+    `extra="forbid"` escondido lá dentro.
+    """
+    if isinstance(anotacao, type) and issubclass(anotacao, BaseModel):
+        return {anotacao}
+    achados = set()
+    for parte in typing.get_args(anotacao):
+        achados |= _modelos_pydantic(parte)
+    return achados
 
 
 def test_rota_sem_modelo_esta_declarada_na_lista():
@@ -162,11 +186,12 @@ def test_a_lista_nao_tem_rota_que_sumiu():
     )
 
 
-def test_todo_modelo_declarado_e_pydantic():
+def test_todo_modelo_declarado_alcanca_um_pydantic():
+    """Anotação que não chega a nenhum BaseModel não descreve corpo nenhum."""
     errados = [
         f"{etiqueta}: {modelo!r}"
         for etiqueta, modelo in _com_modelo().items()
-        if not (isinstance(modelo, type) and issubclass(modelo, BaseModel))
+        if not _modelos_pydantic(modelo)
     ]
     assert not errados, "modelo de saída que não é BaseModel:\n  %s" % "\n  ".join(
         errados
@@ -177,7 +202,8 @@ def test_modelo_novo_proibe_campo_extra():
     """`extra="forbid"` é o que faz o guarda de fidelidade pegar campo não documentado."""
     frouxos = [
         f"{etiqueta}: {modelo.__name__}"
-        for etiqueta, modelo in _com_modelo().items()
+        for etiqueta, anotacao in _com_modelo().items()
+        for modelo in sorted(_modelos_pydantic(anotacao), key=lambda m: m.__name__)
         if modelo.__name__ not in _FORA_DO_EXTRA_FORBID
         and modelo.model_config.get("extra") != "forbid"
     ]
@@ -207,10 +233,10 @@ def test_schema_openapi_descreve_o_corpo_das_rotas_documentadas():
 
 
 def test_divida_restante_e_a_esperada():
-    assert len(SEM_MODELO_DE_SAIDA) == _DIVIDA_NO_FIM_DO_LOTE_1
+    assert len(SEM_MODELO_DE_SAIDA) == _DIVIDA_NO_FIM_DO_LOTE_2
 
 
-@pytest.mark.parametrize("metodo,caminho", LOTE_1)
-def test_lote_1_continua_declarado(metodo, caminho):
-    """Trava o lote 1: remover o modelo de uma destas rotas reprova aqui."""
+@pytest.mark.parametrize("metodo,caminho", LOTE_1 + LOTE_2)
+def test_lote_ja_fechado_continua_declarado(metodo, caminho):
+    """Trava os lotes fechados: remover o modelo de uma destas rotas reprova aqui."""
     assert modelo_declarado(metodo, caminho) is not None
