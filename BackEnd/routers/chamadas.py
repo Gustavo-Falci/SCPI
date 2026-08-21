@@ -29,6 +29,7 @@ from repositories.usuarios import (
     registrar_presenca_por_face,
 )
 from schemas.chamada import ChamadaAbrir, FinalizarChamadaPayload
+from schemas.respostas.chamadas import ChamadaAbertaNaSala, PresencaDaCamera
 from services.notificacoes import enviar_notificacoes_presenca, notificar_alunos_presentes
 
 logger = logging.getLogger(__name__)
@@ -271,6 +272,7 @@ def finalizar_chamada(
 @router.get(
     "/aberta/sala",
     summary="[Serviço] Chamada aberta hoje na sala do token",
+    responses={200: {"model": ChamadaAbertaNaSala}},
 )
 def chamada_aberta_por_sala(
     sala: str = Depends(require_service_token),
@@ -327,6 +329,7 @@ _DETALHE_POR_MOTIVO = {
 @router.post(
     "/registrar_presenca_camera",
     summary="[Serviço] Registra presença reconhecida pela câmera",
+    responses={200: {"model": PresencaDaCamera}},
 )
 async def registrar_presenca_camera(
     payload: PresencaCameraPayload,

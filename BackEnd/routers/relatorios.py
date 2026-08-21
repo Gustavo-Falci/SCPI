@@ -17,6 +17,7 @@ from services.relatorios import (
     opcoes_filtros_relatorios,
     frequencia_turma,
 )
+from schemas.respostas.relatorios import OpcoesDeFiltro
 
 router = APIRouter(tags=["relatorios"])
 
@@ -200,6 +201,7 @@ def listar_relatorios_professor(
 @router.get(
     "/professor/relatorios/filtros",
     summary="Opções de filtro de relatórios do professor",
+    responses={200: {"model": OpcoesDeFiltro}},
 )
 def opcoes_filtros_relatorios_professor(
     current_user: dict = Depends(require_role("Professor")),
@@ -223,6 +225,7 @@ def opcoes_filtros_relatorios_professor(
 @router.get(
     "/admin/relatorios/filtros",
     summary="Opções de filtro de relatórios (Admin)",
+    responses={200: {"model": OpcoesDeFiltro}},
 )
 def opcoes_filtros_relatorios_admin(
     current_user: dict = Depends(require_role("Admin")),

@@ -434,3 +434,56 @@ duas: branch nova a partir de `origin/main` + `cherry-pick` do commit que faltav
 branch congelada.**
 
 Suíte: 791 testes verdes, 17 deles cobrindo /docs, /redoc, /openapi.json e o tema.
+
+## 2026-08-21 — Swagger etapa B, lote 1: modelos de saída com prova
+
+O /docs passou a descrever **o que a rota devolve**, não só o que ela é. 13 rotas documentadas,
+54 ainda na fila, e um guarda que impede a fila de crescer em silêncio.
+
+**A regra que não podia ser quebrada:** modelo declarado por `responses={200: {"model": X}}`,
+**nunca** `response_model=`. `response_model` FILTRA o payload em runtime — um campo esquecido
+no modelo sumiria da resposta que o portal e o app já leem. Documentar não pode mudar
+comportamento. `Token` (POST /auth/login) é a única saída por `response_model=`, de antes desta
+etapa, e ficou como estava.
+
+**A prova.** `tests/conformidade_respostas.py` lê do app real o modelo pendurado na rota e valida
+contra ele o payload que o teste acabou de obter. Todos os modelos herdam `RespostaBase`
+(`extra="forbid"`), então a validação reprova nos DOIS sentidos: campo documentado que a rota não
+devolve (obrigatório ausente) e campo devolvido que ninguém documentou (extra proibido). As duas
+direções foram verificadas por mutação antes de fechar — acrescentei um campo fantasma e depois
+apaguei `aulas_hoje`; os três testes do dashboard reprovaram nas duas vezes.
+
+O payload passa por `jsonable_encoder` antes de validar: o cliente lê JSON, não objeto Python.
+Sem isso um `uuid.UUID` vindo do psycopg2 falharia contra `str` e o teste acusaria divergência
+que o cliente nunca vê. Pelo mesmo motivo os mocks usam `uuid.UUID`, `datetime` e `time` de
+verdade nas colunas que são desse tipo — mock enxuto passa no teste e deixa a documentação mentir.
+
+**Onde o mock ficaria fraco demais, o dado veio do repositório.** As opções de filtro de
+relatórios são montadas chamando `listar_opcoes_filtros_relatorios` com cursor mockado, e só o
+resultado dele vai para a rota. Fixar o dicionário à mão provaria apenas que o dicionário à mão
+bate com o modelo.
+
+**Achado ao escrever os modelos:** o teste que já existia para
+`GET /professor/relatorios/filtros` (`test_router_endpoint_filtros_retorna_opcoes`) mocka a saída
+**sem a chave `professores`** — o repositório sempre devolve as quatro. O teste passa porque a
+rota devolve o mock intacto; não é bug de produção, mas é mock que não descreve a rota. Não foi
+alterado (fora do escopo do lote), fica anotado.
+
+**Contabilidade da dívida:** `SEM_MODELO_DE_SAIDA` em `tests/test_openapi_respostas.py`, com 54
+rotas. O guarda trava três coisas: rota nova sem modelo tem que entrar na lista explicitamente;
+rota já documentada não pode continuar listada (a lista **só encolhe**); e entrada órfã de rota
+que sumiu reprova. Mais um teste confirma que o modelo vira `content` no OpenAPI de verdade —
+`responses` sem schema gerado daria "Successful Response" vazio no Swagger, documentação que não
+documenta.
+
+Rotas do lote 1: `/`, `/politica-privacidade`, `/health` (200 **e** 503, mesmo formato),
+`/professor/dashboard/{usuario_id}`, `/turmas/{usuario_id}`,
+`/aluno/consentimento/{usuario_id}`, `DELETE /aluno/biometria/{usuario_id}`,
+`/chamadas/aberta/sala`, `POST /chamadas/registrar_presenca_camera`,
+`/professor/relatorios/filtros`, `/admin/relatorios/filtros`, `/admin/alunos`,
+`/admin/rostos/inventario`.
+
+Modelos em `BackEnd/schemas/respostas/`, um arquivo por router, mais `comum.py` com `RespostaBase`
+e `MensagemResposta`.
+
+Suíte: **846 testes verdes** (eram 785), 81 pulados, zero warnings.
