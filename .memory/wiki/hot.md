@@ -128,10 +128,30 @@ ninguém documentou. **As duas direções foram verificadas por mutação** ante
 passa por `jsonable_encoder` primeiro — o cliente lê JSON, e sem isso um `uuid.UUID` do psycopg2
 falharia contra `str` numa divergência que o cliente nunca vê.
 
-A dívida restante mora em `SEM_MODELO_DE_SAIDA` (`tests/test_openapi_respostas.py`): **54 rotas**.
-A lista **só encolhe** — o guarda reprova rota nova sem modelo que não esteja listada, rota já
-documentada que continue listada, e entrada órfã. 846 testes verdes (eram 785). Detalhe em
-[[log.md]].
+Ainda em 2026-08-21 entrou o **lote 2**: a família inteira de relatórios (6 rotas). É o lote que
+resolveu o **200 polimórfico**, e a decisão vale para o resto:
+
+- **`formato=pdf` não é outra rota, é outro `content` no mesmo 200.** As quatro rotas com PDF
+  declaram `application/json` **e** `application/pdf` na mesma resposta. Declarar só o JSON faria
+  o /docs afirmar que a rota nunca devolve PDF, e cliente gerado do schema trataria os bytes da
+  ata como JSON malformado.
+- **`paginado=1` vira união, não rota nova.** `GET /professor/relatorios/chamadas` declara
+  `Union[list[ChamadaNoRelatorio], RelatoriosPaginados]`, que sai como `anyOf` no schema. Declarar
+  só a lista esconderia o envelope; só o envelope descreveria errado a chamada padrão.
+
+Duas consequências no ferramental: o helper passou a validar por `TypeAdapter` (aceita modelo,
+`list[X]` e união com a mesma chamada), e o guarda ganhou `_modelos_pydantic`, que desembrulha a
+anotação — sem isso ele olharia para `list`/`Union`, que não são BaseModel, e deixaria passar
+modelo sem `extra="forbid"` escondido dentro.
+
+Nos testes do lote 2 os **mocks param no repositório, não no service**: é o service que
+acrescenta `ausentes`, `percentual` e `situacao`, e mockar o service pularia a metade da resposta
+que o SQL não explica.
+
+A dívida restante mora em `SEM_MODELO_DE_SAIDA` (`tests/test_openapi_respostas.py`): **48 rotas**
+(eram 54 no fim do lote 1). A lista **só encolhe** — o guarda reprova rota nova sem modelo que não
+esteja listada, rota já documentada que continue listada, e entrada órfã. **861 testes verdes**
+(eram 785 antes da etapa B). Detalhe em [[log.md]].
 
 **Atenção ao subir a API local:** o lifespan roda `_migrations.run_all()` (`api.py:116`) e o
 `.env` da raiz aponta `DB_HOST=168.138.134.208` — **produção**. `uvicorn api:app` na máquina do
@@ -155,13 +175,22 @@ classe `dark-mode`, e a página parece não ter mudado.
 
 ## Próximos passos
 
-- [ ] **Swagger etapa B, lote 2.** O lote 1 fechou (13 rotas, ver "Estado atual"); sobram **54** em
-      `SEM_MODELO_DE_SAIDA`. O padrão está pronto e provado — copiar dele: modelo em
-      `schemas/respostas/<router>.py` herdando `RespostaBase`, `responses={200: {"model": X}}`
-      na rota, teste em `tests/test_respostas_documentadas.py` com `assert_resposta_conforme`,
-      e apagar a linha da lista. Candidatos naturais do lote 2: as rotas de relatório com
-      retorno polimórfico (JSON, envelope `paginado=1` e `formato=pdf` na mesma rota) — elas
-      precisam de decisão de desenho antes, o 200 não é um formato só.
+- [ ] **Swagger etapa B, lote 3.** Lotes 1 e 2 fecharam (19 rotas, ver "Estado atual"); sobram
+      **48** em `SEM_MODELO_DE_SAIDA`. Nenhuma decisão de desenho aberta — o polimórfico do 200
+      já foi resolvido no lote 2 e os dois padrões (`content` extra para PDF, união para
+      envelope) estão prontos para copiar. Receita: modelo em `schemas/respostas/<router>.py`
+      herdando `RespostaBase`, `responses={200: {"model": X}}` na rota, teste em
+      `tests/test_respostas_documentadas.py` com `assert_resposta_conforme`, e apagar a linha da
+      lista (o guarda reprova se esquecer).
+      **Obstáculo real do lote 3, diferente dos anteriores:** as ~48 rotas restantes em maioria
+      **não têm teste exercitando o handler** — a regra "nada declarado sem prova" passa a exigir
+      escrever o teste ANTES do modelo, e é aí que o lote fica caro. As baratas primeiro: as
+      mutações de admin e as rotas de auth que devolvem só `{"mensagem": ...}` já têm
+      `MensagemResposta` pronto em `schemas/respostas/comum.py`.
+      `GET /aluno/meus-dados/{usuario_id}` é o caso especial: `formato=zip` (default) devolve
+      binário e `formato=json` devolve o dossiê estruturado — mesmo padrão de dois `content` do
+      lote 2, mas o modelo do JSON é grande e inclui `_schema_version`/`_gerado_em`. Deixar por
+      último.
 - [ ] **RETOMAR AQUI: passar pela porta do jeito DIFÍCIL, com o veto ligado.** É o único risco
       sério que sobrou. Andando, na distância real de uso (rosto de ~60–75px, não colado na
       câmera), de perfil, contra a luz. No log, `tela_frames` tem que dar **0**. Se der ≥2 numa

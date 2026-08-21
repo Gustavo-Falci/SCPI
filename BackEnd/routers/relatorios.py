@@ -17,13 +17,29 @@ from services.relatorios import (
     opcoes_filtros_relatorios,
     frequencia_turma,
 )
-from schemas.respostas.relatorios import OpcoesDeFiltro
+from schemas.respostas.relatorios import (
+    DetalheDaChamada,
+    FrequenciaDaTurma,
+    ListaOuPaginado,
+    ChamadaNoRelatorio,
+    OpcoesDeFiltro,
+)
 
 router = APIRouter(tags=["relatorios"])
 
 TZ = ZoneInfo("America/Sao_Paulo")
 _NAO_SEGURO = re.compile(r"[^A-Za-z0-9]+")
 TETO_CONSOLIDADO = 2000
+
+# `formato=pdf` devolve o arquivo na MESMA rota e no MESMO 200. Declarar só o
+# JSON faria o /docs afirmar que a rota nunca devolve PDF, e um cliente gerado
+# a partir do schema trataria os bytes da ata como JSON malformado.
+_CONTEUDO_PDF = {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}
+
+
+def _tambem_em_pdf(modelo):
+    """Resposta 200 que é JSON por padrão e PDF com `formato=pdf`."""
+    return {200: {"model": modelo, "content": _CONTEUDO_PDF}}
 
 
 def _slug(texto: str) -> str:
@@ -121,6 +137,7 @@ def _rotulo_professor_pdf(professor_id: Optional[str], itens: list) -> Optional[
 @router.get(
     "/professor/relatorios/chamadas",
     summary="Lista chamadas do professor, com filtros e PDF",
+    responses=_tambem_em_pdf(ListaOuPaginado),
 )
 def listar_relatorios_professor(
     limit: int = 50,
@@ -243,6 +260,7 @@ def opcoes_filtros_relatorios_admin(
 @router.get(
     "/professor/relatorios/chamadas/{chamada_id}",
     summary="Detalhe de uma chamada do professor",
+    responses=_tambem_em_pdf(DetalheDaChamada),
 )
 def detalhe_relatorio_professor(
     chamada_id: str,
@@ -273,6 +291,8 @@ def detalhe_relatorio_professor(
 @router.get(
     "/admin/relatorios/chamadas",
     summary="Lista chamadas de todas as turmas (Admin)",
+    # Sem envelope: `paginado` não existe nesta rota, só na do professor.
+    responses=_tambem_em_pdf(list[ChamadaNoRelatorio]),
 )
 def listar_relatorios_admin(
     turma_id: Optional[str] = None,
@@ -336,6 +356,7 @@ def listar_relatorios_admin(
 @router.get(
     "/admin/relatorios/chamadas/{chamada_id}",
     summary="Detalhe de qualquer chamada (Admin)",
+    responses=_tambem_em_pdf(DetalheDaChamada),
 )
 def detalhe_relatorio_admin(
     chamada_id: str,
@@ -361,6 +382,7 @@ def detalhe_relatorio_admin(
 @router.get(
     "/professor/relatorios/turmas/{turma_id}/frequencia",
     summary="Frequência por aluno de uma turma do professor",
+    responses=_tambem_em_pdf(FrequenciaDaTurma),
 )
 def frequencia_turma_professor(
     turma_id: str,
@@ -401,6 +423,7 @@ def frequencia_turma_professor(
 @router.get(
     "/admin/relatorios/turmas/{turma_id}/frequencia",
     summary="Frequência por aluno de qualquer turma (Admin)",
+    responses=_tambem_em_pdf(FrequenciaDaTurma),
 )
 def frequencia_turma_admin(
     turma_id: str,

@@ -509,3 +509,274 @@ def test_inventario_com_aws_indisponivel_conforme(client_admin):
         resposta = client_admin.get("/admin/rostos/inventario")
     assert sorted(resposta.json()["indisponivel"]) == ["rekognition", "s3"]
     assert_resposta_conforme(resposta, "GET", "/admin/rostos/inventario")
+
+
+# --------------------------------------------------------------------------
+# relatórios (lote 2)
+#
+# Aqui os mocks param no REPOSITÓRIO, não no service: é o service que acrescenta
+# `ausentes`, `percentual` e `situacao` ao que veio do banco, e são justamente
+# esses campos calculados que só existem na resposta. Mockar o service pularia
+# a metade da resposta que o SQL não explica.
+# --------------------------------------------------------------------------
+def _linhas_listagem():
+    """Linhas no formato exato do SELECT de `listar_relatorios_chamadas`."""
+    return [
+        {
+            "chamada_id": 101,
+            "turma_id": TURMA_ID,
+            "nome_disciplina": "Cálculo I",
+            "codigo_turma": "MAT-101",
+            "semestre": "3",
+            "turno": "Noturno",
+            "professor_nome": "Ana Prado",
+            "data_chamada": "20/08/2026",
+            "horario_inicio": "19:00",
+            "horario_fim": "20:40",
+            "total_aulas": 2,
+            "total_alunos": 4,
+            "presentes": 5,
+            "presentes_alunos": 2,
+            "ausentes_alunos": 1,
+            "parciais_alunos": 1,
+        },
+        {
+            "chamada_id": 102,
+            "turma_id": TURMA_ID,
+            "nome_disciplina": "Cálculo I",
+            "codigo_turma": "MAT-101",
+            "semestre": "3",
+            "turno": "Noturno",
+            "professor_nome": "Ana Prado",
+            "data_chamada": "13/08/2026",
+            "horario_inicio": "19:00",
+            "horario_fim": "20:40",
+            "total_aulas": 1,
+            "total_alunos": 0,
+            "presentes": 0,
+            "presentes_alunos": 0,
+            "ausentes_alunos": 0,
+            "parciais_alunos": 0,
+        },
+    ]
+
+
+def test_listagem_do_professor_conforme():
+    """Formato padrão: lista simples, sem envelope."""
+    from routers.relatorios import listar_relatorios_professor
+
+    with patch("routers.relatorios.obter_professor_id", return_value="p1"), patch(
+        "services.relatorios.listar_relatorios_chamadas",
+        return_value=_linhas_listagem(),
+    ):
+        resposta = listar_relatorios_professor(
+            current_user={"sub": "u1", "role": "Professor"}
+        )
+    assert isinstance(resposta, list)
+    assert_resposta_conforme(resposta, "GET", "/professor/relatorios/chamadas")
+
+
+def test_listagem_paginada_do_professor_conforme():
+    """`paginado=1` troca o formato inteiro — e o modelo declara os dois."""
+    from routers.relatorios import listar_relatorios_professor
+
+    with patch("routers.relatorios.obter_professor_id", return_value="p1"), patch(
+        "services.relatorios.listar_relatorios_chamadas",
+        return_value=_linhas_listagem(),
+    ), patch("services.relatorios.contar_relatorios_chamadas", return_value=7):
+        resposta = listar_relatorios_professor(
+            paginado=True, current_user={"sub": "u1", "role": "Professor"}
+        )
+    assert resposta["has_more"] is True
+    assert_resposta_conforme(resposta, "GET", "/professor/relatorios/chamadas")
+
+
+def test_listagem_do_admin_conforme():
+    from routers.relatorios import listar_relatorios_admin
+
+    with patch(
+        "services.relatorios.listar_relatorios_chamadas",
+        return_value=_linhas_listagem(),
+    ):
+        resposta = listar_relatorios_admin(current_user={"sub": "adm", "role": "Admin"})
+    assert_resposta_conforme(resposta, "GET", "/admin/relatorios/chamadas")
+
+
+def test_listagem_vazia_conforme():
+    """Recorte sem chamada nenhuma — lista vazia continua sendo o formato."""
+    from routers.relatorios import listar_relatorios_admin
+
+    with patch("services.relatorios.listar_relatorios_chamadas", return_value=[]):
+        resposta = listar_relatorios_admin(current_user={"sub": "adm", "role": "Admin"})
+    assert resposta == []
+    assert_resposta_conforme(resposta, "GET", "/admin/relatorios/chamadas")
+
+
+def _cabecalho_chamada():
+    """Formato exato do SELECT de `obter_relatorio_chamada`."""
+    return {
+        "chamada_id": 101,
+        "turma_id": TURMA_ID,
+        "nome_disciplina": "Cálculo I",
+        "codigo_turma": "MAT-101",
+        "semestre": "3",
+        "turno": "Noturno",
+        "professor_nome": "Ana Prado",
+        "data_chamada": "20/08/2026",
+        "horario_inicio": "19:00",
+        "horario_fim": "20:40",
+        "total_aulas": 2,
+    }
+
+
+def _alunos_da_chamada():
+    """Formato exato do SELECT de `listar_alunos_presenca_chamada`.
+
+    O segundo aluno traz `ra` e `tipo_registro` com o traço do COALESCE — é o
+    valor que chega ao cliente quando não há dado, e precisa caber no modelo.
+    """
+    return [
+        {
+            "aluno_id": ALUNO_ID,
+            "nome": "Ana Prado",
+            "ra": "20260001",
+            "total_aulas": 2,
+            "aulas_presentes_count": 2,
+            "presente": True,
+            "tipo_registro": "Reconhecimento",
+        },
+        {
+            "aluno_id": uuid.uuid4(),
+            "nome": "Bruno Lima",
+            "ra": "—",
+            "total_aulas": 2,
+            "aulas_presentes_count": 0,
+            "presente": False,
+            "tipo_registro": "—",
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "rota,caminho",
+    [
+        ("detalhe_relatorio_professor", "/professor/relatorios/chamadas/{chamada_id}"),
+        ("detalhe_relatorio_admin", "/admin/relatorios/chamadas/{chamada_id}"),
+    ],
+)
+def test_detalhe_da_chamada_conforme(rota, caminho):
+    import routers.relatorios as mod
+
+    handler = getattr(mod, rota)
+    papel = "Professor" if "professor" in rota else "Admin"
+    with patch("routers.relatorios.obter_professor_id", return_value="p1"), patch(
+        "services.relatorios.obter_relatorio_chamada",
+        return_value=_cabecalho_chamada(),
+    ), patch(
+        "services.relatorios.listar_alunos_presenca_chamada",
+        return_value=_alunos_da_chamada(),
+    ):
+        resposta = handler("101", current_user={"sub": "u1", "role": papel})
+    assert_resposta_conforme(resposta, "GET", caminho)
+
+
+def _turma_da_frequencia():
+    """Formato exato do SELECT de `obter_turma_relatorio`."""
+    return {
+        "turma_id": TURMA_ID,
+        "nome_disciplina": "Cálculo I",
+        "codigo_turma": "MAT-101",
+        "turno": "Noturno",
+        "semestre": "3",
+        "professor_nome": "Ana Prado",
+    }
+
+
+def _linhas_frequencia():
+    """Formato exato do SELECT de `listar_frequencia_turma`.
+
+    Os três alunos cobrem as três `situacao` que o service calcula: Regular
+    (>= LIMITE_FREQUENCIA), Risco (abaixo) e Insuficiente (`aulas_dadas` zero,
+    matrícula posterior à última chamada do período).
+    """
+    return [
+        {
+            "aluno_id": ALUNO_ID,
+            "nome": "Ana Prado",
+            "ra": "20260001",
+            "aulas_dadas": 4,
+            "chamadas_count": 2,
+            "aulas_dadas_periodo": 4,
+            "chamadas_periodo_count": 2,
+            "aulas_presentes": 4,
+        },
+        {
+            "aluno_id": uuid.uuid4(),
+            "nome": "Bruno Lima",
+            "ra": "—",
+            "aulas_dadas": 4,
+            "chamadas_count": 2,
+            "aulas_dadas_periodo": 4,
+            "chamadas_periodo_count": 2,
+            "aulas_presentes": 1,
+        },
+        {
+            "aluno_id": uuid.uuid4(),
+            "nome": "Carla Souza",
+            "ra": "20260003",
+            "aulas_dadas": 0,
+            "chamadas_count": 0,
+            "aulas_dadas_periodo": 4,
+            "chamadas_periodo_count": 2,
+            "aulas_presentes": 0,
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "rota,caminho",
+    [
+        (
+            "frequencia_turma_professor",
+            "/professor/relatorios/turmas/{turma_id}/frequencia",
+        ),
+        ("frequencia_turma_admin", "/admin/relatorios/turmas/{turma_id}/frequencia"),
+    ],
+)
+def test_frequencia_da_turma_conforme(rota, caminho):
+    import routers.relatorios as mod
+
+    handler = getattr(mod, rota)
+    papel = "Professor" if "professor" in rota else "Admin"
+    with patch("routers.relatorios.obter_professor_id", return_value="p1"), patch(
+        "services.relatorios.obter_turma_relatorio", return_value=_turma_da_frequencia()
+    ), patch(
+        "services.relatorios.professor_responsavel_pela_turma", return_value=True
+    ), patch(
+        "services.relatorios.listar_frequencia_turma", return_value=_linhas_frequencia()
+    ):
+        resposta = handler(
+            str(TURMA_ID),
+            data_inicio=datetime.date(2026, 8, 1),
+            data_fim=datetime.date(2026, 8, 31),
+            current_user={"sub": "u1", "role": papel},
+        )
+    situacoes = {a["situacao"] for a in resposta["alunos"]}
+    assert situacoes == {"Regular", "Risco", "Insuficiente"}
+    assert_resposta_conforme(resposta, "GET", caminho)
+
+
+def test_frequencia_sem_recorte_de_periodo_conforme():
+    """Sem datas, `periodo` vem com os dois campos nulos — formato documentado."""
+    from routers.relatorios import frequencia_turma_admin
+
+    with patch(
+        "services.relatorios.obter_turma_relatorio", return_value=_turma_da_frequencia()
+    ), patch("services.relatorios.listar_frequencia_turma", return_value=[]):
+        resposta = frequencia_turma_admin(
+            str(TURMA_ID), current_user={"sub": "adm", "role": "Admin"}
+        )
+    assert resposta["periodo"] == {"data_inicio": None, "data_fim": None}
+    assert_resposta_conforme(
+        resposta, "GET", "/admin/relatorios/turmas/{turma_id}/frequencia"
+    )
