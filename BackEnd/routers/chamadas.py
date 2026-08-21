@@ -29,7 +29,12 @@ from repositories.usuarios import (
     registrar_presenca_por_face,
 )
 from schemas.chamada import ChamadaAbrir, FinalizarChamadaPayload
-from schemas.respostas.chamadas import ChamadaAbertaNaSala, PresencaDaCamera
+from schemas.respostas.chamadas import (
+    ChamadaAberta,
+    ChamadaAbertaNaSala,
+    PresencaDaCamera,
+)
+from schemas.respostas.comum import MensagemResposta
 from services.notificacoes import enviar_notificacoes_presenca, notificar_alunos_presentes
 
 logger = logging.getLogger(__name__)
@@ -55,7 +60,11 @@ def _assert_professor_dono_ou_admin(turma_id, current_user: dict) -> None:
         raise HTTPException(status_code=404, detail="Recurso não encontrado.")
 
 
-@router.post("/abrir", summary="Abre chamada para a turma do professor")
+@router.post(
+    "/abrir",
+    summary="Abre chamada para a turma do professor",
+    responses={200: {"model": ChamadaAberta}},
+)
 def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role("Professor"))):
     """Abre uma nova chamada para a turma do professor autenticado.
 
@@ -97,7 +106,11 @@ def abrir_chamada(dados: ChamadaAbrir, current_user: dict = Depends(require_role
         raise internal_error(e, "abrir_chamada")
 
 
-@router.post("/fechar/{turma_id}", summary="Encerra a chamada aberta da turma")
+@router.post(
+    "/fechar/{turma_id}",
+    summary="Encerra a chamada aberta da turma",
+    responses={200: {"model": MensagemResposta}},
+)
 def fechar_chamada(turma_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Professor"))):
     """Encerra a(s) chamada(s) aberta(s) da turma e dispara notificações.
 
@@ -202,7 +215,11 @@ def listar_alunos_chamada(chamada_id: str, current_user: dict = Depends(get_curr
         raise internal_error(e, "listar_alunos_chamada")
 
 
-@router.post("/{chamada_id}/ajustar", summary="Ajusta presenças de uma chamada (sem fechar)")
+@router.post(
+    "/{chamada_id}/ajustar",
+    summary="Ajusta presenças de uma chamada (sem fechar)",
+    responses={200: {"model": MensagemResposta}},
+)
 def ajustar_chamada(
     chamada_id: int,
     payload: FinalizarChamadaPayload,
@@ -231,7 +248,11 @@ def ajustar_chamada(
         raise internal_error(e, "ajustar_chamada")
 
 
-@router.post("/{chamada_id}/finalizar", summary="Ajusta presenças e fecha a chamada")
+@router.post(
+    "/{chamada_id}/finalizar",
+    summary="Ajusta presenças e fecha a chamada",
+    responses={200: {"model": MensagemResposta}},
+)
 def finalizar_chamada(
     chamada_id: int,
     payload: FinalizarChamadaPayload,

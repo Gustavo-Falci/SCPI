@@ -6,12 +6,17 @@ from core.helpers import internal_error
 from core.security import get_current_user
 from repositories.notificacoes import upsert_push_token
 from schemas.auth import RegisterTokenBody
+from schemas.respostas.comum import MensagemResposta
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/notificacoes", tags=["notificacoes"])
 
 
-@router.post("/registrar-token", summary="Registra/atualiza o token push do dispositivo")
+@router.post(
+    "/registrar-token",
+    summary="Registra/atualiza o token push do dispositivo",
+    responses={200: {"model": MensagemResposta}},
+)
 def registrar_push_token(body: RegisterTokenBody, current_user: dict = Depends(get_current_user)):
     """Grava o Expo push token do dispositivo do usuário autenticado (FCM
     por trás do Expo).

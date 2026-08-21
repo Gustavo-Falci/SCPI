@@ -10,6 +10,15 @@ class ChamadaAbertaNaSala(RespostaBase):
     chamada_id: Optional[int] = None
 
 
+class ChamadaAberta(RespostaBase):
+    """A abertura é idempotente: já existindo chamada aberta para a turma, volta
+    o `chamada_id` DELA em vez de criar duplicata. O cliente não distingue os
+    dois casos pela resposta, e não precisa — o id é o mesmo que ele vai usar."""
+
+    mensagem: str
+    chamada_id: int
+
+
 class PresencaDaCamera(RespostaBase):
     """`ja_registrado=true` é o caso idempotente: a presença já existia.
 

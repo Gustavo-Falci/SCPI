@@ -3,6 +3,46 @@ from typing import Literal, Optional
 from schemas.respostas.comum import RespostaBase
 
 
+class TurmaCriada(RespostaBase):
+    """O `turma_id` é gerado no backend (UUID), não vem do cliente — por isso
+    volta na resposta: é a única forma de o portal referenciar a turma nova."""
+
+    mensagem: str
+    turma_id: str
+
+
+class MatriculaAplicada(RespostaBase):
+    """Resultado de matricular/desmatricular em lote.
+
+    `total_enviados` é quantos IDs o cliente mandou, e a contagem do que
+    realmente mudou vai dentro de `mensagem`. Os dois números divergem de
+    propósito: aluno já matriculado (ou já fora) não conta como alterado, e o
+    portal precisa saber que o pedido inteiro foi recebido mesmo assim.
+    """
+
+    mensagem: str
+    total_enviados: int
+
+
+class ProfessorCriado(RespostaBase):
+    """A senha temporária NÃO volta no corpo — vai por e-mail. Devolver aqui a
+    deixaria em log de proxy e no histórico do navegador."""
+
+    mensagem: str
+    usuario_id: str
+    email: str
+
+
+class AlunoCriado(RespostaBase):
+    """Dois IDs porque são duas tabelas: `usuario_id` (login) e `aluno_id`
+    (cadastro acadêmico, chave de biometria e presença)."""
+
+    mensagem: str
+    usuario_id: str
+    aluno_id: str
+    email: str
+
+
 class AlunoNaListaAdmin(RespostaBase):
     """Aluno na aba Alunos do portal.
 
