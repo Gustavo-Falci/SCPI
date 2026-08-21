@@ -26,13 +26,6 @@ _ROTAS_INTERNAS = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
 # documentar uma rota significa apagar a linha dela daqui. Acrescentar linha só
 # faz sentido para rota realmente nova — e mesmo aí, prefira documentar.
 SEM_MODELO_DE_SAIDA = {
-    "DELETE /admin/alunos/{aluno_id}",
-    "DELETE /admin/horarios/{horario_id}",
-    "DELETE /admin/professores/{professor_id}",
-    "DELETE /admin/rostos/rekognition/bulk",
-    "DELETE /admin/rostos/rekognition/{face_id}",
-    "DELETE /admin/rostos/s3",
-    "DELETE /admin/turmas/{turma_id}",
     "GET /admin/horarios-todos",
     "GET /admin/professores",
     "GET /admin/turmas-completas",
@@ -47,18 +40,9 @@ SEM_MODELO_DE_SAIDA = {
     "GET /chamadas/status/{turma_id}",
     "GET /chamadas/{chamada_id}/alunos",
     "GET /turmas/{turma_id}/alunos",
-    "PATCH /admin/alunos/{aluno_id}",
-    "PATCH /admin/professores/{professor_id}",
-    "PATCH /admin/turmas/{turma_id}/professor",
-    "POST /admin/horarios",
     "POST /admin/importar-alunos",
     "POST /admin/importar-professores",
-    "POST /admin/turmas",
-    "POST /admin/turmas/{turma_id}/desmatricular-alunos",
     "POST /admin/turmas/{turma_id}/importar-alunos",
-    "POST /admin/turmas/{turma_id}/matricular-alunos",
-    "POST /admin/usuarios/aluno",
-    "POST /admin/usuarios/professor",
     "POST /alunos/cadastrar-face",
     "POST /auth/alterar-senha",
     "POST /auth/alterar-senha-primeiro-acesso",
@@ -69,11 +53,6 @@ SEM_MODELO_DE_SAIDA = {
     "POST /auth/register",
     "POST /auth/register-aluno-com-face",
     "POST /auth/verificar-codigo",
-    "POST /chamadas/abrir",
-    "POST /chamadas/fechar/{turma_id}",
-    "POST /chamadas/{chamada_id}/ajustar",
-    "POST /chamadas/{chamada_id}/finalizar",
-    "POST /notificacoes/registrar-token",
 }
 
 # `Token` é a única saída declarada por `response_model=`, de antes desta etapa.
@@ -82,9 +61,9 @@ SEM_MODELO_DE_SAIDA = {
 # login. Modelo novo usa `responses={200: ...}`, que não valida nada em runtime.
 _FORA_DO_EXTRA_FORBID = {"Token"}
 
-# Fotografia do fim do lote 2, não meta. Se subir, alguém acrescentou rota sem
+# Fotografia do fim do lote 3, não meta. Se subir, alguém acrescentou rota sem
 # modelo; se cair sem a lista encolher junto, a coleta de rotas quebrou.
-_DIVIDA_NO_FIM_DO_LOTE_2 = 48
+_DIVIDA_NO_FIM_DO_LOTE_3 = 27
 
 LOTE_1 = [
     ("GET", "/"),
@@ -109,6 +88,32 @@ LOTE_2 = [
     ("GET", "/admin/relatorios/chamadas"),
     ("GET", "/admin/relatorios/chamadas/{chamada_id}"),
     ("GET", "/admin/relatorios/turmas/{turma_id}/frequencia"),
+]
+
+# A família de mutações. Quinze delas devolvem só `MensagemResposta`; as seis
+# restantes acrescentam o id que o backend gerou ou a contagem do lote.
+LOTE_3 = [
+    ("DELETE", "/admin/turmas/{turma_id}"),
+    ("DELETE", "/admin/alunos/{aluno_id}"),
+    ("DELETE", "/admin/professores/{professor_id}"),
+    ("DELETE", "/admin/horarios/{horario_id}"),
+    ("DELETE", "/admin/rostos/rekognition/bulk"),
+    ("DELETE", "/admin/rostos/rekognition/{face_id}"),
+    ("DELETE", "/admin/rostos/s3"),
+    ("PATCH", "/admin/alunos/{aluno_id}"),
+    ("PATCH", "/admin/professores/{professor_id}"),
+    ("PATCH", "/admin/turmas/{turma_id}/professor"),
+    ("POST", "/admin/horarios"),
+    ("POST", "/admin/turmas"),
+    ("POST", "/admin/turmas/{turma_id}/matricular-alunos"),
+    ("POST", "/admin/turmas/{turma_id}/desmatricular-alunos"),
+    ("POST", "/admin/usuarios/professor"),
+    ("POST", "/admin/usuarios/aluno"),
+    ("POST", "/chamadas/abrir"),
+    ("POST", "/chamadas/fechar/{turma_id}"),
+    ("POST", "/chamadas/{chamada_id}/ajustar"),
+    ("POST", "/chamadas/{chamada_id}/finalizar"),
+    ("POST", "/notificacoes/registrar-token"),
 ]
 
 
@@ -233,10 +238,10 @@ def test_schema_openapi_descreve_o_corpo_das_rotas_documentadas():
 
 
 def test_divida_restante_e_a_esperada():
-    assert len(SEM_MODELO_DE_SAIDA) == _DIVIDA_NO_FIM_DO_LOTE_2
+    assert len(SEM_MODELO_DE_SAIDA) == _DIVIDA_NO_FIM_DO_LOTE_3
 
 
-@pytest.mark.parametrize("metodo,caminho", LOTE_1 + LOTE_2)
+@pytest.mark.parametrize("metodo,caminho", LOTE_1 + LOTE_2 + LOTE_3)
 def test_lote_ja_fechado_continua_declarado(metodo, caminho):
     """Trava os lotes fechados: remover o modelo de uma destas rotas reprova aqui."""
     assert modelo_declarado(metodo, caminho) is not None

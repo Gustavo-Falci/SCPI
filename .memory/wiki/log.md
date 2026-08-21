@@ -532,3 +532,41 @@ Dívida: `SEM_MODELO_DE_SAIDA` caiu de **54 para 48**. Suíte: **861 testes verd
 **Achado para o lote 3:** as ~48 rotas restantes em maioria não têm teste exercitando o handler.
 A regra "nada declarado sem prova" passa a exigir escrever o teste antes do modelo — é o que vai
 fazer o lote 3 custar mais que os dois primeiros, e não a documentação em si.
+
+## 2026-08-21 — Swagger etapa B, lote 3: a família de mutações
+
+21 rotas que criam, alteram ou apagam (admin, chamadas e notificações). Quinze devolvem só
+`MensagemResposta` — o modelo já existia desde o lote 1 e não precisou de nada novo. As outras
+seis ganharam modelo próprio, e a razão de cada campo extra ficou escrita no docstring:
+
+- `TurmaCriada` e `ChamadaAberta` devolvem um id gerado no backend, que o cliente não tem como
+  saber de outro jeito.
+- `ProfessorCriado` e `AlunoCriado` devolvem os ids do cadastro. A senha temporária **não** entra
+  no corpo (vai por e-mail); há assert de teste travando isso, porque devolvê-la a deixaria em
+  log de proxy e no histórico do navegador. `AlunoCriado` tem dois ids porque são duas tabelas:
+  `usuario_id` é o login, `aluno_id` é o cadastro acadêmico.
+- `MatriculaAplicada` separa `total_enviados` (tamanho do pedido) da contagem do que realmente
+  mudou, que fica na mensagem. Divergem de propósito: matrícula duplicada é ignorada em silêncio
+  (`ON CONFLICT DO NOTHING`) e o portal precisa saber que o pedido inteiro chegou.
+
+**O custo deste lote foi o teste, não a documentação.** Diferente dos lotes 1 e 2, quase nenhuma
+dessas rotas tinha teste exercitando o handler, então a regra "nada declarado sem prova" obrigou a
+escrever 22 testes novos (`tests/test_respostas_mutacoes.py`) antes de declarar qualquer modelo.
+Eles chamam o handler direto, com as dependências de rota fora do caminho, e afirmam o FORMATO da
+resposta de sucesso — a regra de negócio tem testes próprios em outros arquivos.
+
+**Armadilha nova, e vale para todo teste de handler daqui em diante:** repositório não mockado faz
+consulta de verdade, e o `.env` da raiz aponta para o banco de PRODUÇÃO.
+`test_criar_aluno_conforme` esqueceu `existe_aluno_por_ra` no `patch` e **passava assim mesmo** —
+a falha de conexão devolve falsy e o handler segue. O sintoma foi só o relógio: 20s num teste,
+dois connect-timeouts, numa suíte que roda inteira em ~10s. Teste de handler lento é sinal de
+repositório esquecido, não de teste pesado.
+
+Mutação de novo antes de fechar: removi `turma_id` do `TurmaCriada` e o teste reprovou por campo
+extra devolvido.
+
+Dívida: `SEM_MODELO_DE_SAIDA` caiu de **48 para 27**. Suíte: **905 testes verdes**, 81 pulados.
+
+**Para o lote 4**, as 27 restantes se separam em leituras simples (14, caminho barato), auth (8,
+com atenção a `/refresh` e `/verificar-codigo`, que emitem token) e imports CSV mais
+`/alunos/cadastrar-face` (4, precisam do formato da lista `erros`). Detalhe em [[hot.md]].

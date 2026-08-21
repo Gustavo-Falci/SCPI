@@ -63,7 +63,15 @@ from schemas.admin import (
     MatricularAlunos,
     TurmaCreate,
 )
-from schemas.respostas.admin import AlunosPaginados, InventarioBiometrico
+from schemas.respostas.admin import (
+    AlunoCriado,
+    AlunosPaginados,
+    InventarioBiometrico,
+    MatriculaAplicada,
+    ProfessorCriado,
+    TurmaCriada,
+)
+from schemas.respostas.comum import MensagemResposta
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("scpi.audit")
@@ -120,7 +128,11 @@ def admin_listar_alunos_turma(turma_id: str):
         raise internal_error(e)
 
 
-@router.post("/turmas", summary="Criar turma")
+@router.post(
+    "/turmas",
+    summary="Criar turma",
+    responses={200: {"model": TurmaCriada}},
+)
 def admin_criar_turma(turma: TurmaCreate, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Cria uma turma nova, com `professor_id` opcional (turma pode nascer sem professor).
 
@@ -148,7 +160,11 @@ def admin_criar_turma(turma: TurmaCreate, request: Request, current_user: dict =
         raise internal_error(e, "admin_criar_turma")
 
 
-@router.patch("/turmas/{turma_id}/professor", summary="Atribuir ou remover professor da turma")
+@router.patch(
+    "/turmas/{turma_id}/professor",
+    summary="Atribuir ou remover professor da turma",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_atribuir_professor(turma_id: str, dados: AtribuirProfessor, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Define o professor responsável pela turma.
 
@@ -169,7 +185,11 @@ def admin_atribuir_professor(turma_id: str, dados: AtribuirProfessor, request: R
         raise internal_error(e, "admin_atribuir_professor")
 
 
-@router.post("/horarios", summary="Adicionar horário de aula")
+@router.post(
+    "/horarios",
+    summary="Adicionar horário de aula",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_adicionar_horario(h: HorarioCreate, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Cria um horário (dia da semana + faixa de hora + sala) para uma turma.
 
@@ -212,7 +232,11 @@ def admin_adicionar_horario(h: HorarioCreate, request: Request, current_user: di
         raise internal_error(e, "admin_adicionar_horario")
 
 
-@router.delete("/turmas/{turma_id}", summary="Excluir turma")
+@router.delete(
+    "/turmas/{turma_id}",
+    summary="Excluir turma",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_excluir_turma(turma_id: str, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Exclui a turma e tudo que depende dela.
 
@@ -231,7 +255,11 @@ def admin_excluir_turma(turma_id: str, request: Request, current_user: dict = De
         raise internal_error(e, "admin_excluir_turma")
 
 
-@router.patch("/alunos/{aluno_id}", summary="Atualizar dados do aluno")
+@router.patch(
+    "/alunos/{aluno_id}",
+    summary="Atualizar dados do aluno",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_atualizar_aluno(aluno_id: str, dados: AtualizarAlunoAdmin, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Atualiza nome, email, RA e/ou turno do aluno — todos os campos opcionais, só
     os enviados são alterados.
@@ -273,7 +301,11 @@ def admin_atualizar_aluno(aluno_id: str, dados: AtualizarAlunoAdmin, request: Re
         raise internal_error(e, "admin_atualizar_aluno")
 
 
-@router.delete("/alunos/{aluno_id}", summary="Excluir aluno e biometria associada")
+@router.delete(
+    "/alunos/{aluno_id}",
+    summary="Excluir aluno e biometria associada",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_excluir_aluno(aluno_id: str, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Exclui o aluno e sua biometria, nesta ordem: primeiro tenta remover cada
     rosto ativo do Rekognition e o objeto correspondente no S3 (best-effort —
@@ -316,7 +348,11 @@ def admin_excluir_aluno(aluno_id: str, request: Request, current_user: dict = De
         raise internal_error(e)
 
 
-@router.patch("/professores/{professor_id}", summary="Atualizar dados do professor")
+@router.patch(
+    "/professores/{professor_id}",
+    summary="Atualizar dados do professor",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_atualizar_professor(
     professor_id: str,
     dados: AtualizarProfessorAdmin,
@@ -352,7 +388,11 @@ def admin_atualizar_professor(
         raise internal_error(e, "admin_atualizar_professor")
 
 
-@router.delete("/professores/{professor_id}", summary="Excluir professor")
+@router.delete(
+    "/professores/{professor_id}",
+    summary="Excluir professor",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_excluir_professor(professor_id: str, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Exclui o professor, órfão de propósito: antes de apagar `Professores` e
     `Usuarios`, zera `professor_id` em `Turmas` e `Chamadas` (a turma fica
@@ -386,7 +426,11 @@ def admin_listar_todos_horarios():
         raise internal_error(e)
 
 
-@router.delete("/horarios/{horario_id}", summary="Excluir horário de aula")
+@router.delete(
+    "/horarios/{horario_id}",
+    summary="Excluir horário de aula",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_excluir_horario(horario_id: str, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Exclui um horário de aula pelo id.
 
@@ -452,7 +496,11 @@ def admin_listar_alunos(
         raise internal_error(e, "admin_listar_alunos")
 
 
-@router.post("/turmas/{turma_id}/matricular-alunos", summary="Matricular alunos na turma")
+@router.post(
+    "/turmas/{turma_id}/matricular-alunos",
+    summary="Matricular alunos na turma",
+    responses={200: {"model": MatriculaAplicada}},
+)
 def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Matricula um lote de alunos na turma.
 
@@ -488,7 +536,11 @@ def admin_matricular_alunos(turma_id: str, dados: MatricularAlunos, request: Req
         raise internal_error(e, "admin_matricular_alunos")
 
 
-@router.post("/turmas/{turma_id}/desmatricular-alunos", summary="Desmatricular alunos da turma")
+@router.post(
+    "/turmas/{turma_id}/desmatricular-alunos",
+    summary="Desmatricular alunos da turma",
+    responses={200: {"model": MatriculaAplicada}},
+)
 def admin_desmatricular_alunos(
     turma_id: str,
     dados: MatricularAlunos,
@@ -718,7 +770,11 @@ async def admin_importar_professores_csv(
         raise internal_error(e, "admin_importar_professores_csv")
 
 
-@router.post("/usuarios/professor", summary="Criar professor com usuário de acesso")
+@router.post(
+    "/usuarios/professor",
+    summary="Criar professor com usuário de acesso",
+    responses={200: {"model": ProfessorCriado}},
+)
 def admin_criar_professor(dados: CriarProfessorAdmin, request: Request, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Admin"))):
     """Cria um professor: usuário de login (`tipo_usuario='Professor'`) mais o
     registro em `Professores`, numa transação.
@@ -753,7 +809,11 @@ def admin_criar_professor(dados: CriarProfessorAdmin, request: Request, backgrou
         raise internal_error(e, "admin_criar_professor")
 
 
-@router.post("/usuarios/aluno", summary="Criar aluno com usuário de acesso")
+@router.post(
+    "/usuarios/aluno",
+    summary="Criar aluno com usuário de acesso",
+    responses={200: {"model": AlunoCriado}},
+)
 def admin_criar_aluno(dados: CriarAlunoAdmin, request: Request, background_tasks: BackgroundTasks, current_user: dict = Depends(require_role("Admin"))):
     """Cria um aluno: usuário de login (`tipo_usuario='Aluno'`) mais o
     registro em `Alunos` (RA, turno), numa transação. Não matricula em
@@ -836,7 +896,11 @@ def admin_inventario_biometrico():
         raise internal_error(e, "admin_inventario_biometrico")
 
 
-@router.delete("/rostos/rekognition/bulk", summary="Excluir rostos do Rekognition em lote")
+@router.delete(
+    "/rostos/rekognition/bulk",
+    summary="Excluir rostos do Rekognition em lote",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_excluir_rostos_rekognition_bulk(payload: BulkFaceIds, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Remove uma lista de `face_ids` da collection do Rekognition, direto —
     usado pela tela de auditoria para limpar rostos órfãos (sem registro
@@ -861,7 +925,11 @@ def admin_excluir_rostos_rekognition_bulk(payload: BulkFaceIds, request: Request
         raise internal_error(e, "admin_excluir_rostos_rekognition_bulk")
 
 
-@router.delete("/rostos/rekognition/{face_id}", summary="Excluir rosto do Rekognition")
+@router.delete(
+    "/rostos/rekognition/{face_id}",
+    summary="Excluir rosto do Rekognition",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_excluir_rosto_rekognition(face_id: str, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Remove um único rosto (`face_id`) da collection do Rekognition, direto.
 
@@ -880,7 +948,11 @@ def admin_excluir_rosto_rekognition(face_id: str, request: Request, current_user
         raise internal_error(e, "admin_excluir_rosto_rekognition")
 
 
-@router.delete("/rostos/s3", summary="Excluir objeto de rosto no S3")
+@router.delete(
+    "/rostos/s3",
+    summary="Excluir objeto de rosto no S3",
+    responses={200: {"model": MensagemResposta}},
+)
 def admin_excluir_rosto_s3(payload: S3KeyPayload, request: Request, current_user: dict = Depends(require_role("Admin"))):
     """Remove um objeto do bucket S3 pela `key`, direto — usado pela tela de
     auditoria para limpar arquivos órfãos (sem registro correspondente no
