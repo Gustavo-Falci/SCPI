@@ -613,3 +613,14 @@ Dívida: `SEM_MODELO_DE_SAIDA` caiu de **27 para 14**. Suíte: **940 testes verd
 **Para o lote 5** sobram auth (9 — a contagem antiga dizia 8), os 3 imports CSV mais
 `/alunos/cadastrar-face`, e `/aluno/meus-dados` por último (dois `content`: zip binário e o
 dossiê LGPD em JSON). Detalhe em [[hot.md]].
+
+**Mergeado como PR #126 e em produção no mesmo dia.** Deploy sem `pip install` e sem migration:
+`git pull origin main` + `systemctl restart scpi-api`. É o perfil de todo lote da etapa B —
+declaração de schema OpenAPI não toca em dependência nem em banco.
+
+⚠️ **Errei aqui e vale registrar:** durante a rodada de mutação usei
+`git checkout schemas/respostas/chamadas.py` para desfazer a mutação, e o comando devolveu o
+arquivo ao HEAD — que era a `main`, porque a branch ainda não tinha commit. Apagou junto os
+modelos novos do lote (`ImportError: cannot import name 'AlunosDaChamada'`), e tive que
+reescrevê-los. **Em branch sem commit, `git checkout <arquivo>` não desfaz a mutação: desfaz o
+trabalho todo.** Desfazer mutação com edição inversa, ou commitar antes de mutar.

@@ -161,9 +161,11 @@ escrever o teste antes do modelo (`tests/test_respostas_mutacoes.py`).
 gastando **20s** em dois connect-timeouts, numa suíte que roda inteira em ~10s. Teste lento
 chamando handler é sinal de repositório esquecido no `patch`, não de teste pesado.
 
-O **lote 4** fechou as **13 leituras** que sobravam (listagens do portal Admin, telas do aluno,
-alunos da turma, estado da chamada e `/auth/session`), em `tests/test_respostas_leituras.py` —
-de novo com o teste escrito antes do modelo, porque nenhuma delas tinha teste de handler.
+O **lote 4** (PR #126, **em prod desde 2026-08-24**) fechou as **13 leituras** que sobravam
+(listagens do portal Admin, telas do aluno, alunos da turma, estado da chamada e
+`/auth/session`), em `tests/test_respostas_leituras.py` — de novo com o teste escrito antes do
+modelo, porque nenhuma delas tinha teste de handler. O deploy foi só `git pull` + restart:
+`requirements.txt` não mudou e não há migration — a mudança é declaração de schema OpenAPI.
 Duas coisas que valem para os próximos:
 
 - **Formato de leitura é o formato do SELECT.** As linhas falsas dos testes usam os tipos que o
