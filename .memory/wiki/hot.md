@@ -183,9 +183,10 @@ Duas coisas que valem para os próximos:
   Starlette — `MagicMock` levanta "parameter `request` must be an instance of
   starlette.requests.Request".
 
-O **lote 5 fechou a etapa B**: auth (7 rotas), os três imports CSV,
-`/alunos/cadastrar-face` e o dossiê LGPD, em `tests/test_respostas_auth_e_imports.py`. O que
-apareceu de novo:
+O **lote 5 fechou a etapa B** (PR #128, **em prod desde 2026-08-24**): auth (7 rotas), os três
+imports CSV, `/alunos/cadastrar-face` e o dossiê LGPD, em
+`tests/test_respostas_auth_e_imports.py`. Deploy igual ao do lote 4 — `git pull` + restart, sem
+`pip install` e sem migration. O que apareceu de novo:
 
 - **Duas rotas nunca devolvem 200.** `/auth/register` e `/auth/register-aluno-com-face` estão
   desativadas e levantam 403 incondicionalmente. Não são dívida: saíram de

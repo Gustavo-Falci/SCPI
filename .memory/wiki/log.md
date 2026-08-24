@@ -665,3 +665,12 @@ devolve lista `erros` — isso é só dos três imports CSV. Ela devolve
 `{status, face_id, external_id, angulo}`.
 
 Suíte: **970 testes verdes**, 81 pulados, 10s.
+
+**Mergeado como PR #128 e em produção no mesmo dia**, com o deploy de sempre da etapa B
+(`git pull origin main` + `systemctl restart scpi-api`, sem `pip install` e sem migration).
+
+**A etapa B do Swagger está encerrada** — começou em 2026-08-21 (lote 1) e fechou em 2026-08-24,
+cinco lotes, PRs #122, #123, #124, #126 e #128. O que fica de regra permanente para rota nova
+está no [[hot.md]], em "Próximos passos": modelo declarado por `responses={200: ...}` herdando
+`RespostaBase`, mais teste de handler passando por `assert_resposta_conforme`. O guarda reprova
+quem esquecer.
