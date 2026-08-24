@@ -30,9 +30,11 @@ from repositories.usuarios import (
 )
 from schemas.chamada import ChamadaAbrir, FinalizarChamadaPayload
 from schemas.respostas.chamadas import (
+    AlunosDaChamada,
     ChamadaAberta,
     ChamadaAbertaNaSala,
     PresencaDaCamera,
+    StatusDaChamada,
 )
 from schemas.respostas.comum import MensagemResposta
 from services.notificacoes import enviar_notificacoes_presenca, notificar_alunos_presentes
@@ -142,7 +144,11 @@ def fechar_chamada(turma_id: str, background_tasks: BackgroundTasks, current_use
         raise internal_error(e, "fechar_chamada")
 
 
-@router.get("/status/{turma_id}", summary="Consulta status e contagem da chamada da turma")
+@router.get(
+    "/status/{turma_id}",
+    summary="Consulta status e contagem da chamada da turma",
+    responses={200: {"model": StatusDaChamada}},
+)
 def status_chamada(turma_id: str, current_user: dict = Depends(get_current_user)):
     """Situação atual da chamada da turma: aberta ou fechada, com contagem.
 
@@ -179,7 +185,11 @@ def status_chamada(turma_id: str, current_user: dict = Depends(get_current_user)
         raise internal_error(e, "status_chamada")
 
 
-@router.get("/{chamada_id}/alunos", summary="Lista alunos e presenças por aula de uma chamada")
+@router.get(
+    "/{chamada_id}/alunos",
+    summary="Lista alunos e presenças por aula de uma chamada",
+    responses={200: {"model": AlunosDaChamada}},
+)
 def listar_alunos_chamada(chamada_id: str, current_user: dict = Depends(get_current_user)):
     """Lista os alunos da chamada com as aulas em que cada um marcou presença.
 

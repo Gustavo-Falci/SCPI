@@ -43,7 +43,14 @@ from repositories.usuarios import (
     buscar_usuario_id_por_email_simples,
     buscar_usuario_id_por_id,
 )
-from schemas.respostas.alunos import EstadoDoConsentimento
+from schemas.respostas.alunos import (
+    DashboardDoAluno,
+    EstadoDoConsentimento,
+    FotoDeBiometria,
+    FrequenciasDoAluno,
+    HistoricoDeChamadas,
+    StatusDosAngulos,
+)
 from schemas.respostas.comum import MensagemResposta
 
 logger = logging.getLogger(__name__)
@@ -52,7 +59,11 @@ audit_logger = logging.getLogger("scpi.audit")
 router = APIRouter(tags=["alunos"])
 
 
-@router.get("/aluno/dashboard/{usuario_id}", summary="Resumo do dashboard do aluno")
+@router.get(
+    "/aluno/dashboard/{usuario_id}",
+    summary="Resumo do dashboard do aluno",
+    responses={200: {"model": DashboardDoAluno}},
+)
 def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_current_user)):
     """Devolve nome do aluno, frequência geral (%) e as aulas de hoje
     (conforme turno e dia da semana).
@@ -86,7 +97,11 @@ def get_dashboard_aluno(usuario_id: str, current_user: dict = Depends(get_curren
         raise internal_error(e)
 
 
-@router.get("/aluno/frequencias/{usuario_id}", summary="Frequência do aluno por turma")
+@router.get(
+    "/aluno/frequencias/{usuario_id}",
+    summary="Frequência do aluno por turma",
+    responses={200: {"model": FrequenciasDoAluno}},
+)
 def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get_current_user)):
     """Devolve a média geral de presença do aluno e o detalhamento por turma
     (percentual, total de aulas, presenças e faltas).
@@ -139,6 +154,7 @@ def get_frequencias_detalhadas(usuario_id: str, current_user: dict = Depends(get
 @router.get(
     "/aluno/historico-chamadas/{usuario_id}",
     summary="Histórico de chamadas do aluno numa turma",
+    responses={200: {"model": HistoricoDeChamadas}},
 )
 def get_historico_chamadas_aluno(
     usuario_id: str,
@@ -396,7 +412,11 @@ async def cadastrar_aluno_api(
         raise internal_error(e, "cadastrar_aluno_api")
 
 
-@router.get("/aluno/biometria-foto/{usuario_id}", summary="URL temporária da foto de biometria cadastrada")
+@router.get(
+    "/aluno/biometria-foto/{usuario_id}",
+    summary="URL temporária da foto de biometria cadastrada",
+    responses={200: {"model": FotoDeBiometria}},
+)
 def obter_foto_biometria(usuario_id: str, current_user: dict = Depends(get_current_user)):
     """Retorna URL temporária (presigned, 300s) da foto cadastrada — só dono ou Admin."""
     require_self_or_admin(usuario_id, current_user)
@@ -417,6 +437,7 @@ def obter_foto_biometria(usuario_id: str, current_user: dict = Depends(get_curre
 @router.get(
     "/alunos/status-angulos-face/{usuario_id}",
     summary="Ângulos de biometria já cadastrados pelo aluno",
+    responses={200: {"model": StatusDosAngulos}},
 )
 def status_angulos_face(usuario_id: str, current_user: dict = Depends(get_current_user)):
     """Retorna quais ângulos já foram cadastrados para o aluno (`total`,

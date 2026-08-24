@@ -3,6 +3,69 @@ from typing import Literal, Optional
 from schemas.respostas.comum import RespostaBase
 
 
+class ProfessorNaLista(RespostaBase):
+    """Professor no seletor do portal — só o que a tela precisa para escolher.
+
+    `professor_id` é a chave da tabela Professores, não o `usuario_id` do
+    login: é ele que a atribuição de turma espera receber.
+    """
+
+    professor_id: str
+    nome: str
+    email: str
+
+
+class TurmaCompleta(RespostaBase):
+    """Turma na aba Turmas, já cruzada com professor e matrículas.
+
+    `professor_nome` nunca é `null`: turma sem professor vem com o texto
+    "Sem professor", resolvido no próprio SELECT. `total_alunos` é a contagem
+    de matrículas, calculada na consulta e não persistida.
+    """
+
+    turma_id: str
+    nome_disciplina: str
+    codigo_turma: str
+    turno: Optional[str] = None
+    semestre: Optional[str] = None
+    periodo_letivo: Optional[str] = None
+    professor_nome: str
+    total_alunos: int
+
+
+class HorarioCompleto(RespostaBase):
+    """Horário de aula com os dados da turma juntos, para montar a grade.
+
+    `inicio` e `fim` são texto "HH:MM" (formatados no SELECT), não `time`.
+    `dia_semana` é 0-6 com 0=segunda — a MESMA convenção do `weekday()` do
+    Python, e não a do ISODOW do Postgres usada no histórico do aluno.
+    """
+
+    horario_id: str
+    turma_id: Optional[str] = None
+    dia_semana: Optional[int] = None
+    inicio: Optional[str] = None
+    fim: Optional[str] = None
+    sala: Optional[str] = None
+    nome_disciplina: str
+    turno: Optional[str] = None
+    semestre: Optional[str] = None
+
+
+class AlunoDaTurmaAdmin(RespostaBase):
+    """Aluno matriculado, na visão do Admin.
+
+    O handler renomeia `id` (como sai do SELECT) para `aluno_id` — a rota do
+    professor, `GET /turmas/{turma_id}/alunos`, devolve a mesma consulta sem
+    renomear. Turma inexistente devolve lista vazia, não 404.
+    """
+
+    aluno_id: str
+    nome: str
+    email: str
+    ra: str
+
+
 class TurmaCriada(RespostaBase):
     """O `turma_id` é gerado no backend (UUID), não vem do cliente — por isso
     volta na resposta: é a única forma de o portal referenciar a turma nova."""

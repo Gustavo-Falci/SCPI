@@ -11,7 +11,7 @@ from repositories.turmas import (
     listar_turmas_com_horarios_por_professor,
     professor_responsavel_por_usuario,
 )
-from schemas.respostas.turmas import TurmasDoProfessor
+from schemas.respostas.turmas import AlunosDaTurma, TurmasDoProfessor
 
 router = APIRouter(prefix="/turmas", tags=["turmas"])
 
@@ -77,6 +77,7 @@ def get_turmas(usuario_id: str, current_user: dict = Depends(get_current_user)):
 @router.get(
     "/{turma_id}/alunos",
     summary="Lista alunos matriculados na turma",
+    responses={200: {"model": AlunosDaTurma}},
 )
 def get_alunos_turma(turma_id: str, current_user: dict = Depends(get_current_user)):
     """Lista os alunos matriculados na turma.

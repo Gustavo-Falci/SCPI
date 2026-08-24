@@ -59,6 +59,7 @@ from schemas.auth import (
     UsuarioRegistro,
     VerificarCodigoBody,
 )
+from schemas.respostas.auth import SessaoValida
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("scpi.audit")
@@ -295,7 +296,11 @@ def refresh_access_token(
         raise internal_error(e, "refresh_access_token")
 
 
-@router.get("/session", summary="Confirma se a sessão atual ainda é válida")
+@router.get(
+    "/session",
+    summary="Confirma se a sessão atual ainda é válida",
+    responses={200: {"model": SessaoValida}},
+)
 @limiter.limit("60/minute")
 def validar_sessao(request: Request, current_user: dict = Depends(get_current_user)):
     """Confirma que o access token/cookie ainda é válido.
