@@ -1,5 +1,7 @@
 from typing import Literal, Optional
 
+from pydantic import Field
+
 from schemas.respostas.comum import RespostaBase
 
 
@@ -142,3 +144,86 @@ class StatusDosAngulos(RespostaBase):
     total: int
     angulos_cadastrados: list[str]
     completo: bool
+
+
+class FaceCadastrada(RespostaBase):
+    """Confirmação do cadastro de UM ângulo de biometria.
+
+    `external_id` é o `aluno_id` (UUID) — é ele que vai como `ExternalImageId`
+    na collection do Rekognition, nunca o nome do aluno. `face_id` é o id que a
+    AWS gerou para esta face; recadastrar o mesmo ângulo devolve um `face_id`
+    novo, e o anterior é apagado em best-effort.
+    """
+
+    status: Literal["sucesso"]
+    face_id: str
+    external_id: str
+    angulo: str
+
+
+class TitularNoDossie(RespostaBase):
+    """Dados cadastrais do titular. `ra` e `turno` podem faltar em cadastro
+    incompleto; `tipo_usuario` vem da tabela de login."""
+
+    nome: str
+    email: str
+    ra: Optional[str] = None
+    turno: Optional[str] = None
+    tipo_usuario: str
+
+
+class BiometriaNoDossie(RespostaBase):
+    """Estado da biometria SEM identificador interno.
+
+    `face_id` e caminho no S3 ficam de fora de propósito: são dados de
+    operação, não do titular, e o dossiê é minimizado. `angulos_cadastrados`
+    lista só os ângulos com consentimento e não revogados; `registrada` é
+    verdadeiro quando essa lista não está vazia. Datas em ISO 8601.
+    """
+
+    registrada: bool
+    angulos_cadastrados: list[str]
+    consentimento_data: Optional[str] = None
+    revogado_em: Optional[str] = None
+
+
+class PresencaNoDossie(RespostaBase):
+    """Uma presença registrada. `turma` é o nome da disciplina (texto), `data`
+    é `YYYY-MM-DD` e `hora_registro` é `HH:MM:SS`."""
+
+    turma: str
+    data: str
+    hora_registro: str
+
+
+class ConsentimentoNoDossie(RespostaBase):
+    """Um evento da trilha append-only de consentimento.
+
+    O `ip` do registro entra no dossiê de propósito: é dado pessoal tratado
+    pelo sistema, e o titular tem direito a ele (Art. 18, II).
+    """
+
+    evento: str
+    politica_versao: Optional[str] = None
+    registrado_em: Optional[str] = None
+    ip: Optional[str] = None
+    origem: Optional[str] = None
+
+
+class DossieLGPD(RespostaBase):
+    """Dossiê do titular com `formato=json` — o mesmo JSON que vai dentro do
+    zip, sem o PDF, as fotos e o manifesto HMAC.
+
+    `_schema_version` e `_gerado_em` viajam com o dossiê para que um arquivo
+    exportado hoje continue interpretável depois: sem eles, um JSON solto no
+    computador do titular não diz de quando é nem por qual formato foi gerado.
+    Os dois nomes começam com underscore, o que em Pydantic seria atributo
+    privado — por isso são declarados com `alias`.
+    """
+
+    titular: TitularNoDossie
+    biometria: BiometriaNoDossie
+    presencas: list[PresencaNoDossie]
+    consentimentos: list[ConsentimentoNoDossie]
+    schema_version: str = Field(alias="_schema_version")
+    gerado_em: str = Field(alias="_gerado_em")

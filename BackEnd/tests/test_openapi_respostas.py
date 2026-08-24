@@ -1,17 +1,17 @@
 """Guarda da etapa B do Swagger: modelo de saída declarado e honesto.
 
 A etapa A garantiu que toda rota TEM documentação; esta garante que a
-documentação diz o que a rota DEVOLVE. O avanço é medido por uma lista que só
-encolhe: `SEM_MODELO_DE_SAIDA` é o que ainda não foi documentado, e rota nova
-não entra nela sem alguém escrever a linha — que é o momento de perguntar se
-não dá para documentar logo.
+documentação diz o que a rota DEVOLVE. O avanço era medido por uma lista que só
+encolhe, `SEM_MODELO_DE_SAIDA` — e ela chegou a **vazia** no lote 5: toda rota
+que devolve 200 declara o corpo. A lista fica no lugar como guarda: rota nova
+sem modelo reprova aqui, e quem quiser adiar tem que escrever a linha, que é o
+momento de perguntar se não dá para documentar logo.
 
 Nada é declarado sem prova: a fidelidade de cada modelo está em
-`tests/test_respostas_documentadas.py`, que valida o payload real da rota
-contra o modelo com `extra="forbid"`.
+`tests/test_respostas_documentadas.py`, `test_respostas_mutacoes.py`,
+`test_respostas_leituras.py` e `test_respostas_auth_e_imports.py`, que validam o
+payload real da rota contra o modelo com `extra="forbid"`.
 """
-import typing
-
 import typing
 
 import pytest
@@ -25,24 +25,16 @@ _ROTAS_INTERNAS = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
 # Rotas que ainda não declaram modelo de saída. ESTA LISTA SÓ ENCOLHE:
 # documentar uma rota significa apagar a linha dela daqui. Acrescentar linha só
 # faz sentido para rota realmente nova — e mesmo aí, prefira documentar.
-SEM_MODELO_DE_SAIDA = {
-    # `meus-dados` ficou fora do lote 4 de propósito: `formato=zip` (default)
-    # devolve binário e `formato=json` devolve o dossiê LGPD inteiro — dois
-    # `content` e um modelo grande, com escopo próprio.
-    "GET /aluno/meus-dados/{usuario_id}",
-    "POST /admin/importar-alunos",
-    "POST /admin/importar-professores",
-    "POST /admin/turmas/{turma_id}/importar-alunos",
-    "POST /alunos/cadastrar-face",
-    "POST /auth/alterar-senha",
-    "POST /auth/alterar-senha-primeiro-acesso",
-    "POST /auth/esqueci-senha",
-    "POST /auth/logout",
-    "POST /auth/redefinir-senha",
-    "POST /auth/refresh",
+SEM_MODELO_DE_SAIDA = set()
+
+# Rotas que NUNCA devolvem 200 — não é dívida, é ausência de corpo. As duas
+# estão desativadas e levantam 403 incondicionalmente; declarar modelo de saída
+# nelas documentaria uma resposta que não existe. A isenção só se sustenta
+# porque `tests/test_respostas_auth_e_imports.py` prova o 403 chamando os dois
+# handlers: se um deles voltar a responder 200, aquele teste reprova.
+ROTAS_SEM_200 = {
     "POST /auth/register",
     "POST /auth/register-aluno-com-face",
-    "POST /auth/verificar-codigo",
 }
 
 # `Token` é a única saída declarada por `response_model=`, de antes desta etapa.
@@ -51,9 +43,9 @@ SEM_MODELO_DE_SAIDA = {
 # login. Modelo novo usa `responses={200: ...}`, que não valida nada em runtime.
 _FORA_DO_EXTRA_FORBID = {"Token"}
 
-# Fotografia do fim do lote 4, não meta. Se subir, alguém acrescentou rota sem
-# modelo; se cair sem a lista encolher junto, a coleta de rotas quebrou.
-_DIVIDA_NO_FIM_DO_LOTE_4 = 14
+# Fim do lote 5: a dívida zerou. Continua sendo fotografia, não meta — só que
+# agora qualquer valor acima de zero significa rota nova sem modelo.
+_DIVIDA_NO_FIM_DO_LOTE_5 = 0
 
 LOTE_1 = [
     ("GET", "/"),
@@ -125,6 +117,24 @@ LOTE_4 = [
     ("GET", "/auth/session"),
 ]
 
+# O fecho da etapa B: auth, os três imports CSV, o cadastro de face e o dossiê
+# LGPD. `/auth/register` e `/auth/register-aluno-com-face` não aparecem aqui —
+# estão em `ROTAS_SEM_200`.
+LOTE_5 = [
+    ("POST", "/auth/refresh"),
+    ("POST", "/auth/logout"),
+    ("POST", "/auth/alterar-senha"),
+    ("POST", "/auth/alterar-senha-primeiro-acesso"),
+    ("POST", "/auth/esqueci-senha"),
+    ("POST", "/auth/verificar-codigo"),
+    ("POST", "/auth/redefinir-senha"),
+    ("POST", "/admin/importar-alunos"),
+    ("POST", "/admin/importar-professores"),
+    ("POST", "/admin/turmas/{turma_id}/importar-alunos"),
+    ("POST", "/alunos/cadastrar-face"),
+    ("GET", "/aluno/meus-dados/{usuario_id}"),
+]
+
 
 def _rotas_documentaveis():
     from api import app
@@ -170,10 +180,34 @@ def _modelos_pydantic(anotacao):
 def test_rota_sem_modelo_esta_declarada_na_lista():
     """Rota nova entra documentada ou entra na lista — nunca em silêncio."""
     sem_modelo = {_etiqueta(r) for r in _rotas_documentaveis() if not _modelo_de(r)}
-    novas = sorted(sem_modelo - SEM_MODELO_DE_SAIDA)
+    novas = sorted(sem_modelo - SEM_MODELO_DE_SAIDA - ROTAS_SEM_200)
     assert not novas, (
         "%d rota(s) sem modelo de saída e fora de SEM_MODELO_DE_SAIDA:\n  %s"
         % (len(novas), "\n  ".join(novas))
+    )
+
+
+def test_rota_sem_200_continua_sem_modelo():
+    """A isenção vale nos dois sentidos.
+
+    Declarar modelo numa rota que só levanta 403 documentaria corpo que nunca
+    sai; e uma rota que voltasse a responder 200 precisa sair de `ROTAS_SEM_200`
+    e ganhar modelo, não ficar isenta para sempre.
+    """
+    indevidas = sorted(ROTAS_SEM_200 & set(_com_modelo()))
+    assert not indevidas, (
+        "%d rota(s) de ROTAS_SEM_200 declaram modelo de 200:\n  %s"
+        % (len(indevidas), "\n  ".join(indevidas))
+    )
+
+
+def test_rota_sem_200_ainda_existe():
+    """Entrada órfã em ROTAS_SEM_200 isentaria uma rota que não existe mais."""
+    todas = {_etiqueta(r) for r in _rotas_documentaveis()}
+    orfas = sorted(ROTAS_SEM_200 - todas)
+    assert not orfas, (
+        "%d entrada(s) de ROTAS_SEM_200 sem rota correspondente:\n  %s"
+        % (len(orfas), "\n  ".join(orfas))
     )
 
 
@@ -247,10 +281,10 @@ def test_schema_openapi_descreve_o_corpo_das_rotas_documentadas():
 
 
 def test_divida_restante_e_a_esperada():
-    assert len(SEM_MODELO_DE_SAIDA) == _DIVIDA_NO_FIM_DO_LOTE_4
+    assert len(SEM_MODELO_DE_SAIDA) == _DIVIDA_NO_FIM_DO_LOTE_5
 
 
-@pytest.mark.parametrize("metodo,caminho", LOTE_1 + LOTE_2 + LOTE_3 + LOTE_4)
+@pytest.mark.parametrize("metodo,caminho", LOTE_1 + LOTE_2 + LOTE_3 + LOTE_4 + LOTE_5)
 def test_lote_ja_fechado_continua_declarado(metodo, caminho):
     """Trava os lotes fechados: remover o modelo de uma destas rotas reprova aqui."""
     assert modelo_declarado(metodo, caminho) is not None

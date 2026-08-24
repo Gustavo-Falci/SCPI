@@ -45,7 +45,9 @@ from repositories.usuarios import (
 )
 from schemas.respostas.alunos import (
     DashboardDoAluno,
+    DossieLGPD,
     EstadoDoConsentimento,
+    FaceCadastrada,
     FotoDeBiometria,
     FrequenciasDoAluno,
     HistoricoDeChamadas,
@@ -342,7 +344,11 @@ def _persistir_biometria(
     return {"status": "sucesso", "face_id": face_id, "external_id": external_id, "angulo": angulo}
 
 
-@router.post("/alunos/cadastrar-face", summary="Cadastra um ângulo de biometria facial do aluno")
+@router.post(
+    "/alunos/cadastrar-face",
+    summary="Cadastra um ângulo de biometria facial do aluno",
+    responses={200: {"model": FaceCadastrada}},
+)
 @limiter.limit("10/minute")
 async def cadastrar_aluno_api(
     request: Request,
@@ -577,7 +583,17 @@ def revogar_biometria(
         raise internal_error(e, "revogar_biometria")
 
 
-@router.get("/aluno/meus-dados/{usuario_id}", summary="Exporta os dados pessoais do titular (LGPD)")
+# O default da rota é `formato=zip`, que devolve bytes — declarar só o JSON
+# faria o /docs afirmar que ela nunca devolve pacote, e um cliente gerado do
+# schema trataria o zip como JSON malformado. Mesmo padrão dos relatórios.
+_CONTEUDO_ZIP = {"application/zip": {"schema": {"type": "string", "format": "binary"}}}
+
+
+@router.get(
+    "/aluno/meus-dados/{usuario_id}",
+    summary="Exporta os dados pessoais do titular (LGPD)",
+    responses={200: {"model": DossieLGPD, "content": _CONTEUDO_ZIP}},
+)
 def exportar_meus_dados(
     usuario_id: str,
     formato: str = "zip",

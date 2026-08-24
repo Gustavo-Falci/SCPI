@@ -624,3 +624,44 @@ arquivo ao HEAD — que era a `main`, porque a branch ainda não tinha commit. A
 modelos novos do lote (`ImportError: cannot import name 'AlunosDaChamada'`), e tive que
 reescrevê-los. **Em branch sem commit, `git checkout <arquivo>` não desfaz a mutação: desfaz o
 trabalho todo.** Desfazer mutação com edição inversa, ou commitar antes de mutar.
+
+## 2026-08-24 — Swagger etapa B, lote 5: auth, imports e o dossiê (etapa FECHADA)
+
+Doze rotas declaradas e duas isentas, em `tests/test_respostas_auth_e_imports.py` (15 testes).
+Com isso `SEM_MODELO_DE_SAIDA` chegou a **zero** e a etapa B acabou: toda rota que devolve 200
+diz o que devolve.
+
+**A descoberta do lote foi que duas rotas não têm 200 nenhum.** `/auth/register` e
+`/auth/register-aluno-com-face` estão desativadas e levantam 403 incondicionalmente — declarar
+modelo nelas documentaria corpo que não existe. Criei `ROTAS_SEM_200` em vez de deixá-las na
+lista de dívida, com três amarras para a isenção não virar buraco: um teste chama os dois
+handlers e exige o 403 (se voltarem a responder 200, reprova), um proíbe que rotas isentas
+declarem modelo de 200, e outro pega entrada órfã.
+
+Decisões de modelo que valem registro:
+
+- **`/auth/refresh` ganhou `SessaoRenovada` em vez de reusar o `Token` do login.** Os campos são
+  os mesmos, e a duplicação é deliberada: `Token` é declarado por `response_model=`, que valida
+  em runtime — dar `extra="forbid"` a ele transformaria documentação em erro de login. A
+  documentação não pode mudar comportamento.
+- **`/aluno/meus-dados` declara `application/json` + `application/zip`.** O default é o zip; só o
+  JSON faria o /docs afirmar que a rota nunca devolve pacote. Mesmo padrão do PDF nos relatórios
+  do lote 2.
+- **`_schema_version`/`_gerado_em` exigiram `Field(alias=...)`**: nome com underscore inicial é
+  atributo PRIVADO no Pydantic — declarado direto, o campo sumiria do schema sem erro nenhum.
+  Conferido no `app.openapi()`: os dois aparecem com o nome de underscore e como obrigatórios.
+- **`/esqueci-senha` responde igual para e-mail que existe e que não existe.** É anti-enumeração,
+  não descuido; por isso o modelo é o `MensagemResposta` genérico e não um envelope com
+  "enviado: true/false". Travado por teste parametrizado nos dois caminhos.
+- **`/alunos/cadastrar-face` foi testada pelo `_persistir_biometria`**, que é o que roda no
+  threadpool e de onde o corpo realmente sai — a corrotina da rota só repassa.
+
+Mutação antes de fechar, três vezes: campo fantasma no `SessaoRenovada` (reprovou), remoção de
+`duplicados` do `ImportacaoDeProfessores` (reprovou por campo extra devolvido) e um
+`responses={200: ...}` no `/auth/register` (reprovou no guarda novo de `ROTAS_SEM_200`).
+
+Correção de uma expectativa que estava escrita no [[hot.md]]: `/alunos/cadastrar-face` **não**
+devolve lista `erros` — isso é só dos três imports CSV. Ela devolve
+`{status, face_id, external_id, angulo}`.
+
+Suíte: **970 testes verdes**, 81 pulados, 10s.
