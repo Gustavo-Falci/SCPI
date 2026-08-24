@@ -183,10 +183,29 @@ Duas coisas que valem para os próximos:
   Starlette — `MagicMock` levanta "parameter `request` must be an instance of
   starlette.requests.Request".
 
-A dívida restante mora em `SEM_MODELO_DE_SAIDA` (`tests/test_openapi_respostas.py`): **14 rotas**
-(eram 54 no fim do lote 1, 48 no do lote 2, 27 no do lote 3). A lista **só encolhe** — o guarda
-reprova rota nova sem modelo que não esteja listada, rota já documentada que continue listada, e
-entrada órfã. **940 testes verdes** (eram 785 antes da etapa B). Detalhe em [[log.md]].
+O **lote 5 fechou a etapa B**: auth (7 rotas), os três imports CSV,
+`/alunos/cadastrar-face` e o dossiê LGPD, em `tests/test_respostas_auth_e_imports.py`. O que
+apareceu de novo:
+
+- **Duas rotas nunca devolvem 200.** `/auth/register` e `/auth/register-aluno-com-face` estão
+  desativadas e levantam 403 incondicionalmente. Não são dívida: saíram de
+  `SEM_MODELO_DE_SAIDA` para o conjunto novo **`ROTAS_SEM_200`**, e a isenção é sustentada por
+  teste que chama os dois handlers e exige o 403 — mais dois guardas, um proibindo que elas
+  declarem modelo de 200 e outro pegando entrada órfã.
+- **`/auth/refresh` ganhou modelo próprio (`SessaoRenovada`) em vez de reusar o `Token`** do
+  login. `Token` é declarado por `response_model=` e VALIDA em runtime; dar `extra="forbid"` a
+  ele transformaria documentação em erro de login.
+- **`/aluno/meus-dados` declara os dois `content`** (`application/json` + `application/zip`),
+  mesmo padrão do PDF nos relatórios do lote 2. O default da rota é o zip.
+- **`_schema_version` e `_gerado_em` do dossiê precisam de `Field(alias=...)`**: nome com
+  underscore inicial vira atributo privado no Pydantic e sumiria do schema.
+- **A resposta do `/esqueci-senha` é a mesma para e-mail que existe e que não existe** — isso é
+  decisão de segurança (anti-enumeração), e agora está travada por teste parametrizado nos dois
+  caminhos.
+
+`SEM_MODELO_DE_SAIDA` (`tests/test_openapi_respostas.py`) está **vazia**: eram 54 no fim do lote
+1, 48 no 2, 27 no 3, 14 no 4, **0 agora**. A lista fica no lugar como guarda de rota nova.
+**970 testes verdes** (eram 785 antes da etapa B). Detalhe em [[log.md]].
 
 **Atenção ao subir a API local:** o lifespan roda `_migrations.run_all()` (`api.py:116`) e o
 `.env` da raiz aponta `DB_HOST=168.138.134.208` — **produção**. `uvicorn api:app` na máquina do
@@ -210,25 +229,17 @@ classe `dark-mode`, e a página parece não ter mudado.
 
 ## Próximos passos
 
-- [ ] **Swagger etapa B, lote 5 — auth, imports e o dossiê LGPD.** Lotes 1 a 4 fecharam
-      (53 rotas, ver "Estado atual"); restam **14** em `SEM_MODELO_DE_SAIDA`, em três grupos:
-      - **Auth (9):** `/auth/register`, `/refresh`, `/logout`, `/alterar-senha`,
-        `/alterar-senha-primeiro-acesso`, `/esqueci-senha`, `/verificar-codigo`,
-        `/redefinir-senha`, `/register-aluno-com-face`. (A lista antiga dizia 8; são 9 na
-        allowlist.) Várias devolvem só `mensagem`, mas `/refresh` emite token e
-        `/verificar-codigo` emite `reset_token` — modelo próprio, e cuidado para o exemplo do
-        /docs não sugerir formato de segredo. `/refresh` é o único caso do repo com
-        `response_model=` já em uso na família (`Token`, em `/auth/login`) — não copiar isso: o
-        `response_model` filtra em runtime.
-      - **Imports CSV (3) + `/alunos/cadastrar-face`:** devolvem contadores mais uma lista
-        `erros` cujo formato precisa ser levantado antes de declarar.
-      - **`GET /aluno/meus-dados/{usuario_id}`, por último:** `formato=zip` (default) devolve
-        binário e `formato=json` o dossiê estruturado — mesmo padrão de dois `content` do lote 2,
-        mas o modelo do JSON é grande e inclui `_schema_version`/`_gerado_em`.
-      **Ao escrever teste de handler, mocke TODO repositório que ele chama** — ver a armadilha
-      dos 20s em "Estado atual". Rota com `@limiter.limit` (as de auth quase todas têm) exige
-      `Request` real do Starlette, não `MagicMock` — ver `_pedido_real` em
-      `tests/test_respostas_leituras.py`.
+- [x] ~~Swagger etapa B~~ — **fechada no lote 5**. Todas as rotas que devolvem 200 declaram o
+      corpo; `SEM_MODELO_DE_SAIDA` está vazia. **Para rota NOVA daqui em diante:** declarar
+      `responses={200: {"model": X}}` (nunca `response_model=`), com modelo herdando
+      `RespostaBase`, e um teste que chame o handler e passe por `assert_resposta_conforme` —
+      senão o guarda reprova. Mocke TODO repositório que o handler chama (o `.env` da raiz
+      aponta produção) e, se a rota tiver `@limiter.limit`, use `Request` real do Starlette, não
+      `MagicMock` — ver `_pedido` em `tests/test_respostas_auth_e_imports.py`.
+- [ ] **Rever os exemplos do /docs nas duas rotas que emitem segredo** (`/auth/refresh` e
+      `/auth/verificar-codigo`). Hoje o Swagger mostra `"string"` porque nenhum exemplo foi
+      declarado — que é o desejável. Se alguém acrescentar `example=` nesses modelos, não usar
+      algo com cara de token real: exemplo é copiado.
 - [ ] **RETOMAR AQUI: passar pela porta do jeito DIFÍCIL, com o veto ligado.** É o único risco
       sério que sobrou. Andando, na distância real de uso (rosto de ~60–75px, não colado na
       câmera), de perfil, contra a luz. No log, `tela_frames` tem que dar **0**. Se der ≥2 numa

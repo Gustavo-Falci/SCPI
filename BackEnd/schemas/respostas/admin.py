@@ -3,6 +3,52 @@ from typing import Literal, Optional
 from schemas.respostas.comum import RespostaBase
 
 
+class ImportacaoDeAlunosNaTurma(RespostaBase):
+    """Resultado do CSV importado já matriculando na turma da URL.
+
+    `erros` é uma lista de textos no formato `"Linha N: motivo"` — linha com
+    erro é PULADA, não aborta o import, então 200 aqui não significa "tudo
+    entrou". A contagem de importados só aparece dentro de `mensagem`; quem
+    precisa dos números separados usa `/admin/importar-alunos`.
+    """
+
+    mensagem: str
+    emails_enviados: int
+    erros: list[str]
+
+
+class ImportacaoDeAlunos(RespostaBase):
+    """Resultado do CSV sem turma fixa, com os números separados.
+
+    `importados` e `matriculados` divergem de propósito: aluno que já existia
+    e ganhou matrícula conta em `matriculados` sem contar em `importados`, e
+    `duplicados` é quem já existia. `emails_enviados` conta só as senhas
+    temporárias de cadastro novo. `erros` segue o formato `"Linha N: motivo"`,
+    por linha pulada.
+    """
+
+    mensagem: str
+    importados: int
+    duplicados: int
+    matriculados: int
+    emails_enviados: int
+    erros: list[str]
+
+
+class ImportacaoDeProfessores(RespostaBase):
+    """Resultado do CSV de professores.
+
+    E-mail já cadastrado conta em `duplicados` e **não** entra em `erros` —
+    reimportar a mesma planilha é operação normal, não falha. O total
+    importado aparece só em `mensagem`.
+    """
+
+    mensagem: str
+    duplicados: int
+    emails_enviados: int
+    erros: list[str]
+
+
 class ProfessorNaLista(RespostaBase):
     """Professor no seletor do portal — só o que a tela precisa para escolher.
 

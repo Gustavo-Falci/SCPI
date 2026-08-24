@@ -59,7 +59,8 @@ from schemas.auth import (
     UsuarioRegistro,
     VerificarCodigoBody,
 )
-from schemas.respostas.auth import SessaoValida
+from schemas.respostas.auth import CodigoVerificado, SessaoRenovada, SessaoValida
+from schemas.respostas.comum import MensagemResposta
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("scpi.audit")
@@ -230,7 +231,11 @@ def login(
     }
 
 
-@router.post("/refresh", summary="Renova o access token a partir do refresh token")
+@router.post(
+    "/refresh",
+    summary="Renova o access token a partir do refresh token",
+    responses={200: {"model": SessaoRenovada}},
+)
 @limiter.limit("30/minute")
 def refresh_access_token(
     request: Request,
@@ -319,7 +324,11 @@ def validar_sessao(request: Request, current_user: dict = Depends(get_current_us
     }
 
 
-@router.post("/logout", summary="Encerra a sessão (revoga refresh token e cookies)")
+@router.post(
+    "/logout",
+    summary="Encerra a sessão (revoga refresh token e cookies)",
+    responses={200: {"model": MensagemResposta}},
+)
 def logout(
     response: Response,
     body: RefreshRequest,
@@ -356,7 +365,11 @@ def logout(
         raise internal_error(e, "logout")
 
 
-@router.post("/alterar-senha", summary="Troca a senha do usuário autenticado")
+@router.post(
+    "/alterar-senha",
+    summary="Troca a senha do usuário autenticado",
+    responses={200: {"model": MensagemResposta}},
+)
 def alterar_senha(body: AlterarSenhaBody, current_user: dict = Depends(get_current_user)):
     """Troca a senha de quem já está logado, exigindo a senha atual.
 
@@ -400,6 +413,7 @@ def alterar_senha(body: AlterarSenhaBody, current_user: dict = Depends(get_curre
 @router.post(
     "/alterar-senha-primeiro-acesso",
     summary="Define a senha definitiva no primeiro acesso (sem senha atual)",
+    responses={200: {"model": MensagemResposta}},
 )
 def alterar_senha_primeiro_acesso(body: PrimeiroAcessoSenhaBody, current_user: dict = Depends(get_current_user)):
     """Troca a senha temporária do primeiro acesso, sem exigir a senha atual.
@@ -436,7 +450,11 @@ def alterar_senha_primeiro_acesso(body: PrimeiroAcessoSenhaBody, current_user: d
         raise internal_error(e, "alterar_senha_primeiro_acesso")
 
 
-@router.post("/esqueci-senha", summary="Envia código de redefinição de senha por e-mail")
+@router.post(
+    "/esqueci-senha",
+    summary="Envia código de redefinição de senha por e-mail",
+    responses={200: {"model": MensagemResposta}},
+)
 @limiter.limit("3/minute")
 def esqueci_senha(request: Request, body: EsqueciSenhaBody):
     """Primeiro passo da recuperação: gera e envia por e-mail um código de 6
@@ -492,7 +510,11 @@ def esqueci_senha(request: Request, body: EsqueciSenhaBody):
     return generic_response
 
 
-@router.post("/verificar-codigo", summary="Valida o código recebido por e-mail e emite reset_token")
+@router.post(
+    "/verificar-codigo",
+    summary="Valida o código recebido por e-mail e emite reset_token",
+    responses={200: {"model": CodigoVerificado}},
+)
 @limiter.limit("5/minute")
 def verificar_codigo(request: Request, body: VerificarCodigoBody):
     """Segundo passo da recuperação: confere o código de 6 dígitos enviado
@@ -555,7 +577,11 @@ def verificar_codigo(request: Request, body: VerificarCodigoBody):
     return {"reset_token": reset_token}
 
 
-@router.post("/redefinir-senha", summary="Define a nova senha a partir do reset_token")
+@router.post(
+    "/redefinir-senha",
+    summary="Define a nova senha a partir do reset_token",
+    responses={200: {"model": MensagemResposta}},
+)
 def redefinir_senha(request: Request, body: RedefinirSenhaBody):
     """Terceiro e último passo da recuperação: troca a senha usando o
     `reset_token` emitido por `/auth/verificar-codigo`.

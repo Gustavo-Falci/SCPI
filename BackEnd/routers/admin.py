@@ -68,6 +68,9 @@ from schemas.respostas.admin import (
     AlunoDaTurmaAdmin,
     AlunosPaginados,
     HorarioCompleto,
+    ImportacaoDeAlunos,
+    ImportacaoDeAlunosNaTurma,
+    ImportacaoDeProfessores,
     InventarioBiometrico,
     MatriculaAplicada,
     ProfessorCriado,
@@ -642,7 +645,11 @@ def _processar_professores_csv(csv_reader, background_tasks: BackgroundTasks):
     return importados, duplicados, emails_enviados, erros
 
 
-@router.post("/turmas/{turma_id}/importar-alunos", summary="Importar alunos via CSV para a turma")
+@router.post(
+    "/turmas/{turma_id}/importar-alunos",
+    summary="Importar alunos via CSV para a turma",
+    responses={200: {"model": ImportacaoDeAlunosNaTurma}},
+)
 async def admin_importar_alunos_csv(
     turma_id: str,
     request: Request,
@@ -689,7 +696,11 @@ async def admin_importar_alunos_csv(
         raise internal_error(e, "admin_importar_alunos_csv")
 
 
-@router.post("/importar-alunos", summary="Importar alunos via CSV (sem turma fixa)")
+@router.post(
+    "/importar-alunos",
+    summary="Importar alunos via CSV (sem turma fixa)",
+    responses={200: {"model": ImportacaoDeAlunos}},
+)
 async def admin_importar_alunos_csv_global(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -735,7 +746,11 @@ async def admin_importar_alunos_csv_global(
         raise internal_error(e, "admin_importar_alunos_csv_global")
 
 
-@router.post("/importar-professores", summary="Importar professores via CSV")
+@router.post(
+    "/importar-professores",
+    summary="Importar professores via CSV",
+    responses={200: {"model": ImportacaoDeProfessores}},
+)
 async def admin_importar_professores_csv(
     request: Request,
     background_tasks: BackgroundTasks,
