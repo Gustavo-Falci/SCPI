@@ -65,10 +65,14 @@ from schemas.admin import (
 )
 from schemas.respostas.admin import (
     AlunoCriado,
+    AlunoDaTurmaAdmin,
     AlunosPaginados,
+    HorarioCompleto,
     InventarioBiometrico,
     MatriculaAplicada,
     ProfessorCriado,
+    ProfessorNaLista,
+    TurmaCompleta,
     TurmaCriada,
 )
 from schemas.respostas.comum import MensagemResposta
@@ -79,7 +83,11 @@ audit_logger = logging.getLogger("scpi.audit")
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_role("Admin"))])
 
 
-@router.get("/professores", summary="Listar professores")
+@router.get(
+    "/professores",
+    summary="Listar professores",
+    responses={200: {"model": list[ProfessorNaLista]}},
+)
 def admin_listar_professores():
     """Lista todos os professores cadastrados, ordenados por nome.
 
@@ -91,7 +99,11 @@ def admin_listar_professores():
         raise internal_error(e)
 
 
-@router.get("/turmas-completas", summary="Listar turmas com professor e total de alunos")
+@router.get(
+    "/turmas-completas",
+    summary="Listar turmas com professor e total de alunos",
+    responses={200: {"model": list[TurmaCompleta]}},
+)
 def admin_listar_turmas():
     """Lista todas as turmas cadastradas, ordenadas por semestre e disciplina.
 
@@ -105,7 +117,11 @@ def admin_listar_turmas():
         raise internal_error(e)
 
 
-@router.get("/turmas/{turma_id}/alunos", summary="Listar alunos matriculados na turma")
+@router.get(
+    "/turmas/{turma_id}/alunos",
+    summary="Listar alunos matriculados na turma",
+    responses={200: {"model": list[AlunoDaTurmaAdmin]}},
+)
 def admin_listar_alunos_turma(turma_id: str):
     """Lista os alunos matriculados na turma, ordenados por nome.
 
@@ -413,7 +429,11 @@ def admin_excluir_professor(professor_id: str, request: Request, current_user: d
         raise internal_error(e, "admin_excluir_professor")
 
 
-@router.get("/horarios-todos", summary="Listar todos os horários de aula")
+@router.get(
+    "/horarios-todos",
+    summary="Listar todos os horários de aula",
+    responses={200: {"model": list[HorarioCompleto]}},
+)
 def admin_listar_todos_horarios():
     """Lista todos os horários de aula cadastrados, de todas as turmas.
 

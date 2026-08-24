@@ -26,20 +26,10 @@ _ROTAS_INTERNAS = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
 # documentar uma rota significa apagar a linha dela daqui. Acrescentar linha só
 # faz sentido para rota realmente nova — e mesmo aí, prefira documentar.
 SEM_MODELO_DE_SAIDA = {
-    "GET /admin/horarios-todos",
-    "GET /admin/professores",
-    "GET /admin/turmas-completas",
-    "GET /admin/turmas/{turma_id}/alunos",
-    "GET /aluno/biometria-foto/{usuario_id}",
-    "GET /aluno/dashboard/{usuario_id}",
-    "GET /aluno/frequencias/{usuario_id}",
-    "GET /aluno/historico-chamadas/{usuario_id}",
+    # `meus-dados` ficou fora do lote 4 de propósito: `formato=zip` (default)
+    # devolve binário e `formato=json` devolve o dossiê LGPD inteiro — dois
+    # `content` e um modelo grande, com escopo próprio.
     "GET /aluno/meus-dados/{usuario_id}",
-    "GET /alunos/status-angulos-face/{usuario_id}",
-    "GET /auth/session",
-    "GET /chamadas/status/{turma_id}",
-    "GET /chamadas/{chamada_id}/alunos",
-    "GET /turmas/{turma_id}/alunos",
     "POST /admin/importar-alunos",
     "POST /admin/importar-professores",
     "POST /admin/turmas/{turma_id}/importar-alunos",
@@ -61,9 +51,9 @@ SEM_MODELO_DE_SAIDA = {
 # login. Modelo novo usa `responses={200: ...}`, que não valida nada em runtime.
 _FORA_DO_EXTRA_FORBID = {"Token"}
 
-# Fotografia do fim do lote 3, não meta. Se subir, alguém acrescentou rota sem
+# Fotografia do fim do lote 4, não meta. Se subir, alguém acrescentou rota sem
 # modelo; se cair sem a lista encolher junto, a coleta de rotas quebrou.
-_DIVIDA_NO_FIM_DO_LOTE_3 = 27
+_DIVIDA_NO_FIM_DO_LOTE_4 = 14
 
 LOTE_1 = [
     ("GET", "/"),
@@ -114,6 +104,25 @@ LOTE_3 = [
     ("POST", "/chamadas/{chamada_id}/ajustar"),
     ("POST", "/chamadas/{chamada_id}/finalizar"),
     ("POST", "/notificacoes/registrar-token"),
+]
+
+# As leituras que sobraram: listagens do portal Admin, telas do aluno, turma do
+# professor, estado da chamada e sessão. A forma da resposta é a forma do
+# SELECT — o que se documenta aqui é o contrato da consulta.
+LOTE_4 = [
+    ("GET", "/admin/professores"),
+    ("GET", "/admin/turmas-completas"),
+    ("GET", "/admin/horarios-todos"),
+    ("GET", "/admin/turmas/{turma_id}/alunos"),
+    ("GET", "/aluno/dashboard/{usuario_id}"),
+    ("GET", "/aluno/frequencias/{usuario_id}"),
+    ("GET", "/aluno/historico-chamadas/{usuario_id}"),
+    ("GET", "/aluno/biometria-foto/{usuario_id}"),
+    ("GET", "/alunos/status-angulos-face/{usuario_id}"),
+    ("GET", "/turmas/{turma_id}/alunos"),
+    ("GET", "/chamadas/status/{turma_id}"),
+    ("GET", "/chamadas/{chamada_id}/alunos"),
+    ("GET", "/auth/session"),
 ]
 
 
@@ -238,10 +247,10 @@ def test_schema_openapi_descreve_o_corpo_das_rotas_documentadas():
 
 
 def test_divida_restante_e_a_esperada():
-    assert len(SEM_MODELO_DE_SAIDA) == _DIVIDA_NO_FIM_DO_LOTE_3
+    assert len(SEM_MODELO_DE_SAIDA) == _DIVIDA_NO_FIM_DO_LOTE_4
 
 
-@pytest.mark.parametrize("metodo,caminho", LOTE_1 + LOTE_2 + LOTE_3)
+@pytest.mark.parametrize("metodo,caminho", LOTE_1 + LOTE_2 + LOTE_3 + LOTE_4)
 def test_lote_ja_fechado_continua_declarado(metodo, caminho):
     """Trava os lotes fechados: remover o modelo de uma destas rotas reprova aqui."""
     assert modelo_declarado(metodo, caminho) is not None

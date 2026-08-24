@@ -2,7 +2,7 @@
 
 *Contexto imediato. Atualizar ao fim de toda sessão.*
 
-**Última atualização: 2026-08-21.**
+**Última atualização: 2026-08-24.**
 
 ## ✅ Liveness: o bypass foi FECHADO — mas com um teste faltando
 
@@ -161,10 +161,30 @@ escrever o teste antes do modelo (`tests/test_respostas_mutacoes.py`).
 gastando **20s** em dois connect-timeouts, numa suíte que roda inteira em ~10s. Teste lento
 chamando handler é sinal de repositório esquecido no `patch`, não de teste pesado.
 
-A dívida restante mora em `SEM_MODELO_DE_SAIDA` (`tests/test_openapi_respostas.py`): **27 rotas**
-(eram 54 no fim do lote 1, 48 no do lote 2). A lista **só encolhe** — o guarda reprova rota nova
-sem modelo que não esteja listada, rota já documentada que continue listada, e entrada órfã.
-**905 testes verdes** (eram 785 antes da etapa B). Detalhe em [[log.md]].
+O **lote 4** fechou as **13 leituras** que sobravam (listagens do portal Admin, telas do aluno,
+alunos da turma, estado da chamada e `/auth/session`), em `tests/test_respostas_leituras.py` —
+de novo com o teste escrito antes do modelo, porque nenhuma delas tinha teste de handler.
+Duas coisas que valem para os próximos:
+
+- **Formato de leitura é o formato do SELECT.** As linhas falsas dos testes usam os tipos que o
+  psycopg2 devolve de verdade (`uuid.UUID` em coluna `uuid`, `datetime.time` em coluna `time`),
+  não a string já serializada — quem converte é o `jsonable_encoder` do apoio de conformidade, e
+  é a saída dele que o cliente lê.
+- **`GET /chamadas/status/{turma_id}` declara uma UNIÃO** (`StatusComChamadaAberta |
+  StatusSemChamadaAberta`, discriminadas pelo `status`), não um modelo com campos opcionais: sem
+  chamada aberta a resposta não tem `chamada_id` nem `horario_inicio`. Provado por mutação —
+  tirando `chamada_id` do caminho "Aberta" o teste reprova; com campos opcionais teria passado.
+- **Duas rotas devolvem a MESMA consulta com chave diferente**: `/admin/turmas/{turma_id}/alunos`
+  renomeia para `aluno_id`, `/turmas/{turma_id}/alunos` devolve `id`. Está escrito nos dois
+  modelos para ninguém supor que é o mesmo corpo.
+- `/auth/session` tem `@limiter.limit`: chamar o handler direto exige um `Request` de verdade do
+  Starlette — `MagicMock` levanta "parameter `request` must be an instance of
+  starlette.requests.Request".
+
+A dívida restante mora em `SEM_MODELO_DE_SAIDA` (`tests/test_openapi_respostas.py`): **14 rotas**
+(eram 54 no fim do lote 1, 48 no do lote 2, 27 no do lote 3). A lista **só encolhe** — o guarda
+reprova rota nova sem modelo que não esteja listada, rota já documentada que continue listada, e
+entrada órfã. **940 testes verdes** (eram 785 antes da etapa B). Detalhe em [[log.md]].
 
 **Atenção ao subir a API local:** o lifespan roda `_migrations.run_all()` (`api.py:116`) e o
 `.env` da raiz aponta `DB_HOST=168.138.134.208` — **produção**. `uvicorn api:app` na máquina do
@@ -188,28 +208,25 @@ classe `dark-mode`, e a página parece não ter mudado.
 
 ## Próximos passos
 
-- [ ] **Swagger etapa B, lote 4 — as leituras que sobraram.** Lotes 1, 2 e 3 fecharam (40 rotas,
-      ver "Estado atual"); restam **27** em `SEM_MODELO_DE_SAIDA`, e elas se separam em três
-      grupos:
-      - **Leituras simples (14):** listagens de admin (`/admin/professores`,
-        `/admin/turmas-completas`, `/admin/horarios-todos`, `/admin/turmas/{turma_id}/alunos`),
-        as telas do aluno (`/aluno/dashboard`, `/aluno/frequencias`, `/aluno/historico-chamadas`,
-        `/alunos/status-angulos-face`, `/aluno/biometria-foto` — esta devolve
-        `{"url", "expira_em_segundos"}`, JSON comum), `/turmas/{turma_id}/alunos`,
-        `/chamadas/status/{turma_id}`, `/chamadas/{chamada_id}/alunos` e `/auth/session`.
-        É o caminho barato; a forma sai do SELECT, como nos lotes anteriores.
-      - **Auth (8):** `/auth/register`, `/refresh`, `/logout`, `/alterar-senha`,
+- [ ] **Swagger etapa B, lote 5 — auth, imports e o dossiê LGPD.** Lotes 1 a 4 fecharam
+      (53 rotas, ver "Estado atual"); restam **14** em `SEM_MODELO_DE_SAIDA`, em três grupos:
+      - **Auth (9):** `/auth/register`, `/refresh`, `/logout`, `/alterar-senha`,
         `/alterar-senha-primeiro-acesso`, `/esqueci-senha`, `/verificar-codigo`,
-        `/redefinir-senha`, `/register-aluno-com-face`. Várias devolvem só `mensagem`, mas
-        `/refresh` emite token e `/verificar-codigo` emite `reset_token` — modelo próprio, e
-        cuidado para o exemplo do /docs não sugerir formato de segredo.
+        `/redefinir-senha`, `/register-aluno-com-face`. (A lista antiga dizia 8; são 9 na
+        allowlist.) Várias devolvem só `mensagem`, mas `/refresh` emite token e
+        `/verificar-codigo` emite `reset_token` — modelo próprio, e cuidado para o exemplo do
+        /docs não sugerir formato de segredo. `/refresh` é o único caso do repo com
+        `response_model=` já em uso na família (`Token`, em `/auth/login`) — não copiar isso: o
+        `response_model` filtra em runtime.
       - **Imports CSV (3) + `/alunos/cadastrar-face`:** devolvem contadores mais uma lista
         `erros` cujo formato precisa ser levantado antes de declarar.
-      `GET /aluno/meus-dados/{usuario_id}` fica por último: `formato=zip` (default) devolve
-      binário e `formato=json` o dossiê estruturado — mesmo padrão de dois `content` do lote 2,
-      mas o modelo do JSON é grande e inclui `_schema_version`/`_gerado_em`.
+      - **`GET /aluno/meus-dados/{usuario_id}`, por último:** `formato=zip` (default) devolve
+        binário e `formato=json` o dossiê estruturado — mesmo padrão de dois `content` do lote 2,
+        mas o modelo do JSON é grande e inclui `_schema_version`/`_gerado_em`.
       **Ao escrever teste de handler, mocke TODO repositório que ele chama** — ver a armadilha
-      dos 20s em "Estado atual".
+      dos 20s em "Estado atual". Rota com `@limiter.limit` (as de auth quase todas têm) exige
+      `Request` real do Starlette, não `MagicMock` — ver `_pedido_real` em
+      `tests/test_respostas_leituras.py`.
 - [ ] **RETOMAR AQUI: passar pela porta do jeito DIFÍCIL, com o veto ligado.** É o único risco
       sério que sobrou. Andando, na distância real de uso (rosto de ~60–75px, não colado na
       câmera), de perfil, contra a luz. No log, `tela_frames` tem que dar **0**. Se der ≥2 numa

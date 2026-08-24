@@ -570,3 +570,46 @@ Dívida: `SEM_MODELO_DE_SAIDA` caiu de **48 para 27**. Suíte: **905 testes verd
 **Para o lote 4**, as 27 restantes se separam em leituras simples (14, caminho barato), auth (8,
 com atenção a `/refresh` e `/verificar-codigo`, que emitem token) e imports CSV mais
 `/alunos/cadastrar-face` (4, precisam do formato da lista `erros`). Detalhe em [[hot.md]].
+
+## 2026-08-24 — Swagger etapa B, lote 4: as leituras que sobraram
+
+Treze rotas de consulta: as quatro listagens do portal Admin (professores, turmas completas,
+horários, alunos da turma), as cinco telas do aluno (dashboard, frequências, histórico de
+chamadas, foto de biometria, status dos ângulos), `/turmas/{turma_id}/alunos`, os dois estados
+da chamada e `/auth/session`. Modelos novos em `schemas/respostas/` (mais o arquivo novo
+`auth.py`), declarados por `responses={200: {"model": X}}`; listagem pura declara `list[X]`.
+
+Como no lote 3, **nenhuma tinha teste exercitando o handler** — 20 testes novos em
+`tests/test_respostas_leituras.py` antes de qualquer modelo.
+
+Três coisas que este lote ensinou:
+
+- **A união do `/chamadas/status/{turma_id}` não é preciosismo.** Sem chamada aberta a resposta
+  não traz `chamada_id` nem `horario_inicio`; com chamada aberta traz. Declarei
+  `StatusComChamadaAberta | StatusSemChamadaAberta`, discriminadas pelo `status`. Mutação:
+  removi `chamada_id` do caminho "Aberta" e o teste reprovou (o payload não casou com nenhum dos
+  dois lados). Um modelo único com os dois campos opcionais teria passado — e o portal ficaria
+  sem o id para retomar a chamada.
+- **Linha falsa tem que ter o tipo do banco, não o tipo do JSON.** As linhas dos testes usam
+  `uuid.UUID` onde a coluna é `uuid` e `datetime.time` onde é `time`; quem serializa é o
+  `jsonable_encoder` dentro de `assert_resposta_conforme`. Fosse string desde o início, o teste
+  não estaria provando a conversão que o cliente enxerga.
+- **Rota com `@limiter.limit` recusa `MagicMock`.** `/auth/session` levanta "parameter `request`
+  must be an instance of starlette.requests.Request". A saída foi montar um `Request` de verdade
+  com um scope mínimo (`_pedido_real`); o storage do limiter já é o de memória, pela fixture de
+  sessão do conftest. As rotas de auth do lote 5 quase todas têm o decorador — vale reusar.
+
+Duas divergências de contrato que estavam invisíveis e agora estão escritas no modelo:
+`/admin/turmas/{turma_id}/alunos` devolve `aluno_id` e `/turmas/{turma_id}/alunos` devolve `id`,
+sendo a MESMA consulta; e `dia_semana` é 0-6 (convenção do `weekday()` do Python) nos horários do
+Admin, mas o histórico do aluno usa `dia_iso` (ISODOW do Postgres, 1=segunda).
+
+Mutação de novo antes de fechar: campo fantasma nos dois modelos de status (reprovou) e remoção
+de `parciais` do `HistoricoDeChamadas` (reprovou por campo extra devolvido).
+
+Dívida: `SEM_MODELO_DE_SAIDA` caiu de **27 para 14**. Suíte: **940 testes verdes**, 81 pulados,
+12s. `pytest docs/` segue com 44 verdes.
+
+**Para o lote 5** sobram auth (9 — a contagem antiga dizia 8), os 3 imports CSV mais
+`/alunos/cadastrar-face`, e `/aluno/meus-dados` por último (dois `content`: zip binário e o
+dossiê LGPD em JSON). Detalhe em [[hot.md]].
