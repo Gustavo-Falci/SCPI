@@ -5,20 +5,20 @@
 # fastapi 0.136.3 é release malicioso (MAL-2026-4750, 2026-05-23): injeta dependência
 # oculta 'fastar' no extra [standard]. Sem fix-forward; fixado em 0.136.1 (última limpa).
 fastapi==0.136.1
-uvicorn==0.52.3
+uvicorn==0.52.4
 starlette==1.6.0
 python-multipart==0.0.32
 # Servidor de produção: systemd sobe `gunicorn -w 4 -k uvicorn_worker.UvicornWorker api:app`.
 # Pinado aqui para entrar no pip-audit e no Dependabot — antes ficava só instalado à mão
 # na VM, invisível para o CI. Não é usado em dev (uvicorn direto).
-gunicorn==26.0.0
+gunicorn==26.2.0
 # O módulo `uvicorn.workers` foi descontinuado (DeprecationWarning desde a 0.51.0) e será
 # removido; quando isso acontecer, o restart do scpi-api derruba a API. uvicorn-worker é o
 # sucessor oficial, mesmo mantenedor, código idêntico ao módulo antigo.
 uvicorn-worker==0.4.0
 
 # Config
-python-dotenv==1.2.2
+python-dotenv==1.2.3
 
 # Banco de dados
 psycopg2-binary==2.9.12
@@ -43,8 +43,8 @@ PyJWT==2.13.0
 passlib==1.7.4
 
 # AWS
-boto3==1.43.71
-botocore==1.43.71
+boto3==1.43.82
+botocore==1.43.82
 s3transfer==0.19.2
 
 # Reconhecimento facial (necessário apenas na máquina com câmera)
@@ -57,26 +57,26 @@ slowapi==0.1.10
 limits==5.8.0
 
 # Email
-resend==2.36.0
+resend==2.42.0
 
 # Geração de PDF (export LGPD Art. 18)
-reportlab==5.0.0
+reportlab==5.0.1
 
 # Observabilidade — telemetria de erros (Sentry SaaS free tier).
 # DSN vem de SENTRY_DSN; ausente = no-op, dev não precisa.
-sentry-sdk==2.68.0
+sentry-sdk==2.68.1
 
 # Dependências transitivas (pinadas para reproducibilidade)
 annotated-types==0.8.0
 anyio==4.14.2
 certifi==2026.7.22
-charset-normalizer==3.5.0
-click==8.4.2
+charset-normalizer==3.5.1
+click==8.5.0
 colorama==0.4.6
 Deprecated==1.3.1
 dnspython==2.8.0
 h11==0.16.0
-idna==3.18
+idna==3.19
 jmespath==1.1.0
 packaging==26.3
 python-dateutil==2.9.0.post0
