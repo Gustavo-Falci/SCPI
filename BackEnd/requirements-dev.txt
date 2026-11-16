@@ -3,7 +3,7 @@
 # Setup local completo:  pip install -r requirements.txt -r requirements-dev.txt
 # Windows: instalar também tzdata (ZoneInfo não acha o banco de fusos do SO):
 #   pip install tzdata
-pytest==9.1.1
+pytest==9.2.0
 httpx==0.28.1
 # python-docx: usado só pelos testes do gerador de manuais em docs/
 python-docx==1.2.0
